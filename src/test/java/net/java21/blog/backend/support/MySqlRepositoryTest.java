@@ -6,6 +6,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import net.java21.blog.backend.config.JpaAuditingConfig;
+import net.java21.blog.backend.config.QuerydslConfig;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -14,7 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Repository 슬라이스 테스트용 합성 애너테이션.
+ * MySQL 전용 쿼리(FULLTEXT ngram 등) 확인용 합성 애너테이션. 일반 Repository 테스트는 H2의 {@link JpaRepositoryTest}를 쓴다.
  *
  * <ul>
  *   <li>{@code @DataJpaTest} + {@code @AutoConfigureTestDatabase(replace = NONE)} + {@code @ActiveProfiles("test")}</li>
@@ -23,6 +25,7 @@ import org.springframework.test.context.TestPropertySource;
  *       있어도 테스트가 개발 DB에 붙지 않게 한다(환경 변수보다 우선순위가 높다).</li>
  *   <li>{@link TestSchemaInitializer}: JVM당 한 번 스냅숏으로 스키마를 다시 만든다(안전장치 포함).</li>
  *   <li>{@code BLOG_TEST_DATASOURCE_URL}이 없으면 테스트를 건너뛴다.</li>
+ *   <li>QueryDSL({@link QuerydslConfig})과 JPA Auditing({@link JpaAuditingConfig})을 함께 올린다.</li>
  * </ul>
  */
 @Target(ElementType.TYPE)
@@ -38,6 +41,6 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=${BLOG_TEST_DATASOURCE_USERNAME}",
         "spring.datasource.password=${BLOG_TEST_DATASOURCE_PASSWORD}"
 })
-@Import(TestSchemaInitializer.class)
+@Import({TestSchemaInitializer.class, QuerydslConfig.class, JpaAuditingConfig.class})
 public @interface MySqlRepositoryTest {
 }
