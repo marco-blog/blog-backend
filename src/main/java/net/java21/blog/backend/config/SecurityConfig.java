@@ -2,6 +2,8 @@ package net.java21.blog.backend.config;
 
 import java.time.Clock;
 
+import net.java21.blog.backend.admin.AdminAccessFilter;
+import net.java21.blog.backend.admin.AdminRoleLookup;
 import net.java21.blog.backend.common.error.ApiErrorWriter;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.security.AuthProperties;
@@ -9,6 +11,7 @@ import net.java21.blog.backend.security.JwtAuthenticationFilter;
 import net.java21.blog.backend.security.JwtProvider;
 import net.java21.blog.backend.security.OriginCheckFilter;
 import net.java21.blog.backend.security.OriginProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +21,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.csrf.CsrfFilter;
 
@@ -28,6 +32,8 @@ import org.springframework.security.web.csrf.CsrfFilter;
  *   <li>{@code access_token} 쿠키의 JWT로 인증한다({@link JwtAuthenticationFilter}). {@code Authorization} 헤더는 쓰지 않는다.</li>
  *   <li>{@link #PUBLIC_GET} 경로의 GET과 {@link #PUBLIC_POST}(가입·로그인·리프레시·로그아웃·비밀번호 재설정)만 비로그인으로 허용하고, 나머지는 로그인이 필요하다.
  *       인증·권한 오류도 공통 틀(401 {@code UNAUTHENTICATED}, 403 {@code FORBIDDEN})로 응답한다.</li>
+ *   <li>관리자 API({@code /api/v1/admin/**})는 인증 뒤 {@link AdminAccessFilter}가 요청마다 DB의 현재 권한을 확인하고,
+ *       관리자가 아니면(비로그인 포함) 404 {@code NOT_FOUND}로 응답한다(006 FR-097). 권한 확인 빈이 없으면 모두 거부한다.</li>
  * </ol>
  * 공개 GET의 내용별 노출(비공개 글 404 등)은 각 서비스가 data-model "글 노출 매트릭스"로 판단한다.
  */
@@ -51,7 +57,8 @@ public class SecurityConfig {
 
     /** {@link #PUBLIC_GET} 아래에 있지만 주인만 쓰는 GET 경로(로그인 필요). 공개 규칙보다 먼저 검사한다. */
     static final String[] AUTHENTICATED_GET = {
-            "/api/v1/blogs/*/posts/drafts/**"
+            "/api/v1/blogs/*/posts/drafts/**",
+            "/api/v1/blogs/*/manage/**"
     };
 
     /**
@@ -75,13 +82,16 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ApiErrorWriter errorWriter,
-            OriginProperties originProperties, JwtProvider jwtProvider) throws Exception {
+            OriginProperties originProperties, JwtProvider jwtProvider, ObjectProvider<AdminRoleLookup> adminRoleLookup)
+            throws Exception {
+        AdminRoleLookup roleLookup = adminRoleLookup.getIfAvailable(() -> userId -> false);
         http
                 // 쿠키 인증의 CSRF 방어는 토큰 대신 Origin 검사(OriginCheckFilter)로 한다.
                 .csrf(AbstractHttpConfigurer::disable)
                 .addFilterBefore(new OriginCheckFilter(originProperties.allowedOrigins(), errorWriter),
                         CsrfFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), AnonymousAuthenticationFilter.class)
+                .addFilterBefore(new AdminAccessFilter(roleLookup, errorWriter), AuthorizationFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)

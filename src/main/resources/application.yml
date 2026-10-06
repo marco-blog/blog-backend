@@ -90,3 +90,7 @@ blog:
     trash-purge-cron: "0 30 3 * * *"
     trash-retention: 30d
     purge-batch-size: 500
+  # 관리자(006 FR-105): 기동 시 SUPER_ADMIN이 한 명도 없으면 이 이메일의 회원을 SUPER_ADMIN으로 지정한다(첫 최고 관리자 지정의 유일한 경로).
+  # 값은 환경 변수(또는 .env)로만 주고 저장소에 커밋하지 않는다. 비우면 아무것도 하지 않는다.
+  admin:
+    bootstrap-super-admin-email: ${BLOG_ADMIN_BOOTSTRAP_SUPER_ADMIN_EMAIL:}
