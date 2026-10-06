@@ -55,7 +55,11 @@ public enum ErrorCode {
     MEDIA_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE),
     MEDIA_TYPE_NOT_ALLOWED(HttpStatus.UNSUPPORTED_MEDIA_TYPE),
     MEDIA_TEMP_QUOTA_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS),
-    THUMBNAIL_SIZE_NOT_ALLOWED(HttpStatus.BAD_REQUEST);
+    THUMBNAIL_SIZE_NOT_ALLOWED(HttpStatus.BAD_REQUEST),
+
+    // 002 구독과 탐색 (002 contracts/api.md 오류 코드 표)
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND),
+    CANNOT_SUBSCRIBE_OWN_BLOG(HttpStatus.UNPROCESSABLE_CONTENT);
 
     private final HttpStatus status;
 

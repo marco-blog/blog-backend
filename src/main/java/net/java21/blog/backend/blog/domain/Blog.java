@@ -1,6 +1,7 @@
 package net.java21.blog.backend.blog.domain;
 
 import java.time.Instant;
+import java.util.Set;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,12 +18,14 @@ import jakarta.persistence.Table;
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.user.domain.User;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
  * 블로그(blogs). 회원 1 : 블로그 N(R28). {@code handle}은 삭제된 블로그를 포함해 유일하고 바꿀 수 없다(FR-002, FR-159).
- * 002~007이 더한 컬럼(subscriber_count, portal_enabled 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * 002의 구독자 수({@code subscriber_count}, 읽기 전용 카운터: 구독·취소 때 원자적 UPDATE로만 바꾼다)와 피드 설정
+ * ({@code feed_item_count}, {@code feed_content_mode})을 매핑한다. 003~007이 더한 컬럼(portal_enabled 등)은 DB 기본값이 있으므로 매핑하지 않는다.
  */
 @Entity
 @Table(name = "blogs")
@@ -30,6 +33,9 @@ public class Blog extends BaseTimeEntity {
 
     public static final int TITLE_MAX = 100;
     public static final int DESCRIPTION_MAX = 500;
+    /** 피드에 담을 수 있는 글 수(FR-046). */
+    public static final Set<Integer> FEED_ITEM_COUNTS = Set.of(10, 20, 30, 50);
+    public static final int DEFAULT_FEED_ITEM_COUNT = 20;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -64,6 +70,21 @@ public class Blog extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /** 구독자 수(FR-031). 엔티티 저장으로 바꾸지 않는다(구독·취소의 원자적 UPDATE만, 002 research D1). */
+    @ColumnDefault("0")
+    @Column(name = "subscriber_count", nullable = false, insertable = false, updatable = false)
+    private int subscriberCount;
+
+    /** 피드에 담을 글 수 10·20·30·50(FR-046). */
+    @Column(name = "feed_item_count", nullable = false)
+    private int feedItemCount = DEFAULT_FEED_ITEM_COUNT;
+
+    /** 피드 공개 형태(FR-046). */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "feed_content_mode", nullable = false, length = 10)
+    private FeedContentMode feedContentMode = FeedContentMode.FULL;
+
     protected Blog() {
     }
 
@@ -97,6 +118,18 @@ public class Blog extends BaseTimeEntity {
 
     public void changeCommentEnabled(boolean commentEnabled) {
         this.commentEnabled = commentEnabled;
+    }
+
+    /** 피드 설정(FR-046). 글 수는 {@link #FEED_ITEM_COUNTS}만 받는다. */
+    public void changeFeedSettings(int feedItemCount, FeedContentMode feedContentMode) {
+        if (!FEED_ITEM_COUNTS.contains(feedItemCount)) {
+            throw new IllegalArgumentException("Feed item count must be one of " + FEED_ITEM_COUNTS + ": " + feedItemCount);
+        }
+        if (feedContentMode == null) {
+            throw new IllegalArgumentException("Feed content mode is required");
+        }
+        this.feedItemCount = feedItemCount;
+        this.feedContentMode = feedContentMode;
     }
 
     public Long getId() {
@@ -148,5 +181,17 @@ public class Blog extends BaseTimeEntity {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    public int getSubscriberCount() {
+        return subscriberCount;
+    }
+
+    public int getFeedItemCount() {
+        return feedItemCount;
+    }
+
+    public FeedContentMode getFeedContentMode() {
+        return feedContentMode;
     }
 }
