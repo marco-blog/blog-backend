@@ -17,6 +17,10 @@ import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.blog.service.BlogService;
 import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.blog.service.HandlePolicy;
+import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.domain.MediaStatus;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.support.JpaRepositoryTest;
@@ -30,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /** 블로그 조회·집계(T056): ACTIVE handle 조회, 회원별 ACTIVE 수, 회원 행 잠금, {@code /me/blogs} 고정 쿼리 수. */
@@ -57,6 +62,8 @@ class BlogRepositoryTest {
     private EntityManager em;
     @Autowired
     private QueryCounter queryCounter;
+    @MockitoBean
+    private MediaReferenceService mediaReferences;
 
     private User marco;
     private User other;
@@ -71,13 +78,18 @@ class BlogRepositoryTest {
     void findByHandleWithOwnerFetchesOwnerAndIncludesDeletedBlogs() {
         Blog deleted = persistBlog(marco, "old-blog");
         deleted.delete(NOW);
-        persistBlog(marco, "marco");
+        Blog active = persistBlog(marco, "marco");
+        active.changeCoverMedia(persistMedia(marco, "cover", MediaPurpose.BLOG_COVER));
+        marco.changeProfileMedia(persistMedia(marco, "profile", MediaPurpose.PROFILE));
         flushAndClear();
 
+        // 블로그 응답에 쓰는 주인·대표 이미지·프로필 이미지까지 쿼리 1회(US4)
         queryCounter.reset();
         Blog blog = blogRepository.findByHandleWithOwner("marco").orElseThrow();
         assertThat(Hibernate.isInitialized(blog.getUser())).isTrue();
         assertThat(blog.getUser().getNickname()).isEqualTo("marco");
+        assertThat(blog.coverImageUrl()).isEqualTo("/media/" + key("cover"));
+        assertThat(blog.getUser().profileImageUrl()).isEqualTo("/media/" + key("profile"));
         assertThat(queryCounter.count()).isEqualTo(1);
 
         assertThat(blogRepository.findByHandleWithOwner("old-blog").orElseThrow().getStatus())
@@ -141,6 +153,7 @@ class BlogRepositoryTest {
 
         for (int i = 1; i <= 4; i++) {
             Blog blog = persistBlog(marco, "marco-" + i);
+            blog.changeCoverMedia(persistMedia(marco, "cover" + i, MediaPurpose.BLOG_COVER));
             persistPost(blog, PostStatus.PUBLISHED);
             persistPost(blog, PostStatus.PUBLISHED);
         }
@@ -152,7 +165,9 @@ class BlogRepositoryTest {
         assertThat(five.count()).isEqualTo(5);
         assertThat(five.limit()).isEqualTo(3);
         assertThat(five.items()).extracting(MyBlogsResponse.Item::postCount).containsExactly(1L, 2L, 2L, 2L, 2L);
-        // 회원 1회 + 블로그 목록(글 수 포함) 1회
+        assertThat(five.items()).extracting(MyBlogsResponse.Item::coverImageUrl).containsExactly(null,
+                "/media/" + key("cover1"), "/media/" + key("cover2"), "/media/" + key("cover3"), "/media/" + key("cover4"));
+        // 회원 1회 + 블로그 목록(글 수·대표 이미지 키 포함) 1회: 대표 이미지 수와 관계없다
         assertThat(queriesForOne).isEqualTo(2);
         assertThat(queryCounter.count()).isEqualTo(2);
     }
@@ -221,5 +236,18 @@ class BlogRepositoryTest {
     private void flushAndClear() {
         em.flush();
         em.clear();
+    }
+
+    /** 이름으로 만든 22자 키(테스트용). */
+    private static String key(String name) {
+        return (name + "0000000000000000000000").substring(0, 22);
+    }
+
+    private Media persistMedia(User owner, String name, MediaPurpose purpose) {
+        Media media = new Media(owner, key(name), purpose, name + ".png", "2026/10/" + name + ".png", "image/png", 10,
+                1, 1);
+        ReflectionTestUtils.setField(media, "status", MediaStatus.ATTACHED);
+        em.persist(media);
+        return media;
     }
 }

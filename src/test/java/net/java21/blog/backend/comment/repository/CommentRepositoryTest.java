@@ -8,6 +8,10 @@ import java.util.List;
 
 import jakarta.persistence.EntityManager;
 
+import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.domain.MediaStatus;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.comment.domain.CommentStatus;
@@ -78,7 +82,7 @@ class CommentRepositoryTest {
     @ValueSource(ints = {1, 3, 12})
     void postCommentTreeInOneQueryRegardlessOfCount(int threads) {
         for (int i = 0; i < threads; i++) {
-            User writer = user("w" + i, "작성자" + i);
+            User writer = withProfileImage(user("w" + i, "작성자" + i));
             Comment top = comment(post, writer, null, "댓글 " + i);
             comment(post, owner, top, "답글 " + i);
             comment(post, user("r" + i, "답글러" + i), top, "또 답글 " + i);
@@ -96,6 +100,9 @@ class CommentRepositoryTest {
         assertThat(rows.get(1).parentId()).isEqualTo(rows.getFirst().id());
         assertThat(rows.get(1).nickname()).isEqualTo("주인");
         assertThat(rows.get(1).userId()).isEqualTo(owner.getId());
+        // 작성자 프로필 이미지 키도 같은 쿼리에서(US4): 이미지가 있는 작성자 수와 관계없이 1회
+        assertThat(rows.getFirst().profileMediaKey()).isEqualTo(mediaKey("w0"));
+        assertThat(rows.get(1).profileMediaKey()).isNull();
     }
 
     @Test
@@ -120,7 +127,7 @@ class CommentRepositoryTest {
         Post other = publishedPost(blog, "둘째 글");
         Post trashed = publishedPost(blog, "버린 글");
         for (int i = 0; i < count; i++) {
-            comment(i % 2 == 0 ? post : other, user("u" + i, "회원" + i), null, "댓글 " + i);
+            comment(i % 2 == 0 ? post : other, withProfileImage(user("u" + i, "회원" + i)), null, "댓글 " + i);
             clock.advance(Duration.ofSeconds(1));
         }
         Comment gone = comment(post, owner, null, "삭제 자리");
@@ -142,6 +149,7 @@ class CommentRepositoryTest {
         BlogCommentRow newest = page.getContent().getFirst();
         assertThat(newest.content()).isEqualTo("댓글 " + (count - 1));
         assertThat(newest.nickname()).isEqualTo("회원" + (count - 1));
+        assertThat(newest.profileMediaKey()).isEqualTo(mediaKey("u" + (count - 1)));
         assertThat(newest.postId()).isEqualTo((count - 1) % 2 == 0 ? post.getId() : other.getId());
         assertThat(newest.postTitle()).isEqualTo((count - 1) % 2 == 0 ? "첫 글" : "둘째 글");
     }
@@ -202,6 +210,20 @@ class CommentRepositoryTest {
         assertThat(commentRepository.existsByParentId(reply.getId())).isFalse();
         assertThat(commentRepository.existsByParentIdAndIdNot(top.getId(), reply.getId())).isFalse();
         assertThat(commentRepository.findWithPostAndOwner(-1L)).isEmpty();
+    }
+
+    private static String mediaKey(String userKey) {
+        return (userKey + "PROFILE0000000000000000").substring(0, 22);
+    }
+
+    private User withProfileImage(User user) {
+        String userKey = user.getEmail().substring(0, user.getEmail().indexOf('@'));
+        Media media = new Media(user, mediaKey(userKey), MediaPurpose.PROFILE, "p.png", "2026/10/p.png", "image/png",
+                10, 1, 1);
+        TestEntities.with(media, "status", MediaStatus.ATTACHED);
+        em.persist(media);
+        user.changeProfileMedia(media);
+        return user;
     }
 
     private User user(String key, String nickname) {

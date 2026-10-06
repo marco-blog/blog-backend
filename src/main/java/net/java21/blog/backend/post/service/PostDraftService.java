@@ -8,6 +8,7 @@ import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.dto.DraftResponse;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 작성·임시저장(FR-013, FR-016, FR-108). 작성 중 내용은 {@code post_drafts}에만 저장하고 발행본({@code posts})은 바꾸지 않는다.
  * 발행 전 글은 블로그 관리 목록에 보이도록 {@code posts.title}만 사본 제목과 맞춘다.
+ * 저장·폐기 때 본문의 이미지 참조({@code post_media} DRAFT)를 갱신한다(US4, FR-071·073).
  */
 @Service
 public class PostDraftService {
@@ -34,17 +36,19 @@ public class PostDraftService {
     private final PostDraftRepository postDraftRepository;
     private final PostQueryRepository postQueryRepository;
     private final TagQueryRepository tagQueryRepository;
+    private final MediaReferenceService mediaReferences;
     private final Clock clock;
 
     public PostDraftService(BlogAccess blogAccess, PostAccess postAccess, PostRepository postRepository,
             PostDraftRepository postDraftRepository, PostQueryRepository postQueryRepository,
-            TagQueryRepository tagQueryRepository, Clock clock) {
+            TagQueryRepository tagQueryRepository, MediaReferenceService mediaReferences, Clock clock) {
         this.blogAccess = blogAccess;
         this.postAccess = postAccess;
         this.postRepository = postRepository;
         this.postDraftRepository = postDraftRepository;
         this.postQueryRepository = postQueryRepository;
         this.tagQueryRepository = tagQueryRepository;
+        this.mediaReferences = mediaReferences;
         this.clock = clock;
     }
 
@@ -56,6 +60,7 @@ public class PostDraftService {
         PostDraft draft = new PostDraft(post);
         draft.write(request.title(), request.contentMarkdown(), request.categoryId(), request.tags(), clock.instant());
         postDraftRepository.save(draft);
+        mediaReferences.syncDraft(post.getId(), userId, request.contentMarkdown());
         return new SavedDraftResponse(post.getId(), draft.getSavedAt());
     }
 
@@ -68,6 +73,7 @@ public class PostDraftService {
         draft.write(request.title(), request.contentMarkdown(), request.categoryId(), request.tags(), now);
         postDraftRepository.save(draft);
         post.syncDraftTitle(request.title());
+        mediaReferences.syncDraft(postId, userId, request.contentMarkdown());
         return new SavedDraftResponse(postId, now);
     }
 
@@ -95,6 +101,7 @@ public class PostDraftService {
             throw new BusinessException(ErrorCode.POST_NOT_PUBLISHED, "Post is not published: " + postId);
         }
         postDraftRepository.findById(postId).ifPresent(postDraftRepository::delete);
+        mediaReferences.discardDraft(postId);
     }
 
     /** 이 블로그의 가장 최근 임시저장(이어 쓰기 확인용). 없으면 null. */

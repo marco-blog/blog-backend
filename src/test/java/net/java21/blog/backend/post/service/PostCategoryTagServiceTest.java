@@ -75,6 +75,8 @@ class PostCategoryTagServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
 
     @Mock
+    private net.java21.blog.backend.media.service.MediaReferenceService mediaReferences;
+    @Mock
     private PostRepository postRepository;
     @Mock
     private PostDraftRepository postDraftRepository;
@@ -109,9 +111,9 @@ class PostCategoryTagServiceTest {
                 categoryAccess, tagQueryRepository, clock);
         publishService = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
-                categoryAccess, tagService, clock);
+                categoryAccess, tagService, mediaReferences, clock);
         draftService = new PostDraftService(blogAccess, access, postRepository, postDraftRepository,
-                postQueryRepository, tagQueryRepository, clock);
+                postQueryRepository, tagQueryRepository, mediaReferences, clock);
         managePostService = new ManagePostService(blogAccess, managePostQueryRepository, categoryAccess,
                 tagQueryRepository, new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");

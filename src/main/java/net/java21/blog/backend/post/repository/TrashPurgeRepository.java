@@ -104,7 +104,7 @@ public class TrashPurgeRepository {
         long purged = queryFactory.update(blog)
                 .set(blog.title, "")
                 .setNull(blog.description)
-                .setNull(blog.coverMediaId)
+                .setNull(blog.coverMedia)
                 .where(blog.id.in(ids))
                 .execute();
         em.clear();

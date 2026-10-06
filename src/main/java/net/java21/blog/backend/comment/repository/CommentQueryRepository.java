@@ -12,6 +12,7 @@ import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
 import net.java21.blog.backend.comment.domain.CommentStatus;
+import net.java21.blog.backend.media.domain.QMedia;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.user.domain.QUser;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,8 @@ public class CommentQueryRepository {
 
     /** 작성자 별칭. 노출 조각({@code PostExposure})의 기본 별칭 {@code user}와 겹치지 않게 따로 둔다. */
     private static final QUser author = new QUser("author");
+    /** 작성자 프로필 이미지(US4). 같은 쿼리의 LEFT JOIN으로 읽는다. */
+    private static final QMedia authorMedia = new QMedia("authorMedia");
 
     private final JPAQueryFactory queryFactory;
 
@@ -42,9 +45,11 @@ public class CommentQueryRepository {
     public List<CommentRow> findPostComments(Long postId) {
         return queryFactory
                 .select(Projections.constructor(CommentRow.class, comment.id, comment.parent.id, comment.content,
-                        comment.status, author.id, author.nickname, comment.createdAt, comment.updatedAt))
+                        comment.status, author.id, author.nickname, authorMedia.mediaKey, comment.createdAt,
+                        comment.updatedAt))
                 .from(comment)
                 .leftJoin(comment.user, author)
+                .leftJoin(author.profileMedia, authorMedia)
                 .where(comment.post.id.eq(postId))
                 .orderBy(comment.createdAt.asc(), comment.id.asc())
                 .fetch();
@@ -84,10 +89,11 @@ public class CommentQueryRepository {
     private JPAQuery<BlogCommentRow> selectBlogComments() {
         return queryFactory
                 .select(Projections.constructor(BlogCommentRow.class, comment.id, comment.content, author.id,
-                        author.nickname, comment.createdAt, comment.updatedAt, post.id, post.title))
+                        author.nickname, authorMedia.mediaKey, comment.createdAt, comment.updatedAt, post.id, post.title))
                 .from(comment)
                 .join(comment.post, post)
-                .leftJoin(comment.user, author);
+                .leftJoin(comment.user, author)
+                .leftJoin(author.profileMedia, authorMedia);
     }
 
     private static BooleanExpression blogComments(Long blogId) {

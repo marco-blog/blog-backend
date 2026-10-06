@@ -12,6 +12,9 @@ import net.java21.blog.backend.auth.service.SignupService;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
 import net.java21.blog.backend.user.repository.UserRepository;
@@ -31,18 +34,24 @@ public class AccountService {
     private final WithdrawalRepository withdrawalRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MediaReferenceService mediaReferences;
     private final Clock clock;
 
     public AccountService(UserRepository userRepository, WithdrawalRepository withdrawalRepository,
-            RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder, Clock clock) {
+            RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder,
+            MediaReferenceService mediaReferences, Clock clock) {
         this.userRepository = userRepository;
         this.withdrawalRepository = withdrawalRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.mediaReferences = mediaReferences;
         this.clock = clock;
     }
 
-    /** 보낸 필드만 바꾼다. 하나라도 틀리면 아무것도 바꾸지 않고 400 {@code VALIDATION_FAILED}(모든 입력란 오류를 함께). */
+    /**
+     * 보낸 필드만 바꾼다. 하나라도 틀리면 아무것도 바꾸지 않고 400 {@code VALIDATION_FAILED}(모든 입력란 오류를 함께).
+     * 프로필 이미지는 {@code purpose=PROFILE}로 올린 본인 이미지만 받아 ATTACHED로 하고, 이전 이미지는 정리 대상 판단(FR-073).
+     */
     @Transactional
     public void updateProfile(long userId, UpdateMeRequest request) {
         User user = requireActive(userRepository.findById(userId).orElse(null));
@@ -64,9 +73,12 @@ public class AccountService {
                 errors.add(new FieldError("bio", "TOO_LONG", Map.of("max", User.BIO_MAX)));
             }
         }
+        Media profileMedia = null;
         if (request.hasProfileImageMediaKey() && request.getProfileImageMediaKey() != null) {
-            // 프로필 이미지는 이미지 업로드(US4, purpose=PROFILE)와 함께 연결한다.
-            errors.add(FieldError.of("profileImageMediaKey", "INVALID"));
+            profileMedia = mediaReferences.findOwned(userId, request.getProfileImageMediaKey(), MediaPurpose.PROFILE);
+            if (profileMedia == null) {
+                errors.add(FieldError.of("profileImageMediaKey", "INVALID"));
+            }
         }
         if (request.hasLocale() && request.getLocale() != null && !SignupService.LOCALES.contains(request.getLocale())) {
             errors.add(FieldError.of("locale", "INVALID"));
@@ -93,6 +105,23 @@ public class AccountService {
         }
         if (request.hasTimeZone()) {
             user.changeTimeZone(request.getTimeZone());
+        }
+        if (request.hasProfileImageMediaKey()) {
+            changeProfileMedia(user, profileMedia);
+        }
+    }
+
+    private void changeProfileMedia(User user, Media media) {
+        Long previousId = user.getProfileMediaId();
+        if (media != null) {
+            if (media.getId().equals(previousId)) {
+                return;
+            }
+            mediaReferences.attach(media);
+        }
+        user.changeProfileMedia(media);
+        if (previousId != null) {
+            mediaReferences.reevaluate(List.of(previousId));
         }
     }
 

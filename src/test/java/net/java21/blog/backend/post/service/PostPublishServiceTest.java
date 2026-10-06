@@ -22,6 +22,7 @@ import net.java21.blog.backend.category.repository.CategoryRepository;
 import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.content.HtmlSanitizerPolicy;
 import net.java21.blog.backend.content.MarkdownRenderer;
 import net.java21.blog.backend.content.VideoEmbedTransformer;
@@ -65,6 +66,8 @@ class PostPublishServiceTest {
     private TagQueryRepository tagQueryRepository;
     @Mock
     private TagService tagService;
+    @Mock
+    private MediaReferenceService mediaReferences;
 
     private PostPublishService service;
     private Blog blog;
@@ -79,7 +82,7 @@ class PostPublishServiceTest {
                 new BlogAccess(blogRepository), categoryAccess, tagQueryRepository, clock);
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
-                categoryAccess, tagService, clock);
+                categoryAccess, tagService, mediaReferences, clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));

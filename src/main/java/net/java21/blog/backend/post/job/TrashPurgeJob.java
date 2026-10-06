@@ -7,9 +7,11 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.post.repository.TrashPurgeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -21,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>같은 기간이 지난 삭제된 블로그의 카테고리를 지우고 제목·소개를 비운다({@code blogs} 행은 주소 재사용 방지로 남김).</li>
  * </ol>
  * {@code blog.jobs.purge-batch-size}건씩 트랜잭션을 나눠 처리하고 처리 건수를 로그에 남긴다. 서버 1대 전제라 분산 락은 없다.
+ * 같은 트랜잭션에서 영구 삭제한 글의 이미지 참조({@code post_media})와 비운 블로그의 대표 이미지를 정리 대상 판단한다(US4, FR-073).
  */
 @Component
 public class TrashPurgeJob {
@@ -31,13 +34,22 @@ public class TrashPurgeJob {
     private final TransactionTemplate transactionTemplate;
     private final JobsProperties properties;
     private final Clock clock;
+    /** 이미지 참조 정리. 없으면(이미지를 다루지 않는 슬라이스 테스트) 건너뛴다. */
+    private final MediaReferenceService mediaReferences;
 
     public TrashPurgeJob(TrashPurgeRepository repository, TransactionTemplate transactionTemplate,
             JobsProperties properties, Clock clock) {
+        this(repository, transactionTemplate, properties, clock, null);
+    }
+
+    @Autowired
+    public TrashPurgeJob(TrashPurgeRepository repository, TransactionTemplate transactionTemplate,
+            JobsProperties properties, Clock clock, MediaReferenceService mediaReferences) {
         this.repository = repository;
         this.transactionTemplate = transactionTemplate;
         this.properties = properties;
         this.clock = clock;
+        this.mediaReferences = mediaReferences;
     }
 
     /** 처리 결과(영구 삭제한 글 수, 비운 블로그 수). */
@@ -52,10 +64,30 @@ public class TrashPurgeJob {
     public Result purge() {
         Instant cutoff = clock.instant().minus(properties.trashRetention());
         int batch = properties.purgeBatchSize();
-        long posts = inBatches(() -> repository.findPurgeablePostIds(cutoff, batch), repository::deletePosts);
-        long blogs = inBatches(() -> repository.findPurgeableBlogIds(cutoff, batch), repository::purgeBlogs);
+        long posts = inBatches(() -> repository.findPurgeablePostIds(cutoff, batch), this::deletePosts);
+        long blogs = inBatches(() -> repository.findPurgeableBlogIds(cutoff, batch), this::purgeBlogs);
         log.info("Trash purge finished: posts={}, blogs={}, cutoff={}", posts, blogs, cutoff);
         return new Result(posts, blogs);
+    }
+
+    /** 글 영구 삭제: 이미지 참조를 먼저 지우고, 삭제 뒤 그 이미지들을 정리 대상 판단. */
+    private long deletePosts(List<Long> ids) {
+        List<Long> mediaIds = mediaReferences == null ? List.of() : mediaReferences.detachPosts(ids);
+        long deleted = repository.deletePosts(ids);
+        if (mediaReferences != null) {
+            mediaReferences.reevaluate(mediaIds);
+        }
+        return deleted;
+    }
+
+    /** 삭제된 블로그 비우기: 대표 이미지 참조가 사라지므로 비운 뒤 정리 대상 판단. */
+    private long purgeBlogs(List<Long> ids) {
+        List<Long> coverIds = mediaReferences == null ? List.of() : mediaReferences.coverMediaIds(ids);
+        long purged = repository.purgeBlogs(ids);
+        if (mediaReferences != null) {
+            mediaReferences.reevaluate(coverIds);
+        }
+        return purged;
     }
 
     /**

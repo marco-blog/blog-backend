@@ -9,7 +9,7 @@ import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 로그인한 회원의 기본 정보와 내 블로그({@code GET /me}). 쿼리 2회(회원, 블로그 목록). */
+/** 로그인한 회원의 기본 정보와 내 블로그({@code GET /me}). 쿼리 2회(회원, 블로그 목록), 프로필 이미지가 있으면 1회 더. */
 @Service
 public class MeQueryService {
 
@@ -27,7 +27,7 @@ public class MeQueryService {
         User user = userRepository.findById(userId)
                 .filter(User::isActive)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED, "Member is not active"));
-        return new MeResponse(user.getId(), user.getEmail(), user.getNickname(), user.getBio(), null,
+        return new MeResponse(user.getId(), user.getEmail(), user.getNickname(), user.getBio(), user.profileImageUrl(),
                 user.getRole().name(), user.getLocale(), user.getTimeZone(),
                 blogQueryRepository.findActiveBlogLinks(user.getId()), null);
     }

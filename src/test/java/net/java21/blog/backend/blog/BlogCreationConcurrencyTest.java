@@ -55,6 +55,8 @@ class BlogCreationConcurrencyTest {
 
     private static final int REQUESTS = 10;
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private net.java21.blog.backend.media.service.MediaReferenceService mediaReferenceService;
     @Autowired
     private BlogService blogService;
     @Autowired

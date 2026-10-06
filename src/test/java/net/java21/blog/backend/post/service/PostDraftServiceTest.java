@@ -18,6 +18,7 @@ import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.domain.PostStatus;
@@ -57,6 +58,8 @@ class PostDraftServiceTest {
     private PostQueryRepository postQueryRepository;
     @Mock
     private TagQueryRepository tagQueryRepository;
+    @Mock
+    private MediaReferenceService mediaReferences;
 
     private PostDraftService service;
     private User owner;
@@ -65,7 +68,8 @@ class PostDraftServiceTest {
     @BeforeEach
     void setUp() {
         service = new PostDraftService(new BlogAccess(blogRepository), new PostAccess(postRepository), postRepository,
-                postDraftRepository, postQueryRepository, tagQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                postDraftRepository, postQueryRepository, tagQueryRepository, mediaReferences,
+                Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L);
         blog = TestEntities.blog(10L, owner, "marco");
     }

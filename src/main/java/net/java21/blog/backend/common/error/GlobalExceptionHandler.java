@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -77,6 +79,18 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         return error(ErrorCode.VALIDATION_FAILED, "Invalid value for " + e.getName(),
                 List.of(FieldError.of(e.getName(), ValidationCodes.INVALID_FORMAT)));
+    }
+
+    /** 업로드 크기가 {@code spring.servlet.multipart.max-file-size}(= {@code blog.media.max-size})를 넘었다(T212). */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(MaxUploadSizeExceededException e) {
+        return error(ErrorCode.MEDIA_TOO_LARGE, "Upload too large", List.of());
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException e) {
+        return error(ErrorCode.VALIDATION_FAILED, e.getMessage(),
+                List.of(FieldError.of(e.getRequestPartName(), ValidationCodes.REQUIRED)));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

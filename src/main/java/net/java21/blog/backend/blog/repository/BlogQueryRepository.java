@@ -1,6 +1,7 @@
 package net.java21.blog.backend.blog.repository;
 
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
+import static net.java21.blog.backend.media.domain.QMedia.media;
 import static net.java21.blog.backend.post.domain.QPost.post;
 
 import java.time.Instant;
@@ -26,16 +27,17 @@ public class BlogQueryRepository {
 
     /**
      * 내 블로그(삭제 제외)를 만든 순으로, 블로그마다 발행된 글 수(공개·비공개, 임시저장·휴지통 제외)와 함께 읽는다.
-     * 블로그 수와 관계없이 쿼리 1회(LEFT JOIN + GROUP BY).
+     * 대표 이미지 키도 같은 쿼리에서 읽는다(US4). 블로그 수와 관계없이 쿼리 1회(LEFT JOIN + GROUP BY).
      */
     public List<MyBlogRow> findMyBlogs(Long userId) {
         return queryFactory
                 .select(Projections.constructor(MyBlogRow.class,
-                        blog.id, blog.handle, blog.title, blog.coverMediaId, post.id.count(), blog.createdAt))
+                        blog.id, blog.handle, blog.title, media.mediaKey, post.id.count(), blog.createdAt))
                 .from(blog)
+                .leftJoin(blog.coverMedia, media)
                 .leftJoin(post).on(post.blog.eq(blog).and(post.status.eq(PostStatus.PUBLISHED)))
                 .where(blog.user.id.eq(userId), blog.status.eq(BlogStatus.ACTIVE))
-                .groupBy(blog.id, blog.handle, blog.title, blog.coverMediaId, blog.createdAt)
+                .groupBy(blog.id, blog.handle, blog.title, media.mediaKey, blog.createdAt)
                 .orderBy(blog.id.asc())
                 .fetch();
     }

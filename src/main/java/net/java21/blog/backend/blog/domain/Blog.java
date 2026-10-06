@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
+import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.user.domain.User;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -38,9 +39,10 @@ public class Blog extends BaseTimeEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** 대표 이미지(media). 미디어 엔티티는 US4에서 연결한다. */
-    @Column(name = "cover_media_id")
-    private Long coverMediaId;
+    /** 대표 이미지(media, owner_type=BLOG_COVER, US4). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cover_media_id")
+    private Media coverMedia;
 
     @Column(nullable = false, unique = true, length = 20, updatable = false)
     private String handle;
@@ -105,8 +107,23 @@ public class Blog extends BaseTimeEntity {
         return user;
     }
 
+    /** 대표 이미지를 바꾼다(null이면 지움). 이전 이미지의 정리 대상 판단은 호출한 쪽이 한다. */
+    public void changeCoverMedia(Media media) {
+        this.coverMedia = media;
+    }
+
+    public Media getCoverMedia() {
+        return coverMedia;
+    }
+
+    /** 대표 이미지 id(지연 로딩 프록시를 초기화하지 않는다). */
     public Long getCoverMediaId() {
-        return coverMediaId;
+        return coverMedia == null ? null : coverMedia.getId();
+    }
+
+    /** 대표 이미지 주소 {@code /media/{key}} 또는 null. 이미지가 읽혀 있지 않으면 한 번 읽는다. */
+    public String coverImageUrl() {
+        return coverMedia == null ? null : coverMedia.url();
     }
 
     public String getHandle() {

@@ -7,7 +7,8 @@ import net.java21.blog.backend.blog.domain.Blog;
 /**
  * {@code PATCH /blogs/{handle}}(JSON Merge Patch, api-guidelines 3절): 보낸 필드만 바꾸고 {@code null}은 값을 지운다.
  * 보냈는지 여부를 알아야 하므로 record 대신 setter가 표시를 남기는 클래스로 둔다.
- * 제목과 댓글 허용은 지울 수 없으므로 {@code null}이면 서비스가 400을 준다. 대표 이미지는 US4.
+ * 제목과 댓글 허용은 지울 수 없으므로 {@code null}이면 서비스가 400을 준다.
+ * 대표 이미지({@code coverImageMediaKey})는 {@code purpose=BLOG_COVER}로 올린 본인 이미지의 키, null이면 지운다.
  */
 public class UpdateBlogRequest {
 
@@ -17,6 +18,8 @@ public class UpdateBlogRequest {
     private boolean descriptionPresent;
     private Boolean commentEnabled;
     private boolean commentEnabledPresent;
+    private String coverImageMediaKey;
+    private boolean coverImageMediaKeyPresent;
 
     public UpdateBlogRequest() {
     }
@@ -48,6 +51,19 @@ public class UpdateBlogRequest {
     public void setCommentEnabled(Boolean commentEnabled) {
         this.commentEnabled = commentEnabled;
         this.commentEnabledPresent = true;
+    }
+
+    public String getCoverImageMediaKey() {
+        return coverImageMediaKey;
+    }
+
+    public void setCoverImageMediaKey(String coverImageMediaKey) {
+        this.coverImageMediaKey = coverImageMediaKey;
+        this.coverImageMediaKeyPresent = true;
+    }
+
+    public boolean hasCoverImageMediaKey() {
+        return coverImageMediaKeyPresent;
     }
 
     public boolean hasTitle() {

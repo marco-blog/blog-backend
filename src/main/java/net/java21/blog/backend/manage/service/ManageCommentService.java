@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 
+import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.comment.dto.CommentAuthor;
@@ -57,7 +58,8 @@ public class ManageCommentService {
     }
 
     private static ManageCommentResponse toResponse(BlogCommentRow row) {
-        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(), null);
+        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(),
+                Media.urlOf(row.profileMediaKey()));
         return new ManageCommentResponse(row.id(), row.content(), author, false, row.createdAt(), row.updatedAt(),
                 row.postId(), row.postTitle());
     }

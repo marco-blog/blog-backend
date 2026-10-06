@@ -8,13 +8,17 @@ import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
 import net.java21.blog.backend.crypto.EncryptedStringConverter;
+import net.java21.blog.backend.media.domain.Media;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -42,9 +46,10 @@ public class User extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 프로필 이미지(media). 미디어 엔티티는 US4에서 연결한다. */
-    @Column(name = "profile_media_id")
-    private Long profileMediaId;
+    /** 프로필 이미지(media, owner_type=PROFILE, US4). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profile_media_id")
+    private Media profileMedia;
 
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "email_enc", nullable = false, length = 512)
@@ -181,7 +186,7 @@ public class User extends BaseTimeEntity {
         this.emailHash = anonymousEmailHash;
         this.nickname = PURGED_NICKNAME;
         this.bio = null;
-        this.profileMediaId = null;
+        this.profileMedia = null;
         this.passwordHash = PURGED_PASSWORD_HASH;
     }
 
@@ -194,8 +199,23 @@ public class User extends BaseTimeEntity {
         return id;
     }
 
+    /** 프로필 이미지를 바꾼다(null이면 지움). 이전 이미지의 정리 대상 판단은 호출한 쪽이 한다. */
+    public void changeProfileMedia(Media media) {
+        this.profileMedia = media;
+    }
+
+    public Media getProfileMedia() {
+        return profileMedia;
+    }
+
+    /** 프로필 이미지 id(지연 로딩 프록시를 초기화하지 않는다). */
     public Long getProfileMediaId() {
-        return profileMediaId;
+        return profileMedia == null ? null : profileMedia.getId();
+    }
+
+    /** 프로필 이미지 주소 {@code /media/{key}} 또는 null. 이미지가 읽혀 있지 않으면 한 번 읽는다. */
+    public String profileImageUrl() {
+        return profileMedia == null ? null : profileMedia.url();
     }
 
     public String getEmail() {

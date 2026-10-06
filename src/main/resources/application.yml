@@ -17,6 +17,12 @@ spring:
     execution:
       # feedFetchExecutor 빈이 있어도 기본 applicationTaskExecutor를 만든다(풀을 공유하지 않음).
       mode: force
+  # 이미지 업로드(US4): 파일당 한도는 blog.media.max-size(10MB)와 같게, 요청 전체는 폼 필드 여유를 더한다.
+  # 넘으면 MaxUploadSizeExceededException → 413 MEDIA_TOO_LARGE.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
   jpa:
     open-in-view: false
     hibernate:
@@ -31,6 +37,9 @@ spring:
         default_batch_fetch_size: 100
 
 server:
+  tomcat:
+    # 한도를 넘은 업로드에도 연결을 끊지 않고 413 응답을 돌려줄 수 있게 남은 본문을 읽어 버린다(기본 2MB).
+    max-swallow-size: 20MB
   # 방문자 주소는 ClientAddressFilter가 blog.security.trusted-proxies(front 서버)가 보낸 X-Forwarded-For에서만 꺼낸다.
   # framework(ForwardedHeaderFilter)·native는 쓰지 않는다(framework는 아무 접속자의 헤더나 믿는다).
   forward-headers-strategy: none
@@ -90,6 +99,19 @@ blog:
     trash-purge-cron: "0 30 3 * * *"
     trash-retention: 30d
     purge-batch-size: 500
+  # 이미지(US4, research R11). upload-dir·temp-dir·thumbnail-dir는 필수이며 프로필 파일이 정한다(local은 임시 디렉터리 기본값,
+  # prod는 환경 변수). 기동 때 세 디렉터리를 만들고 쓸 수 없으면 기동을 멈춘다. 아래는 기본값(MediaProperties와 같다).
+  media:
+    temp-ttl: 24h
+    temp-quota: 200MB
+    max-size: 10MB
+    # 원본 가로×세로 상한(압축 폭탄 방지). 넘으면 413 MEDIA_TOO_LARGE
+    max-pixels: 40000000
+    cleanup-cron: "0 0 * * * *"
+    allowed-types: [image/jpeg, image/png, image/gif, image/webp]
+    thumbnail:
+      # FR-131 기본 크기(50x50, 100x100, 160x160, 300x200, 600x400, 1200x630)와 각 2배를 중복 없이
+      sizes: [50x50, 100x100, 160x160, 200x200, 300x200, 320x320, 600x400, 1200x630, 1200x800, 2400x1260]
   # 관리자(006 FR-105): 기동 시 SUPER_ADMIN이 한 명도 없으면 이 이메일의 회원을 SUPER_ADMIN으로 지정한다(첫 최고 관리자 지정의 유일한 경로).
   # 값은 환경 변수(또는 .env)로만 주고 저장소에 커밋하지 않는다. 비우면 아무것도 하지 않는다.
   admin:

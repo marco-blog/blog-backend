@@ -12,6 +12,14 @@ import net.java21.blog.backend.auth.domain.PasswordResetToken;
 import net.java21.blog.backend.auth.domain.RefreshToken;
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
+import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.domain.MediaStatus;
+import net.java21.blog.backend.media.repository.MediaQueryRepository;
+import net.java21.blog.backend.media.repository.MediaRepository;
+import net.java21.blog.backend.media.repository.PostMediaRepository;
+import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.media.storage.MediaStorage;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
@@ -24,6 +32,7 @@ import net.java21.blog.backend.user.repository.PrivacyPurgeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -52,7 +61,7 @@ class PrivacyPurgeJobTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:00:00Z");
 
     @TestConfiguration(proxyBeanMethods = false)
-    @Import({PrivacyPurgeRepository.class, LoginHistoryQueryRepository.class})
+    @Import({PrivacyPurgeRepository.class, LoginHistoryQueryRepository.class, MediaQueryRepository.class})
     static class Config {
 
         @Bean
@@ -66,13 +75,21 @@ class PrivacyPurgeJobTest {
             return new TransactionTemplate(transactionManager);
         }
 
+        @Bean
+        MediaReferenceService mediaReferenceService(MediaRepository mediaRepository,
+                MediaQueryRepository mediaQueryRepository, PostMediaRepository postMediaRepository, MutableClock clock) {
+            return new MediaReferenceService(mediaRepository, mediaQueryRepository, postMediaRepository,
+                    Mockito.mock(MediaStorage.class), clock);
+        }
+
         /** 배치 크기 2: 여러 번에 나눠 처리하는지 확인한다. */
         @Bean
         PrivacyPurgeJob privacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
-                PersonalDataHasher hasher, TransactionTemplate transactionTemplate, MutableClock clock) {
+                PersonalDataHasher hasher, TransactionTemplate transactionTemplate, MutableClock clock,
+                MediaReferenceService mediaReferences) {
             return new PrivacyPurgeJob(repository, loginHistory, hasher, transactionTemplate,
                     new PrivacyProperties(Duration.ofDays(30), Duration.ofDays(90)),
-                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock);
+                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock, mediaReferences);
         }
     }
 
@@ -84,6 +101,7 @@ class PrivacyPurgeJobTest {
     private JdbcTemplate jdbc;
 
     private User active;
+    private int mediaSeq;
 
     @BeforeEach
     void setUp() {
@@ -94,12 +112,16 @@ class PrivacyPurgeJobTest {
         User user = new User(email, TestEntities.HASHER.hashEmail(email), "$2a$hash", "닉" + email.charAt(0), "ko",
                 null, "2026-10-06", NOW.minus(Duration.ofDays(400)));
         TestEntities.with(user, "bio", "소개");
-        TestEntities.with(user, "profileMediaId", 99L);
         if (withdrawnAt != null) {
             TestEntities.with(user, "status", UserStatus.WITHDRAWN);
             TestEntities.with(user, "withdrawnAt", withdrawnAt);
         }
         em.persist(user);
+        Media profile = new Media(user, ("profile" + (++mediaSeq) + "0000000000000000000000").substring(0, 22),
+                MediaPurpose.PROFILE, "p.png", "2026/10/p.png", "image/png", 10, 1, 1);
+        TestEntities.with(profile, "status", MediaStatus.ATTACHED);
+        em.persist(profile);
+        user.changeProfileMedia(profile);
         return user;
     }
 
@@ -125,6 +147,11 @@ class PrivacyPurgeJobTest {
         assertThat(purged.getNickname()).isEqualTo(User.PURGED_NICKNAME);
         assertThat(purged.getBio()).isNull();
         assertThat(purged.getProfileMediaId()).isNull();
+        // 이전 프로필 이미지는 아무도 쓰지 않으므로 정리 대상(FR-073), 아직 파기하지 않은 회원의 이미지는 그대로
+        assertThat(jdbc.queryForObject("SELECT m.status FROM media m WHERE m.owner_id = ?", String.class, old.getId()))
+                .isEqualTo("ORPHANED");
+        assertThat(jdbc.queryForObject("SELECT m.status FROM media m WHERE m.owner_id = ?", String.class,
+                recent.getId())).isEqualTo("ATTACHED");
         assertThat(purged.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
         byte[] raw = jdbc.queryForObject("SELECT email_enc FROM users WHERE id = ?", byte[].class, old.getId());
         assertThat(new String(raw, java.nio.charset.StandardCharsets.ISO_8859_1)).doesNotContain("old@example.com")
