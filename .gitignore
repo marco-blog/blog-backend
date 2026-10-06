@@ -2,7 +2,7 @@ target/
 *.class
 .env
 .env.*
-application-local.yml
+!.env.example
 .idea/
 .vscode/
 .DS_Store
