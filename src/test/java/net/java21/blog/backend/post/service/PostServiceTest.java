@@ -95,6 +95,27 @@ class PostServiceTest {
         assertThat(service.detail(100L, OWNER).contentMarkdown()).isEqualTo("본문");
     }
 
+    /**
+     * T196: 상세의 {@code commentEnabled}는 방문자에게 블로그 설정을 반영한 값(FR-029)이다. 주인에게는 글별 설정 그대로를 주어
+     * 작성 화면이 블로그 설정 때문에 글별 설정을 바꿔 저장하지 않게 한다. {@code commentCount}는 표시되는 댓글 수 그대로.
+     */
+    @Test
+    void commentEnabledReflectsBlogSettingForVisitors() {
+        publish(PostVisibility.PUBLIC);
+        stubFound();
+        when(postQueryRepository.findPrevious(10L, 100L, NOW)).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(10L, 100L, NOW)).thenReturn(Optional.empty());
+        net.java21.blog.backend.support.TestEntities.with(post, "commentCount", 3);
+
+        assertThat(service.detail(100L, null).commentEnabled()).isTrue();
+        assertThat(service.detail(100L, null).commentCount()).isEqualTo(3);
+
+        blog.changeCommentEnabled(false);
+        assertThat(service.detail(100L, null).commentEnabled()).isFalse();
+        assertThat(service.detail(100L, STRANGER).commentEnabled()).isFalse();
+        assertThat(service.detail(100L, OWNER).commentEnabled()).isTrue();
+    }
+
     @Test
     void privatePostIsNotFoundForOthersButVisibleToOwner() {
         publish(PostVisibility.PRIVATE);

@@ -9,7 +9,9 @@ import net.java21.blog.backend.common.api.PageRequests;
 import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
+import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
+import net.java21.blog.backend.manage.service.ManageCommentService;
 import net.java21.blog.backend.manage.service.ManageDashboardService;
 import net.java21.blog.backend.manage.service.ManagePostService;
 import net.java21.blog.backend.post.domain.PostStatus;
@@ -35,12 +37,18 @@ public class ManageController {
     /** 정렬은 서버가 정한다(최신순, 휴지통은 최근에 버린 순). */
     private static final PageRequests MANAGE_POSTS = PageRequests.sortableBy(Sort.unsorted());
 
+    /** 관리 댓글 목록은 최신순 고정 */
+    private static final PageRequests MANAGE_COMMENTS = PageRequests.sortableBy(Sort.unsorted());
+
     private final ManageDashboardService dashboardService;
     private final ManagePostService postService;
+    private final ManageCommentService commentService;
 
-    public ManageController(ManageDashboardService dashboardService, ManagePostService postService) {
+    public ManageController(ManageDashboardService dashboardService, ManagePostService postService,
+            ManageCommentService commentService) {
         this.dashboardService = dashboardService;
         this.postService = postService;
+        this.commentService = commentService;
     }
 
     @GetMapping("/api/v1/blogs/{handle}/manage/dashboard")
@@ -65,5 +73,13 @@ public class ManageController {
     ApiResponse<BulkPostResponse> bulk(@CurrentUser AuthUser user, @PathVariable String handle,
             @Valid @RequestBody BulkPostRequest request) {
         return ApiResponse.ok(postService.bulk(user.userId(), handle, request));
+    }
+
+    /** 내 블로그 모든 글의 댓글(최신순, 006 FR-099). 지우기는 {@code DELETE /comments/{id}}. */
+    @GetMapping("/api/v1/blogs/{handle}/manage/comments")
+    ApiResponse<List<ManageCommentResponse>> comments(@CurrentUser AuthUser user, @PathVariable String handle,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return ApiResponse.page(
+                commentService.comments(user.userId(), handle, MANAGE_COMMENTS.resolve(page, size, null)));
     }
 }

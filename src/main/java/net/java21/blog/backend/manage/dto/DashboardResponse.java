@@ -9,9 +9,9 @@ import net.java21.blog.backend.post.dto.PostSummaryResponse;
  *
  * @param draftCount     임시저장(발행 전) 글 수
  * @param recentPosts    최근 글 5편(휴지통 제외)
- * @param newComments7d  최근 7일 새 댓글 수(US3 전에는 0)
- * @param recentComments 최근 댓글 5건(US3 전에는 빈 목록)
+ * @param newComments7d  최근 7일 새 댓글 수(표시되는 댓글, 휴지통 글 제외)
+ * @param recentComments 최근 댓글 5건
  */
 public record DashboardResponse(long draftCount, List<PostSummaryResponse> recentPosts, long newComments7d,
-        List<RecentCommentResponse> recentComments) {
+        List<ManageCommentResponse> recentComments) {
 }

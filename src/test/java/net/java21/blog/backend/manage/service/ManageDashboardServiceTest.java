@@ -27,7 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** 블로그 관리 대시보드(T150, 006 FR-100): 임시저장 수, 최근 글 5편. 댓글 수치는 US3에서 채운다. */
+/** 블로그 관리 대시보드(T150, 006 FR-100): 임시저장 수, 최근 글 5편, 댓글 수치(ManageCommentService). */
 @ExtendWith(MockitoExtension.class)
 class ManageDashboardServiceTest {
 
@@ -37,6 +37,8 @@ class ManageDashboardServiceTest {
     private BlogAccess blogAccess;
     @Mock
     private ManagePostQueryRepository repository;
+    @Mock
+    private ManageCommentService commentService;
 
     @Test
     void draftCountAndFiveRecentPosts() {
@@ -46,6 +48,7 @@ class ManageDashboardServiceTest {
         when(repository.findRecentPosts(10L, ManageDashboardService.RECENT_SIZE)).thenReturn(List.of(
                 new ManagePostRow(3L, "최근 글", "요약", null, 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW,
                         NOW, false, null)));
+        when(commentService.stats(10L, 5)).thenReturn(new ManageCommentService.CommentStats(1, List.of()));
 
         DashboardResponse dashboard = service().dashboard(1L, "marco");
 
@@ -54,7 +57,7 @@ class ManageDashboardServiceTest {
         assertThat(dashboard.recentPosts()).singleElement()
                 .satisfies(p -> assertThat(p.title()).isEqualTo("최근 글"))
                 .satisfies(p -> assertThat(p.purgeAt()).isNull());
-        assertThat(dashboard.newComments7d()).isZero();
+        assertThat(dashboard.newComments7d()).isEqualTo(1);
         assertThat(dashboard.recentComments()).isEmpty();
     }
 
@@ -69,6 +72,6 @@ class ManageDashboardServiceTest {
 
     private ManageDashboardService service() {
         return new ManageDashboardService(blogAccess, repository,
-                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500));
+                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), commentService);
     }
 }

@@ -38,7 +38,12 @@ public enum ErrorCode {
     DRAFT_NOT_FOUND(HttpStatus.NOT_FOUND),
 
     // 001 계정 설정 (Phase 4)
-    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST);
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST),
+
+    // 001 댓글 (US3, FR-027~029)
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND),
+    REPLY_DEPTH_EXCEEDED(HttpStatus.UNPROCESSABLE_CONTENT),
+    COMMENTS_DISABLED(HttpStatus.UNPROCESSABLE_CONTENT);
 
     private final HttpStatus status;
 
