@@ -5,6 +5,7 @@ import java.time.Instant;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.crypto.CryptoProperties;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
+import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.user.domain.User;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -34,6 +35,13 @@ public final class TestEntities {
         Blog blog = new Blog(owner, handle, Blog.defaultTitle(owner.getNickname()));
         ReflectionTestUtils.setField(blog, "id", id);
         return blog;
+    }
+
+    /** 발행 전 글(DRAFT). */
+    public static Post post(long id, Blog blog, String title) {
+        Post post = new Post(blog, title);
+        ReflectionTestUtils.setField(post, "id", id);
+        return post;
     }
 
     public static <T> T with(T entity, String field, Object value) {

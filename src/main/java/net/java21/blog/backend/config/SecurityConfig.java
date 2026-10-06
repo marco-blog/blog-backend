@@ -49,15 +49,21 @@ public class SecurityConfig {
             "/actuator/health"
     };
 
+    /** {@link #PUBLIC_GET} 아래에 있지만 주인만 쓰는 GET 경로(로그인 필요). 공개 규칙보다 먼저 검사한다. */
+    static final String[] AUTHENTICATED_GET = {
+            "/api/v1/blogs/*/posts/drafts/**"
+    };
+
     /**
      * 비로그인으로 부를 수 있는 POST 경로(Origin 검사는 그대로 받는다). 로그아웃은 접근 토큰이 만료돼도
-     * 리프레시 쿠키로 계열을 폐기할 수 있게 연다.
+     * 리프레시 쿠키로 계열을 폐기할 수 있게 연다. 조회수는 SSR loader가 방문자 대신 부른다.
      */
     static final String[] PUBLIC_POST = {
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
-            "/api/v1/auth/logout"
+            "/api/v1/auth/logout",
+            "/api/v1/posts/*/views"
     };
 
     @Bean
@@ -80,6 +86,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers(HttpMethod.GET, AUTHENTICATED_GET).authenticated()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
                         .anyRequest().authenticated())
