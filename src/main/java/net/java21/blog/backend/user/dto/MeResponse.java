@@ -7,7 +7,8 @@ import net.java21.blog.backend.blog.dto.BlogLink;
 /**
  * {@code GET /me}. {@code profileImageUrl}은 {@code /media/{key}} 또는 null, {@code unseenReleaseNote}는 003 전까지 항상 null.
  *
- * @param blogs 삭제하지 않은 내 블로그, 만든 순
+ * @param blogs                   삭제하지 않은 내 블로그, 만든 순
+ * @param unreadNotificationCount 안 읽은 알림 수(002 FR-033, 상단 배지)
  */
 public record MeResponse(
         long userId,
@@ -19,7 +20,8 @@ public record MeResponse(
         String locale,
         String timeZone,
         List<BlogLink> blogs,
-        UnseenReleaseNote unseenReleaseNote) {
+        UnseenReleaseNote unseenReleaseNote,
+        long unreadNotificationCount) {
 
     /** 003 FR-163 배너용 {@code { version, title }}. */
     public record UnseenReleaseNote(String version, String title) {

@@ -19,6 +19,7 @@ import net.java21.blog.backend.comment.domain.CommentStatus;
 import net.java21.blog.backend.comment.dto.CommentResponse;
 import net.java21.blog.backend.comment.dto.CreateCommentRequest;
 import net.java21.blog.backend.comment.dto.UpdateCommentRequest;
+import net.java21.blog.backend.comment.event.CommentCreatedEvent;
 import net.java21.blog.backend.comment.repository.CommentQueryRepository;
 import net.java21.blog.backend.comment.repository.CommentRepository;
 import net.java21.blog.backend.comment.repository.CommentRow;
@@ -40,6 +41,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * 댓글 규칙(T185, FR-027~029, US3 AS1~4): 볼 수 있는 글에만(노출 매트릭스, 아니면 404 {@code POST_NOT_FOUND}),
@@ -64,6 +66,8 @@ class CommentServiceTest {
     private CommentRepository commentRepository;
     @Mock
     private CommentQueryRepository queryRepository;
+    @Mock
+    private ApplicationEventPublisher events;
 
     private CommentService service;
     private User owner;
@@ -73,7 +77,7 @@ class CommentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CommentService(postRepository, userRepository, commentRepository, queryRepository);
+        service = new CommentService(postRepository, userRepository, commentRepository, queryRepository, events);
         owner = TestEntities.user(OWNER, "owner@example.com", "{hash}", "주인");
         writer = TestEntities.user(WRITER, "writer@example.com", "{hash}", "작성자");
         blog = TestEntities.blog(10L, owner, "marco");
@@ -166,6 +170,23 @@ class CommentServiceTest {
         assertThat(created.deleted()).isFalse();
         assertThat(created.createdAt()).isEqualTo(NOW);
         assertThat(created.replies()).isEmpty();
+        // 커밋 뒤 블로그 주인에게 NEW_COMMENT 알림을 만들 이벤트(002 T052)
+        verify(events).publishEvent(new CommentCreatedEvent(500L, 100L, "글 100", 10L, OWNER, WRITER));
+    }
+
+    @Test
+    void ownerCommentStillPublishesEventTheListenerSkipsIt() {
+        service.create(OWNER, 100L, new CreateCommentRequest("주인 댓글", null));
+
+        verify(events).publishEvent(new CommentCreatedEvent(500L, 100L, "글 100", 10L, OWNER, OWNER));
+    }
+
+    @Test
+    void failedCreateDoesNotPublish() {
+        assertThatThrownBy(() -> service.create(WRITER, 100L, new CreateCommentRequest(" ", null)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(events, never()).publishEvent(any(Object.class));
     }
 
     @Test

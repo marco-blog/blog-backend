@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import jakarta.persistence.EntityManager;
 
@@ -20,6 +21,10 @@ import net.java21.blog.backend.media.repository.MediaRepository;
 import net.java21.blog.backend.media.repository.PostMediaRepository;
 import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.media.storage.MediaStorage;
+import net.java21.blog.backend.notification.domain.Notification;
+import net.java21.blog.backend.notification.domain.NotificationTargetType;
+import net.java21.blog.backend.notification.domain.NotificationType;
+import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
@@ -61,7 +66,8 @@ class PrivacyPurgeJobTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:00:00Z");
 
     @TestConfiguration(proxyBeanMethods = false)
-    @Import({PrivacyPurgeRepository.class, LoginHistoryQueryRepository.class, MediaQueryRepository.class})
+    @Import({PrivacyPurgeRepository.class, LoginHistoryQueryRepository.class, MediaQueryRepository.class,
+            NotificationQueryRepository.class})
     static class Config {
 
         @Bean
@@ -86,10 +92,11 @@ class PrivacyPurgeJobTest {
         @Bean
         PrivacyPurgeJob privacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
                 PersonalDataHasher hasher, TransactionTemplate transactionTemplate, MutableClock clock,
-                MediaReferenceService mediaReferences) {
+                MediaReferenceService mediaReferences, NotificationQueryRepository notifications) {
             return new PrivacyPurgeJob(repository, loginHistory, hasher, transactionTemplate,
                     new PrivacyProperties(Duration.ofDays(30), Duration.ofDays(90)),
-                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock, mediaReferences);
+                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock, mediaReferences,
+                    notifications);
         }
     }
 
@@ -163,6 +170,29 @@ class PrivacyPurgeJobTest {
         User stillActive = reload(active);
         assertThat(stillActive.getEmail()).isEqualTo("active@example.com");
         assertThat(stillActive.getNickname()).isEqualTo("닉a");
+    }
+
+    @Test
+    void deletesNotificationsReceivedByPurgedMembers() {
+        User old = user("old@example.com", NOW.minus(Duration.ofDays(31)));
+        User recent = user("recent@example.com", NOW.minus(Duration.ofDays(1)));
+        for (User receiver : List.of(old, old, recent, active)) {
+            em.persist(new Notification(receiver, active, null, NotificationType.NEW_SUBSCRIBER,
+                    NotificationTargetType.BLOG, 1L, Map.of("blogTitle", "블로그")));
+        }
+        // 파기되는 회원이 일으킨 알림은 받는 회원의 것이므로 남는다("탈퇴한 회원"으로 보인다)
+        em.persist(new Notification(active, old, null, NotificationType.NEW_COMMENT, NotificationTargetType.COMMENT,
+                2L, Map.of("postId", 3, "postTitle", "글")));
+        em.flush();
+
+        assertThat(job.purge().users()).isEqualTo(1);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ?", Long.class,
+                old.getId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ?", Long.class,
+                recent.getId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ?", Long.class,
+                active.getId())).isEqualTo(2);
     }
 
     @Test

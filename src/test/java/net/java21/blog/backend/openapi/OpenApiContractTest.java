@@ -117,7 +117,11 @@ class OpenApiContractTest {
             "DELETE /api/v1/me/likes/{postId}",
             "PUT /api/v1/me/subscriptions/{handle}",
             "DELETE /api/v1/me/subscriptions/{handle}",
-            "GET /api/v1/me/feed");
+            "GET /api/v1/me/feed",
+            // 002 알림
+            "GET /api/v1/me/notifications",
+            "POST /api/v1/me/notifications/{id}/read",
+            "POST /api/v1/me/notifications/bulk");
 
     /** 공통 틀 대신 표준 형식(바이너리)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}");
