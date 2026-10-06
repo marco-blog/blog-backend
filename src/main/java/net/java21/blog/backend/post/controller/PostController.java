@@ -25,6 +25,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
 import net.java21.blog.backend.security.AuthUser;
 import net.java21.blog.backend.security.CurrentUser;
@@ -56,10 +57,13 @@ public class PostController {
     private final PostPublishService postPublishService;
     private final ViewCountService viewCountService;
     private final PostsProperties postsProperties;
+    private final RelatedPostService relatedPostService;
 
     public PostController(PostService postService, PostDraftService postDraftService,
-            PostPublishService postPublishService, ViewCountService viewCountService, PostsProperties postsProperties) {
+            PostPublishService postPublishService, ViewCountService viewCountService, PostsProperties postsProperties,
+            RelatedPostService relatedPostService) {
         this.postService = postService;
+        this.relatedPostService = relatedPostService;
         this.postDraftService = postDraftService;
         this.postPublishService = postPublishService;
         this.viewCountService = viewCountService;
@@ -94,6 +98,13 @@ public class PostController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, CacheHeaders.PRIVATE_NO_CACHE)
                 .body(ApiResponse.ok(postService.detail(id, viewer == null ? null : viewer.userId())));
+    }
+
+    /** 같은 블로그의 관련 글 최대 5편(002 FR-068). 기준 글을 볼 수 없으면 404 {@code POST_NOT_FOUND}. */
+    @GetMapping("/api/v1/posts/{id}/related")
+    ApiResponse<List<PostSummaryResponse>> related(@CurrentUser(required = false) AuthUser viewer,
+            @PathVariable Long id) {
+        return ApiResponse.ok(relatedPostService.related(id, viewer == null ? null : viewer.userId()));
     }
 
     @DeleteMapping("/api/v1/posts/{id}")

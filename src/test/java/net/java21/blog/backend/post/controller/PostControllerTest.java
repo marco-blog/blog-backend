@@ -43,6 +43,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
 import net.java21.blog.backend.support.AuthCookies;
 import net.java21.blog.backend.support.WebMvcTestSupport;
@@ -88,6 +89,8 @@ class PostControllerTest {
     private PostService postService;
     @MockitoBean
     private PostDraftService postDraftService;
+    @MockitoBean
+    private RelatedPostService relatedPostService;
     @MockitoBean
     private PostPublishService postPublishService;
     @MockitoBean
@@ -448,5 +451,38 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.header.isSuccessful").value(false))
                 .andExpect(jsonPath("$.header.resultCode").value(code))
                 .andExpect(jsonPath("$.result").value(nullValue()));
+    }
+
+    @Test
+    void relatedPostsAreOpenToAnonymousVisitors() throws Exception {
+        when(relatedPostService.related(123L, null)).thenReturn(List.of(SUMMARY));
+
+        mvc.perform(get("/api/v1/posts/123/related"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.header.isSuccessful").value(true))
+                .andExpect(jsonPath("$.result[0].id").value(123))
+                .andExpect(jsonPath("$.result[0].title").value("제목"))
+                .andExpect(jsonPath("$.result[0].hasDraft").value(false))
+                .andExpect(jsonPath("$.totalCount").doesNotExist());
+    }
+
+    @Test
+    void relatedPostsPassTheViewerAndEmptyIsAnEmptyArray() throws Exception {
+        when(relatedPostService.related(123L, 7L)).thenReturn(List.of());
+
+        mvc.perform(get("/api/v1/posts/123/related").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").isArray())
+                .andExpect(jsonPath("$.result").isEmpty());
+    }
+
+    @Test
+    void relatedPostsOfAnInvisiblePostAre404() throws Exception {
+        when(relatedPostService.related(9L, null))
+                .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "Post not found: 9"));
+
+        mvc.perform(get("/api/v1/posts/9/related"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.header.resultCode").value("POST_NOT_FOUND"));
     }
 }
