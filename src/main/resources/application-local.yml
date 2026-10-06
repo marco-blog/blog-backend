@@ -30,3 +30,7 @@ blog:
     allowed-origins:
       - http://localhost:5173
       - http://localhost:3000
+    # X-Forwarded-For를 믿는 접속 주소: 같은 컴퓨터의 front 개발 서버
+    trusted-proxies:
+      - 127.0.0.1
+      - "::1"
