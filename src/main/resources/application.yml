@@ -43,3 +43,12 @@ blog:
   crypto:
     # 개인정보 암호화(FR-134~136). 키 값은 프로필 파일이 .env 또는 환경 변수에서 읽는다.
     active-key-version: ${BLOG_CRYPTO_ACTIVE_KEY_VERSION:1}
+  # 인증(001 contracts/api.md "프로퍼티"). 아래 값이 기본값이며 AuthProperties에도 같은 기본값이 있다.
+  # jwt-secret(HS256, UTF-8 32바이트 이상)은 필수이고 프로필 파일이 .env 또는 환경 변수 BLOG_AUTH_JWT_SECRET에서 읽는다.
+  auth:
+    access-ttl: 30m
+    refresh-idle-ttl: 4h
+    refresh-absolute-ttl: 7d
+    refresh-reuse-grace: 10s
+    login-max-failures: 5
+    login-lock-duration: 10m
