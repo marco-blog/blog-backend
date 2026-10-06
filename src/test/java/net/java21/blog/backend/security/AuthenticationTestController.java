@@ -3,12 +3,18 @@ package net.java21.blog.backend.security;
 import java.util.Map;
 
 import net.java21.blog.backend.common.api.ApiResponse;
+import org.springframework.boot.test.context.TestComponent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 인증 필터·공개 경로·{@link CurrentUser} 확인용 테스트 컨트롤러. 공개 경로 규칙에 맞춰 경로를 흉내 낸다. */
+/**
+ * 인증 필터·공개 경로·{@link CurrentUser} 확인용 테스트 컨트롤러. 공개 경로 규칙에 맞춰 경로를 흉내 낸다.
+ * 실제 컨트롤러(/api/v1/me, /api/v1/blogs/{handle} 등)와 경로가 겹치므로 {@link TestComponent}로 컴포넌트 스캔에서 빼고
+ * 이 컨트롤러를 쓰는 테스트만 {@code @Import}로 올린다({@code @SpringBootTest}에 끼어들지 않게).
+ */
+@TestComponent
 @RestController
 class AuthenticationTestController {
 

@@ -52,3 +52,10 @@ blog:
     refresh-reuse-grace: 10s
     login-max-failures: 5
     login-lock-duration: 10m
+  # 블로그(FR-158): 회원별 한도(users.max_blogs)가 없을 때 회원 1명이 가질 수 있는 블로그 수. 1.0에서는 관리 화면에서 바꾸지 않는다.
+  blogs:
+    default-max-per-member: 3
+  # 약관·개인정보처리방침 버전(4개 언어 공통, FR-081·155). 가입 요청의 termsVersion과 같아야 한다.
+  # 문안을 바꾸면 이 값을 올린다(환경 변수 BLOG_LEGAL_TERMS_VERSION으로 덮어쓸 수 있다).
+  legal:
+    terms-version: ${BLOG_LEGAL_TERMS_VERSION:2026-10-06}

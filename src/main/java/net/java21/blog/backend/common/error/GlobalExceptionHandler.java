@@ -151,7 +151,13 @@ public class GlobalExceptionHandler {
         }
 
         static String of(ConstraintViolation<?> violation) {
-            String constraint = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
+            Class<? extends java.lang.annotation.Annotation> type =
+                    violation.getConstraintDescriptor().getAnnotation().annotationType();
+            FieldErrorCode custom = type.getAnnotation(FieldErrorCode.class);
+            if (custom != null) {
+                return custom.value();
+            }
+            String constraint = type.getSimpleName();
             if (constraint.equals("Size") || constraint.equals("Length")) {
                 Object min = violation.getConstraintDescriptor().getAttributes().get("min");
                 int length = lengthOf(violation.getInvalidValue());

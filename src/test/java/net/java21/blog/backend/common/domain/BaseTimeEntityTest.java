@@ -9,6 +9,7 @@ import jakarta.persistence.EntityManager;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.fixture.audit.FixtureTag;
+import net.java21.blog.backend.BlogBackendApplication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +25,7 @@ class BaseTimeEntityTest {
     private static final Instant T0 = Instant.parse("2026-10-06T04:24:19.123456Z");
 
     @TestConfiguration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = FixtureTag.class)
+    @EntityScan(basePackageClasses = {FixtureTag.class, BlogBackendApplication.class})
     static class FixtureEntities {
 
         @Bean

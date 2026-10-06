@@ -8,6 +8,7 @@ import java.lang.annotation.Target;
 
 import net.java21.blog.backend.common.time.TimeConfig;
 import net.java21.blog.backend.config.JpaAuditingConfig;
+import net.java21.blog.backend.crypto.CryptoConfig;
 import net.java21.blog.backend.config.QuerydslConfig;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -25,6 +26,7 @@ import org.springframework.test.context.TestPropertySource;
  *   <li>Hibernate 통계를 켜서 {@link QueryCounter}로 실행된 쿼리 수(N+1 없음)를 확인한다.</li>
  *   <li>QueryDSL({@link QuerydslConfig}), JPA Auditing({@link JpaAuditingConfig})과 UTC Clock({@link TimeConfig})을 함께 올린다.
  *       시각을 고정하려면 테스트에서 {@code @Primary} {@link MutableClock} 빈을 더한다.</li>
+ *   <li>개인정보 암호화({@link CryptoConfig}): 회원 엔티티의 {@code EncryptedStringConverter}가 쓴다(test 프로필의 고정 키).</li>
  * </ul>
  * MySQL 전용 쿼리(FULLTEXT ngram 등)는 {@link MySqlRepositoryTest}로 확인한다.
  */
@@ -43,6 +45,6 @@ import org.springframework.test.context.TestPropertySource;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
-@Import({QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class, QueryCounter.class})
+@Import({QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class, QueryCounter.class, CryptoConfig.class})
 public @interface JpaRepositoryTest {
 }

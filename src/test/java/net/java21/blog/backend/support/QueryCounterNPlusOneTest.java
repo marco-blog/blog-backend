@@ -10,6 +10,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import net.java21.blog.fixture.nplusone.FixtureChild;
 import net.java21.blog.fixture.nplusone.FixtureParent;
+import net.java21.blog.backend.BlogBackendApplication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ class QueryCounterNPlusOneTest {
 
     /** {@code @Nested} 클래스도 같은 엔티티를 쓰도록 {@code @Import}로 올린다(중첩 설정 자동 감지는 바깥 클래스에만 적용). */
     @TestConfiguration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = FixtureParent.class)
+    @EntityScan(basePackageClasses = {FixtureParent.class, BlogBackendApplication.class})
     static class FixtureEntities {
     }
 

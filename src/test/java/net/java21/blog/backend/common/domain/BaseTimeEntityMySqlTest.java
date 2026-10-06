@@ -11,6 +11,7 @@ import java.time.temporal.ChronoUnit;
 import jakarta.persistence.EntityManager;
 import net.java21.blog.backend.support.MySqlRepositoryTest;
 import net.java21.blog.fixture.audit.FixtureTag;
+import net.java21.blog.backend.BlogBackendApplication;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
@@ -26,7 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class BaseTimeEntityMySqlTest {
 
     @TestConfiguration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = FixtureTag.class)
+    @EntityScan(basePackageClasses = {FixtureTag.class, BlogBackendApplication.class})
     static class FixtureEntities {
     }
 
