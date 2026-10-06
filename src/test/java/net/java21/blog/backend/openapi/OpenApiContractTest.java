@@ -121,10 +121,30 @@ class OpenApiContractTest {
             // 002 알림
             "GET /api/v1/me/notifications",
             "POST /api/v1/me/notifications/{id}/read",
-            "POST /api/v1/me/notifications/bulk");
+            "POST /api/v1/me/notifications/bulk",
+            // 002 검색·관련 글
+            "GET /api/v1/search/posts",
+            "GET /api/v1/posts/{id}/related",
+            // 002 블로그 피드(RSS·Atom)와 사이트맵·robots(접두어 없음, 표준 형식)
+            "GET /{handle}/rss",
+            "GET /{handle}/atom",
+            "GET /{handle}/category/{categoryId}/rss",
+            "GET /sitemap.xml",
+            "GET /sitemap/pages.xml",
+            "GET /sitemap/posts-{n}.xml",
+            "GET /robots.txt");
 
-    /** 공통 틀 대신 표준 형식(바이너리)을 쓰는 경로(api-guidelines 4절 예외). */
-    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}");
+    /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
+    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
+            "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
+            "GET /robots.txt");
+
+    /** 002가 001 응답에 더한 필드(002 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.of(
+            "MeResponse", List.of("unreadNotificationCount"),
+            "BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode"),
+            "PostDetailResponse", List.of("likeCount", "likedByMe"),
+            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode"));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
@@ -188,6 +208,19 @@ class OpenApiContractTest {
             }
         }
         assertThat(violations).as("공통 틀이 아닌 응답").isEmpty();
+    }
+
+    @Test
+    void responseExtensionsOf002AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        RESPONSE_EXTENSIONS.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 002 응답 확장 필드").isEmpty();
     }
 
     @Test
