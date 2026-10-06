@@ -22,7 +22,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = CommonResponseTestController.class)
-@Import({SecurityConfig.class, ApiErrorWriter.class})
+@Import({SecurityConfig.class, ApiErrorWriter.class, SameOriginRequests.class})
 class CommonResponseWebMvcTest {
 
     @Autowired
