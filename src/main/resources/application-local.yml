@@ -22,6 +22,9 @@ blog:
     keys:
       "[1]": ${BLOG_CRYPTO_KEY_V1}
     hash-key: ${BLOG_CRYPTO_HASH_KEY}
+  auth:
+    # 접근 토큰 서명 키(UTF-8 32바이트 이상). .env 의 값을 쓴다. 생성: openssl rand -base64 48
+    jwt-secret: ${BLOG_AUTH_JWT_SECRET}
   security:
     # 상태 변경 요청의 Origin 허용 목록(R3): front 개발 서버
     allowed-origins:

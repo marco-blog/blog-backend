@@ -11,10 +11,13 @@ import jakarta.validation.constraints.Size;
 
 import net.java21.blog.backend.common.api.ApiResponse;
 import net.java21.blog.backend.common.api.FieldError;
+import net.java21.blog.backend.common.api.PageRequests;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -55,6 +58,17 @@ class CommonResponseTestController {
     ApiResponse<List<Item>> page(@RequestParam int page, @RequestParam(defaultValue = "2") @Max(50) int size) {
         List<Item> items = List.of(new Item(1, "a"), new Item(2, "b"));
         return ApiResponse.page(new PageImpl<>(items, PageRequest.of(page, size), 135));
+    }
+
+    private static final PageRequests ITEM_PAGES = PageRequests.sortableBy(Sort.by(Sort.Direction.DESC, "id"), "id", "title");
+
+    /** {@link PageRequests} 사용 예: page·size·sort를 해석하고, 허용하지 않은 sort는 400 VALIDATION_FAILED. */
+    @GetMapping("/paged")
+    ApiResponse<List<Item>> paged(@RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size, @RequestParam(required = false) String sort) {
+        Pageable pageable = ITEM_PAGES.resolve(page, size, sort);
+        String summary = "page=" + pageable.getPageNumber() + " size=" + pageable.getPageSize() + " sort=" + pageable.getSort();
+        return ApiResponse.page(new PageImpl<>(List.of(new Item(1, summary)), pageable, 135));
     }
 
     @GetMapping("/feed")

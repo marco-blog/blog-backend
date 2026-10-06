@@ -21,5 +21,8 @@ blog:
     keys:
       "[1]": dGVzdC1vbmx5LWtleS12MS0wMDAwMDAwMDAwMDAwMDA=
     hash-key: dGVzdC1vbmx5LWhhc2gta2V5LTAwMDAwMDAwMDAwMDA=
+  auth:
+    # 테스트 전용 고정 JWT 서명 키(비밀 아님, 32바이트 이상). 운영·개발 키로 쓰지 않는다.
+    jwt-secret: test-only-jwt-secret-not-for-production-0000
   security:
     allowed-origins: http://localhost:5173

@@ -5,6 +5,8 @@
 #   BLOG_CRYPTO_KEY_V1              개인정보 암호화 키(Base64 32바이트, openssl rand -base64 32)
 #   BLOG_CRYPTO_HASH_KEY            검색용 HMAC 키(Base64 32바이트). 한번 정하면 바꾸지 않는다.
 #   BLOG_CRYPTO_ACTIVE_KEY_VERSION  현재 암호화 키 버전(기본 1)
+#   BLOG_AUTH_JWT_SECRET            접근 토큰(JWT HS256) 서명 키(UTF-8 32바이트 이상, openssl rand -base64 48).
+#                                   바꾸면 발급된 접근 토큰이 모두 무효가 된다(리프레시로 다시 받는다).
 # 키 교체: 새 버전 키를 BLOG_CRYPTO_KEYS_2 처럼 추가 → BLOG_CRYPTO_ACTIVE_KEY_VERSION=2 → 재암호화 후 이전 키 제거.
 spring:
   datasource:
@@ -29,5 +31,7 @@ blog:
     keys:
       "[1]": ${BLOG_CRYPTO_KEY_V1}
     hash-key: ${BLOG_CRYPTO_HASH_KEY}
+  auth:
+    jwt-secret: ${BLOG_AUTH_JWT_SECRET}
   security:
     allowed-origins: https://blog.java21.net

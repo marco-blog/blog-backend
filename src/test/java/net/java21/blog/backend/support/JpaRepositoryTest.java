@@ -6,6 +6,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import net.java21.blog.backend.common.time.TimeConfig;
 import net.java21.blog.backend.config.JpaAuditingConfig;
 import net.java21.blog.backend.config.QuerydslConfig;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -22,7 +23,8 @@ import org.springframework.test.context.TestPropertySource;
  *   <li>접속 정보를 {@code @TestPropertySource}로 지정해 {@code BLOG_TEST_DATASOURCE_*}·{@code SPRING_DATASOURCE_*}
  *       환경 변수가 있어도 MySQL에 붙지 않는다(환경 변수보다 우선순위가 높다). {@link TestSchemaInitializer}도 쓰지 않는다.</li>
  *   <li>Hibernate 통계를 켜서 {@link QueryCounter}로 실행된 쿼리 수(N+1 없음)를 확인한다.</li>
- *   <li>QueryDSL({@link QuerydslConfig})과 JPA Auditing({@link JpaAuditingConfig})을 함께 올린다.</li>
+ *   <li>QueryDSL({@link QuerydslConfig}), JPA Auditing({@link JpaAuditingConfig})과 UTC Clock({@link TimeConfig})을 함께 올린다.
+ *       시각을 고정하려면 테스트에서 {@code @Primary} {@link MutableClock} 빈을 더한다.</li>
  * </ul>
  * MySQL 전용 쿼리(FULLTEXT ngram 등)는 {@link MySqlRepositoryTest}로 확인한다.
  */
@@ -41,6 +43,6 @@ import org.springframework.test.context.TestPropertySource;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
-@Import({QuerydslConfig.class, JpaAuditingConfig.class, QueryCounter.class})
+@Import({QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class, QueryCounter.class})
 public @interface JpaRepositoryTest {
 }

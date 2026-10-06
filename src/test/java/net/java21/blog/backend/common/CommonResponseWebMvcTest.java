@@ -10,8 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import net.java21.blog.backend.common.error.ApiErrorWriter;
-import net.java21.blog.backend.config.SecurityConfig;
+import net.java21.blog.backend.support.WebMvcTestSupport;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +21,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = CommonResponseTestController.class)
-@Import({SecurityConfig.class, ApiErrorWriter.class, SameOriginRequests.class})
+@Import(WebMvcTestSupport.class)
 class CommonResponseWebMvcTest {
 
     @Autowired
@@ -52,6 +51,16 @@ class CommonResponseWebMvcTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result.length()").value(2))
                     .andExpect(jsonPath("$.totalCount").value(135));
+        }
+
+        @Test
+        void pageRequestsClampsSizeAndAppliesSort() throws Exception {
+            mvc.perform(get("/api/v1/test/paged").param("page", "1").param("size", "500").param("sort", "title,asc"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.result[0].title").value("page=1 size=50 sort=title: ASC"))
+                    .andExpect(jsonPath("$.totalCount").value(135));
+            mvc.perform(get("/api/v1/test/paged"))
+                    .andExpect(jsonPath("$.result[0].title").value("page=0 size=20 sort=id: DESC"));
         }
 
         @Test
@@ -151,6 +160,16 @@ class CommonResponseWebMvcTest {
             mvc.perform(get("/api/v1/test/items").param("page", "x"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID_FORMAT"));
+        }
+
+        @Test
+        void pageRequestsRejectsDisallowedSort() throws Exception {
+            mvc.perform(get("/api/v1/test/paged").param("sort", "password,desc"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.header.resultCode").value("VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.header.fieldErrors[0].field").value("sort"))
+                    .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID"))
+                    .andExpect(jsonPath("$.result").value(nullValue()));
         }
 
         @Test
