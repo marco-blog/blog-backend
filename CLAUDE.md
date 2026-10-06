@@ -14,6 +14,7 @@ Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../docs/specs/`에
 - 패키지는 도메인별: `net.java21.blog.backend.{domain}/controller|service|repository|dto|domain`
 - 에러 응답: `{ "code": "POST_NOT_FOUND", "message": "..." }`
 - 쓰기 API는 소유자 검증 테스트를 함께 작성한다.
+- 경로·기간 같은 운영 값은 하드코딩하지 않고 `@ConfigurationProperties`(접두어 `blog.`)로 관리한다. 예: `blog.media.upload-dir`, `blog.media.temp-dir`.
 
 ## 테스트 규칙
 - 라인 커버리지 80% 이상. 미만이면 `./mvnw verify`가 실패한다(JaCoCo check).
