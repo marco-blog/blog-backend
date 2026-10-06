@@ -15,6 +15,7 @@ import net.java21.blog.backend.support.JpaFixtures;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.QueryCounter;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.topic.domain.Topic;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,5 +117,26 @@ class SitemapQueryRepositoryTest {
         assertThat(repository.stats().lastModified()).isNull();
         assertThat(repository.findBlogs()).isEmpty();
         assertThat(repository.findPosts(0, 10)).isEmpty();
+    }
+
+    /** 003 T061: 운영자 숨김이 아닌 주제 경로(대분류·부모 slug가 붙은 소분류), 숨긴 대분류의 소분류 제외, 쿼리 1회. */
+    @Test
+    void topicPathsSkipAdminHiddenTopicsAndChildrenOfHiddenMajors() {
+        Topic life = fx.topic(null, "life", 1);
+        Topic knowledge = fx.topic(null, "knowledge", 0);
+        fx.topic(life, "daily", 1);
+        fx.topic(life, "pets", 0);
+        fx.topic(knowledge, "it-internet", 0).hide();
+        Topic culture = fx.topic(null, "culture", 2);
+        fx.topic(culture, "movie", 0);
+        culture.hide();
+        fx.flushAndClear();
+
+        queryCounter.reset();
+        List<String> paths = repository.findTopicPaths();
+
+        assertThat(queryCounter.count()).isEqualTo(1);
+        assertThat(paths).containsExactly("/topics/knowledge", "/topics/life", "/topics/life/pets",
+                "/topics/life/daily");
     }
 }

@@ -121,6 +121,20 @@ class SitemapControllerTest {
         assertThat(doc.getElementsByTagNameNS(NS, "priority").getLength()).isZero();
     }
 
+    /** 003 T061: pages.xml에 운영자 숨김이 아닌 주제 페이지의 절대 주소(lastmod 없음). */
+    @Test
+    void pagesIncludeTopicPagesWithoutLastmod() throws Exception {
+        when(repository.findBlogs()).thenReturn(List.of(new SitemapBlogRow("marco", UPDATED)));
+        when(repository.findTopicPaths()).thenReturn(List.of("/topics/knowledge", "/topics/knowledge/it-internet"));
+
+        Document doc = parse(mvc.perform(get("/sitemap/pages.xml")).andExpect(status().isOk()).andReturn());
+
+        assertThat(texts(doc, "loc")).containsExactly("https://blog.example.com/", "https://blog.example.com/terms",
+                "https://blog.example.com/privacy", "https://blog.example.com/marco",
+                "https://blog.example.com/topics/knowledge", "https://blog.example.com/topics/knowledge/it-internet");
+        assertThat(texts(doc, "lastmod")).containsExactly("2026-10-06T04:24:19Z");
+    }
+
     @Test
     void postsFileListsPostUrlsWithLastmod() throws Exception {
         when(repository.stats()).thenReturn(new SitemapStats(3, UPDATED));
