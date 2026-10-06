@@ -24,7 +24,7 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * 회원(users). 이메일은 정규화(소문자) 후 암호화해 {@code email_enc}에, 검색용 HMAC은 {@code email_hash}에 둔다(FR-134·135).
- * 002~007이 더한 컬럼(last_seen_release_version 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * 003의 마지막 확인 릴리스 노트 버전({@code last_seen_release_version})을 매핑하고, 004~007이 더한 컬럼은 DB 기본값이 있으므로 매핑하지 않는다.
  * 열거형은 MySQL에서 VARCHAR이므로 {@code @JdbcTypeCode(VARCHAR)}로 Hibernate의 ENUM 타입 추론을 막는다(ddl-auto=validate).
  */
 @Entity
@@ -102,6 +102,10 @@ public class User extends BaseTimeEntity {
     /** 회원별 블로그 한도. null이면 {@code blog.blogs.default-max-per-member}. */
     @Column(name = "max_blogs")
     private Integer maxBlogs;
+
+    /** 마지막으로 확인한 릴리스 노트 버전(003 FR-163). NULL=확인한 적 없음. 더 높은 값으로만 바꾼다(조건부 UPDATE). */
+    @Column(name = "last_seen_release_version", length = 20)
+    private String lastSeenReleaseVersion;
 
     protected User() {
     }
@@ -193,6 +197,10 @@ public class User extends BaseTimeEntity {
     /** 실제 적용되는 블로그 한도. */
     public int effectiveBlogLimit(int defaultMax) {
         return maxBlogs == null ? defaultMax : maxBlogs;
+    }
+
+    public String getLastSeenReleaseVersion() {
+        return lastSeenReleaseVersion;
     }
 
     public Long getId() {

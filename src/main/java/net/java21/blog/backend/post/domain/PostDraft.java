@@ -22,7 +22,7 @@ import org.hibernate.type.SqlTypes;
 /**
  * 글 작성 중 사본(post_drafts, T097, FR-016·108). 발행 전 글의 작성본이거나, 발행된 글을 고치는 동안의 작성본이다.
  * 발행 때 내용을 {@link Post}에 반영하고 지운다. 글을 영구 삭제하면 DB의 {@code ON DELETE CASCADE}로 함께 지워진다.
- * {@code category_id}는 외래 키 없이 저장하고 발행 때 검증한다(US2). 003의 {@code topic_id}는 매핑하지 않는다.
+ * {@code category_id}와 003의 {@code topic_id}는 외래 키 없이 저장하고 발행 때 검증한다(US2, 003 research P9).
  */
 @Entity
 @Table(name = "post_drafts")
@@ -52,6 +52,10 @@ public class PostDraft extends BaseTimeEntity {
     @Column(name = "tags_json")
     private List<String> tags = new ArrayList<>();
 
+    /** 작성 중 주제(소분류, 003 FR-076). 외래 키 없음, 저장 때 검증하지 않는다. */
+    @Column(name = "topic_id")
+    private Long topicId;
+
     @Column(name = "saved_at", nullable = false)
     private Instant savedAt;
 
@@ -69,6 +73,15 @@ public class PostDraft extends BaseTimeEntity {
         this.categoryId = categoryId;
         this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags);
         this.savedAt = now;
+    }
+
+    /** 작성 중 주제를 바꾼다(null = 선택 안 함, 003 research P9). */
+    public void changeTopic(Long topicId) {
+        this.topicId = topicId;
+    }
+
+    public Long getTopicId() {
+        return topicId;
     }
 
     public Long getPostId() {

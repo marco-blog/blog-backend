@@ -80,13 +80,9 @@ class MediaIntegrationHooksTest {
 
     @org.junit.jupiter.api.BeforeEach
     void otherFeatureTables() {
-        // 트랙백(005)·포털(003) 엔티티는 아직 없어 H2에 테이블이 없다. 영구 삭제가 지우는 테이블만 같은 이름으로 둔다.
+        // 트랙백(005) 엔티티는 아직 없어 H2에 테이블이 없다. 영구 삭제가 지우는 테이블만 같은 이름으로 둔다.
         jdbc.execute("CREATE TABLE IF NOT EXISTS trackbacks (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
                 + " post_id BIGINT NOT NULL, source_post_id BIGINT, source_url VARCHAR(1000) NOT NULL)");
-        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_curations (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-                + " post_id BIGINT NOT NULL)");
-        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_exclusions (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-                + " post_id BIGINT)");
     }
 
     @Test

@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
 import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.topic.domain.Topic;
 import net.java21.blog.backend.user.domain.User;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -25,7 +26,8 @@ import org.hibernate.type.SqlTypes;
 /**
  * 블로그(blogs). 회원 1 : 블로그 N(R28). {@code handle}은 삭제된 블로그를 포함해 유일하고 바꿀 수 없다(FR-002, FR-159).
  * 002의 구독자 수({@code subscriber_count}, 읽기 전용 카운터: 구독·취소 때 원자적 UPDATE로만 바꾼다)와 피드 설정
- * ({@code feed_item_count}, {@code feed_content_mode})을 매핑한다. 003~007이 더한 컬럼(portal_enabled 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * ({@code feed_item_count}, {@code feed_content_mode})과 003의 포털 설정({@code portal_enabled}, {@code default_topic_id},
+ * {@code first_published_at})을 매핑한다. 004~007이 더한 컬럼(guestbook_enabled 등)은 DB 기본값이 있으므로 매핑하지 않는다.
  */
 @Entity
 @Table(name = "blogs")
@@ -85,6 +87,19 @@ public class Blog extends BaseTimeEntity {
     @Column(name = "feed_content_mode", nullable = false, length = 10)
     private FeedContentMode feedContentMode = FeedContentMode.FULL;
 
+    /** "포털에 내 글 노출"(003 FR-089, 기본 켜짐). 꺼도 블로그·검색·RSS에는 영향이 없다. */
+    @Column(name = "portal_enabled", nullable = false)
+    private boolean portalEnabled = true;
+
+    /** 블로그 기본 주제(소분류, 003 FR-077). 새 글 작성 때 front가 미리 선택한다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "default_topic_id")
+    private Topic defaultTopic;
+
+    /** 처음 글을 발행한 시각(003 FR-087 "새로 시작한 블로그"). NULL일 때 한 번만 채우고 되돌리지 않는다. */
+    @Column(name = "first_published_at")
+    private Instant firstPublishedAt;
+
     protected Blog() {
     }
 
@@ -130,6 +145,39 @@ public class Blog extends BaseTimeEntity {
         }
         this.feedItemCount = feedItemCount;
         this.feedContentMode = feedContentMode;
+    }
+
+    /** 포털 설정(003 FR-077·089). 기본 주제 검증(소분류·숨김 아님)은 호출한 쪽이 한다. */
+    public void changePortalSettings(boolean portalEnabled, Topic defaultTopic) {
+        this.portalEnabled = portalEnabled;
+        this.defaultTopic = defaultTopic;
+    }
+
+    /**
+     * 첫 발행 시각을 남긴다(003 FR-087). 이미 값이 있으면 그대로 둔다(두 번째 글, 수정 발행, 글 삭제 후 다시 발행).
+     * 004 예약 발행도 실제로 발행될 때 이 메서드를 부른다.
+     */
+    public void markFirstPublished(Instant publishedAt) {
+        if (firstPublishedAt == null) {
+            this.firstPublishedAt = publishedAt;
+        }
+    }
+
+    public boolean isPortalEnabled() {
+        return portalEnabled;
+    }
+
+    public Topic getDefaultTopic() {
+        return defaultTopic;
+    }
+
+    /** 기본 주제 id(지연 로딩 프록시를 초기화하지 않는다). */
+    public Long getDefaultTopicId() {
+        return defaultTopic == null ? null : defaultTopic.getId();
+    }
+
+    public Instant getFirstPublishedAt() {
+        return firstPublishedAt;
     }
 
     public Long getId() {

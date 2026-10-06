@@ -59,6 +59,13 @@ public class SecurityConfig {
             "/sitemap.xml",
             "/sitemap/**",
             "/robots.txt",
+            // 003 포털·주제·릴리스 노트(003 contracts/api.md)
+            "/api/v1/topics",
+            "/api/v1/topics/*/posts",
+            "/api/v1/portal",
+            "/api/v1/portal/latest",
+            "/api/v1/release-notes",
+            "/api/v1/release-notes/**",
             "/media/**",
             "/v3/api-docs",
             "/v3/api-docs/**",
@@ -73,7 +80,7 @@ public class SecurityConfig {
 
     /**
      * 비로그인으로 부를 수 있는 POST 경로(Origin 검사는 그대로 받는다). 로그아웃은 접근 토큰이 만료돼도
-     * 리프레시 쿠키로 계열을 폐기할 수 있게 연다. 조회수는 SSR loader가 방문자 대신 부른다.
+     * 리프레시 쿠키로 계열을 폐기할 수 있게 연다. 조회수는 SSR loader가 방문자 대신, 끝까지 읽음은 브라우저가 부른다.
      */
     static final String[] PUBLIC_POST = {
             "/api/v1/auth/signup",
@@ -82,7 +89,9 @@ public class SecurityConfig {
             "/api/v1/auth/logout",
             "/api/v1/auth/password-reset/request",
             "/api/v1/auth/password-reset/confirm",
-            "/api/v1/posts/*/views"
+            "/api/v1/posts/*/views",
+            // 003 끝까지 읽음(FR-086): 방문자 브라우저가 보낸다
+            "/api/v1/posts/*/read-complete"
     };
 
     @Bean

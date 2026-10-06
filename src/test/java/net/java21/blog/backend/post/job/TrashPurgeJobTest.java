@@ -13,6 +13,8 @@ import net.java21.blog.backend.blog.domain.BlogStatus;
 import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.portal.domain.PortalCuration;
+import net.java21.blog.backend.portal.domain.PortalExclusion;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.domain.PostVisibility;
@@ -88,18 +90,12 @@ class TrashPurgeJobTest {
 
     @BeforeEach
     void setUp() {
-        // 트랙백(005)·포털(003) 엔티티는 아직 없다. 영구 삭제가 이 테이블들의 posts FK(ON DELETE CASCADE 없음)를 먼저 정리하는지
-        // 확인하려고 실제 스키마와 같은 FK만 가진 모양으로 만든다.
+        // 트랙백(005) 엔티티는 아직 없다. 영구 삭제가 이 테이블의 posts FK(ON DELETE CASCADE 없음)를 먼저 정리하는지
+        // 확인하려고 실제 스키마와 같은 FK만 가진 모양으로 만든다. 포털(003) 테이블은 엔티티로 생긴다.
         jdbc.execute("CREATE TABLE IF NOT EXISTS trackbacks (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
                 + " post_id BIGINT NOT NULL, source_post_id BIGINT, source_url VARCHAR(1000) NOT NULL,"
                 + " CONSTRAINT fk_test_trackbacks_post FOREIGN KEY (post_id) REFERENCES posts (id),"
                 + " CONSTRAINT fk_test_trackbacks_source FOREIGN KEY (source_post_id) REFERENCES posts (id))");
-        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_curations (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-                + " post_id BIGINT NOT NULL,"
-                + " CONSTRAINT fk_test_portal_curations_post FOREIGN KEY (post_id) REFERENCES posts (id))");
-        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_exclusions (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-                + " post_id BIGINT,"
-                + " CONSTRAINT fk_test_portal_exclusions_post FOREIGN KEY (post_id) REFERENCES posts (id))");
         owner = new User("marco@example.com", "a".repeat(64), "$2a$hash", "marco", null, null, "2026-10-06", NOW);
         em.persist(owner);
         blog = new Blog(owner, "marco", "마르코의 블로그");
@@ -191,8 +187,9 @@ class TrashPurgeJobTest {
         jdbc.update("INSERT INTO trackbacks (post_id, source_url) VALUES (?, 'https://x.test/1')", old.getId());
         jdbc.update("INSERT INTO trackbacks (post_id, source_post_id, source_url) VALUES (?, ?, 'https://x.test/2')",
                 live.getId(), old.getId());
-        jdbc.update("INSERT INTO portal_curations (post_id) VALUES (?)", old.getId());
-        jdbc.update("INSERT INTO portal_exclusions (post_id) VALUES (?)", old.getId());
+        em.persist(new PortalCuration(old, NOW, NOW.plus(Duration.ofDays(1)), 0, owner));
+        em.persist(new PortalExclusion(old, "테스트", owner));
+        em.flush();
         em.clear();
 
         TrashPurgeJob.Result result = job.purge();

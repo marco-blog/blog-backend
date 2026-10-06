@@ -85,6 +85,8 @@ blog:
     view-dedup-max-size: 100000
     visitor-cookie: visitor_id
     visitor-cookie-max-age: 365d
+    # 글 일별 통계(post_daily_stats, 003 FR-086) 보관 기간. 인기 점수는 최근 7일만 쓴다.
+    stats-retention: 90d
   # 정기 작업(research R26). 휴지통 비우기(FR-084, FR-159): 보관 기간이 지난 휴지통 글과 삭제된 블로그를 건수 단위로 정리한다.
   # 메일(FR-133, research R23). host·port·from은 프로필 파일이, username·password는 환경 변수가 준다.
   mail:
@@ -101,6 +103,8 @@ blog:
     purge-batch-size: 500
     # 오래된 알림 정리(002 research D3): blog.notifications.retention이 지난 알림을 지운다.
     notification-purge-cron: "0 15 4 * * *"
+    # 글 일별 통계 정리(003 research P4): blog.posts.stats-retention이 지난 post_daily_stats 행을 지운다.
+    post-stats-purge-cron: "0 45 4 * * *"
   # 알림(002 FR-033, contracts/api.md "프로퍼티").
   notifications:
     retention: 90d
@@ -126,6 +130,25 @@ blog:
     thumbnail:
       # FR-131 기본 크기(50x50, 100x100, 160x160, 300x200, 600x400, 1200x630)와 각 2배를 중복 없이
       sizes: [50x50, 100x100, 160x160, 200x200, 300x200, 320x320, 600x400, 1200x630, 1200x800, 2400x1260]
+  # 포털(003 contracts/api.md "프로퍼티"). score-weights·new-member-delay·min-content-length·topic-auto-hide-threshold는
+  # 운영 설정(system_settings, 관리자 콘솔 "포털 설정")에 값이 없을 때의 기본값이다.
+  # 로컬 수동 검증·E2E는 BLOG_PORTAL_CACHE_TTL=0s, BLOG_PORTAL_NEW_MEMBER_DELAY=PT0S, BLOG_PORTAL_TOPIC_AUTO_HIDE_THRESHOLD=1로 띄운다.
+  portal:
+    # 포털 목록·인기 점수·주제별 글 수 캐시 수명(FR-090: 글 상태 변화는 이 시간 안에 반영). 0s면 캐시하지 않는다.
+    cache-ttl: 5m
+    cache-max-size: 2000
+    score-weights:
+      view: 1
+      read-complete: 5
+      like: 10
+      comment: 8
+      half-life-hours: 48
+      report-penalty: 0.5
+    new-member-delay: 24h
+    min-content-length: 200
+    topic-auto-hide-threshold: 20
+    popular-window: 7d
+    topic-count-window: 30d
   # 관리자(006 FR-105): 기동 시 SUPER_ADMIN이 한 명도 없으면 이 이메일의 회원을 SUPER_ADMIN으로 지정한다(첫 최고 관리자 지정의 유일한 경로).
   # 값은 환경 변수(또는 .env)로만 주고 저장소에 커밋하지 않는다. 비우면 아무것도 하지 않는다.
   admin:
