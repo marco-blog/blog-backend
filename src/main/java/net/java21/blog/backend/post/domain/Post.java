@@ -20,9 +20,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 글(posts, T096). 블로그 목록의 글 수와 블로그 삭제(글을 휴지통으로)에 필요해 US1 인증·블로그 단계에서 먼저 만들었다.
- * 작성·발행·휴지통 동작은 글 기능(T095~T103)에서 더한다.
+ * 글(posts, T096). 상태 전이(data-model "상태 전이"): DRAFT → PUBLISHED(발행), PUBLISHED → DRAFT 불가,
+ * DRAFT/PUBLISHED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
+ * 작성 중 내용은 {@link PostDraft}에 두고 발행 때 이 행에 반영한다(FR-108).
  * {@code category_id}는 US2에서 카테고리 연관으로 바꾼다. 002~005가 더한 컬럼(like_count 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * 노출 판단은 {@code PostExposure} 한 곳에서 한다.
  */
 @Entity
 @Table(name = "posts")
@@ -95,6 +97,69 @@ public class Post extends BaseTimeEntity {
     public Post(Blog blog, String title) {
         this.blog = blog;
         this.title = title;
+    }
+
+    public boolean isDeleted() {
+        return status == PostStatus.DELETED;
+    }
+
+    public boolean isPublished() {
+        return status == PostStatus.PUBLISHED;
+    }
+
+    /** 이 글이 속한 블로그의 주인인지. 블로그와 주인이 읽혀 있어야 한다. */
+    public boolean isOwnedBy(Long userId) {
+        return userId != null && blog.getUser().getId().equals(userId);
+    }
+
+    /** 발행 전 글의 제목을 작성 중 사본과 맞춘다(블로그 관리 목록에 보이는 제목). 발행된 글은 발행 때만 바뀐다. */
+    public void syncDraftTitle(String draftTitle) {
+        if (status == PostStatus.DRAFT) {
+            this.title = draftTitle == null ? "" : draftTitle;
+        }
+    }
+
+    /**
+     * 발행(수정 발행 포함). 변환·살균된 내용을 반영하고 PUBLISHED로 바꾼다. {@code published_at}은 처음 발행할 때만 정한다.
+     * 글 번호(id)는 바뀌지 않는다.
+     */
+    public void publish(String title, String markdown, String html, String text, String summary, String thumbnailUrl,
+            PostVisibility visibility, boolean commentEnabled, Instant now) {
+        if (status == PostStatus.DELETED) {
+            throw new IllegalStateException("Deleted post cannot be published: " + id);
+        }
+        this.title = title;
+        this.contentMarkdown = markdown;
+        this.contentHtml = html;
+        this.contentText = text;
+        this.summary = summary;
+        this.thumbnailUrl = thumbnailUrl;
+        this.visibility = visibility;
+        this.commentEnabled = commentEnabled;
+        this.status = PostStatus.PUBLISHED;
+        if (publishedAt == null) {
+            this.publishedAt = now;
+        }
+    }
+
+    /** 휴지통으로(FR-084). 직전 상태를 남긴다. */
+    public void moveToTrash(Instant now) {
+        if (status == PostStatus.DELETED) {
+            throw new IllegalStateException("Post already in trash: " + id);
+        }
+        this.statusBeforeDelete = status;
+        this.status = PostStatus.DELETED;
+        this.deletedAt = now;
+    }
+
+    /** 휴지통에서 삭제 전 상태로(FR-084). 공개 범위는 삭제 중에도 바뀌지 않았으므로 그대로다. */
+    public void restore() {
+        if (status != PostStatus.DELETED) {
+            throw new IllegalStateException("Post not in trash: " + id);
+        }
+        this.status = statusBeforeDelete == null ? PostStatus.DRAFT : statusBeforeDelete;
+        this.statusBeforeDelete = null;
+        this.deletedAt = null;
     }
 
     public Long getId() {
