@@ -1,6 +1,6 @@
 # backend
 
-Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../docs/specs/`에 있고, 원칙은 `../docs/.specify/memory/constitution.md`를 따른다.
+Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../blog-docs/specs/`에 있고, 원칙은 `../blog-docs/.specify/memory/constitution.md`를 따른다.
 
 ## 스택
 - 패키지: groupId `net.java21.blog`, artifactId `backend`, 기본 패키지 `net.java21.blog.backend`
