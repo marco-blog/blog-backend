@@ -145,6 +145,33 @@ class PostPublishServiceTest {
         verify(postDraftRepository, never()).delete(any());
     }
 
+    /** 003 T039: 블로그의 첫 발행이 {@code first_published_at}을 채운다(비공개 발행 포함). */
+    @Test
+    void firstPublishOfTheBlogSetsFirstPublishedAtEvenWhenPrivate() {
+        draft("제목", "본문");
+        when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+
+        service.publish(1L, 100L, settings(PostVisibility.PRIVATE, null, null));
+
+        assertThat(blog.getFirstPublishedAt()).isEqualTo(NOW);
+    }
+
+    /** 003 T039: 이미 값이 있으면(두 번째 글·수정 발행) 그대로 둔다. */
+    @Test
+    void laterPublishesKeepTheBlogsFirstPublishedAt() {
+        Instant earlier = NOW.minusSeconds(86_400);
+        blog.markFirstPublished(earlier);
+        post.publish("제목", "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PUBLIC, true, earlier);
+        draft("새 제목", "새 본문");
+        when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+
+        assertThat(blog.getFirstPublishedAt()).isEqualTo(earlier);
+    }
+
     @Test
     void titleIsRequired() {
         draft("   ", "본문");

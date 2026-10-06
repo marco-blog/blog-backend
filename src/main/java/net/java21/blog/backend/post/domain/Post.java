@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
+import net.java21.blog.backend.topic.domain.Topic;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -26,7 +27,8 @@ import org.hibernate.type.SqlTypes;
  * DRAFT/PUBLISHED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
  * 작성 중 내용은 {@link PostDraft}에 두고 발행 때 이 행에 반영한다(FR-108).
  * 카테고리는 LAZY 연관이며 목록 조회는 DTO projection으로 읽는다(N+1 없음). 002의 좋아요 수({@code like_count})는 읽기 전용으로 매핑하고
- * (좋아요·취소의 원자적 UPDATE로만 바뀐다), 003~005가 더한 컬럼(topic_id 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * (좋아요·취소의 원자적 UPDATE로만 바뀐다). 003의 주제({@code topic_id}, 소분류)는 LAZY 연관으로 매핑하고, 004~005가 더한 컬럼
+ * (password_hash 등)은 DB 기본값이 있으므로 매핑하지 않는다.
  * 노출 판단은 {@code PostExposure} 한 곳에서 한다.
  */
 @Entity
@@ -45,6 +47,11 @@ public class Post extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private Category category;
+
+    /** 서비스 주제(소분류, 003 FR-076). NULL=주제 없음. 선택 가능 검증은 발행 서비스가 한다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private Topic topic;
 
     @Column(nullable = false, length = 200)
     private String title;
@@ -156,6 +163,11 @@ public class Post extends BaseTimeEntity {
         this.category = category;
     }
 
+    /** 주제 지정(003 FR-076). null이면 주제 없음. */
+    public void assignTopic(Topic topic) {
+        this.topic = topic;
+    }
+
     /** 휴지통으로(FR-084). 직전 상태를 남긴다. */
     public void moveToTrash(Instant now) {
         if (status == PostStatus.DELETED) {
@@ -187,6 +199,16 @@ public class Post extends BaseTimeEntity {
     /** 카테고리(LAZY). 미분류면 null. */
     public Category getCategory() {
         return category;
+    }
+
+    /** 주제(LAZY). 없으면 null. */
+    public Topic getTopic() {
+        return topic;
+    }
+
+    /** 주제 id(지연 로딩 프록시를 초기화하지 않는다). */
+    public Long getTopicId() {
+        return topic == null ? null : topic.getId();
     }
 
     public String getTitle() {

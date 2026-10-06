@@ -13,6 +13,8 @@ import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.tag.domain.PostTag;
 import net.java21.blog.backend.tag.domain.Tag;
+import net.java21.blog.backend.topic.domain.Topic;
+import net.java21.blog.backend.topic.domain.TopicNames;
 import net.java21.blog.backend.user.domain.User;
 
 /** {@code @JpaRepositoryTest}에서 회원·블로그·글·카테고리·태그를 저장하는 도우미(US2 리포지토리 테스트 공용). */
@@ -83,6 +85,43 @@ public class JpaFixtures {
         d.write(post.getTitle(), "본문", categoryId, tags, T0);
         em.persist(d);
         return d;
+    }
+
+    /** 주제(003). 이름은 slug로 4개 언어를 채운다. */
+    public Topic topic(Topic parent, String slug, int sortOrder) {
+        Topic t = new Topic(parent, slug, new TopicNames(slug + "-ko", slug + "-en", slug + "-ja", slug + "-zh"),
+                sortOrder, parent == null ? "#3D7DD8" : null, false);
+        em.persist(t);
+        return t;
+    }
+
+    /**
+     * 본문 텍스트를 정해 발행한 글(003 포털 길이 조건). {@code publishedAt}은 {@code publishedAt} 그대로, 주제는 {@code topic}.
+     */
+    public Post publishedText(Blog blog, String title, String text, Topic topic, PostStatus status,
+            PostVisibility visibility, Instant publishedAt) {
+        Post p = new Post(blog, title);
+        p.assignTopic(topic);
+        if (status != PostStatus.DRAFT) {
+            p.publish(title, text, "<p>" + text + "</p>", text, "요약 " + title, null, visibility, true, publishedAt);
+        }
+        if (status == PostStatus.DELETED) {
+            p.moveToTrash(publishedAt.plusSeconds(1));
+        }
+        em.persist(p);
+        return p;
+    }
+
+    /** 공개 발행 글(본문 텍스트 지정). */
+    public Post publishedText(Blog blog, String title, String text, Topic topic, Instant publishedAt) {
+        return publishedText(blog, title, text, topic, PostStatus.PUBLISHED, PostVisibility.PUBLIC, publishedAt);
+    }
+
+    /** 가입 시각을 바꾼다(JPA Auditing이 저장 때 채운 값을 덮어쓴다). */
+    public void joinedAt(User user, Instant createdAt) {
+        em.flush();
+        em.createNativeQuery("UPDATE users SET created_at = :t WHERE id = :id")
+                .setParameter("t", createdAt).setParameter("id", user.getId()).executeUpdate();
     }
 
     public void flushAndClear() {

@@ -43,6 +43,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.ReadCompleteService;
 import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
 import net.java21.blog.backend.support.AuthCookies;
@@ -95,6 +96,8 @@ class PostControllerTest {
     private PostPublishService postPublishService;
     @MockitoBean
     private ViewCountService viewCountService;
+    @MockitoBean
+    private ReadCompleteService readCompleteService;
 
     // ---- 블로그 글 목록 ----
 
@@ -444,6 +447,52 @@ class PostControllerTest {
         expectError(mvc.perform(post("/api/v1/posts/123/views").header("Origin", "https://evil.example.com")), 403,
                 "ORIGIN_NOT_ALLOWED");
         verifyNoInteractions(viewCountService);
+    }
+
+    // ---- 끝까지 읽음(003 T030) ----
+
+    @Test
+    void readCompleteIsPublic200NullAndReusesVisitorCookie() throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/posts/123/read-complete")
+                        .cookie(new Cookie("visitor_id", "3f1c2b8e-1111-2222-3333-444455556666")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.header.isSuccessful").value(true))
+                .andExpect(jsonPath("$.result").value(nullValue()))
+                .andReturn();
+        assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
+        verify(readCompleteService).record(123L, null, "v:3f1c2b8e-1111-2222-3333-444455556666");
+        verifyNoInteractions(viewCountService);
+    }
+
+    @Test
+    void readCompleteWithoutVisitorCookieIssuesOne() throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/posts/123/read-complete"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", containsString("visitor_id=")))
+                .andReturn();
+        String setCookie = result.getResponse().getHeader("Set-Cookie");
+        String visitorId = setCookie.substring("visitor_id=".length(), setCookie.indexOf(';'));
+        verify(readCompleteService).record(123L, null, "v:" + visitorId);
+    }
+
+    @Test
+    void readCompleteOfLoggedInMemberUsesMemberId() throws Exception {
+        mvc.perform(post("/api/v1/posts/123/read-complete").cookie(authCookies.user(7L))).andExpect(status().isOk());
+        verify(readCompleteService).record(123L, 7L, "u:7");
+    }
+
+    @Test
+    void readCompleteOfInvisiblePostIs404() throws Exception {
+        when(readCompleteService.record(eq(123L), isNull(), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
+        expectError(mvc.perform(post("/api/v1/posts/123/read-complete")), 404, "POST_NOT_FOUND");
+    }
+
+    @Test
+    void readCompleteFromForeignOriginIsRejected() throws Exception {
+        expectError(mvc.perform(post("/api/v1/posts/123/read-complete").header("Origin", "https://evil.example.com")),
+                403, "ORIGIN_NOT_ALLOWED");
+        verifyNoInteractions(readCompleteService);
     }
 
     private static ResultActions expectError(ResultActions actions, int httpStatus, String code) throws Exception {
