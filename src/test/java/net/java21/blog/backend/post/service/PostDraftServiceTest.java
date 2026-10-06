@@ -31,6 +31,7 @@ import net.java21.blog.backend.post.repository.PostQueryRepository;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.blog.domain.BlogStatus;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import net.java21.blog.backend.user.domain.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,8 @@ class PostDraftServiceTest {
     private PostDraftRepository postDraftRepository;
     @Mock
     private PostQueryRepository postQueryRepository;
+    @Mock
+    private TagQueryRepository tagQueryRepository;
 
     private PostDraftService service;
     private User owner;
@@ -62,7 +65,7 @@ class PostDraftServiceTest {
     @BeforeEach
     void setUp() {
         service = new PostDraftService(new BlogAccess(blogRepository), new PostAccess(postRepository), postRepository,
-                postDraftRepository, postQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                postDraftRepository, postQueryRepository, tagQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L);
         blog = TestEntities.blog(10L, owner, "marco");
     }

@@ -10,7 +10,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
 
 /**
  * 글 목록 한 줄(contracts/api.md {@code PostSummary}). {@code deletedAt}·{@code purgeAt}은 휴지통 글에만 있다.
- * 카테고리·태그는 US2 전까지 null·빈 배열.
+ * 카테고리는 미분류면 null, 태그는 이름순.
  */
 public record PostSummaryResponse(
         Long id,

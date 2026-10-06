@@ -15,6 +15,7 @@ import net.java21.blog.backend.blog.dto.BlogLink;
 import net.java21.blog.backend.blog.dto.MyBlogsResponse;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.blog.service.BlogService;
+import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.blog.service.HandlePolicy;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
@@ -38,7 +39,7 @@ class BlogRepositoryTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     @EnableConfigurationProperties(BlogsProperties.class)
-    @Import({BlogQueryRepository.class, BlogService.class, BlogAccess.class, HandlePolicy.class, PasswordConfig.class})
+    @Import({BlogQueryRepository.class, CategoryQueryRepository.class, BlogService.class, BlogAccess.class, HandlePolicy.class, PasswordConfig.class})
     static class Services {
     }
 

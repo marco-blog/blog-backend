@@ -9,7 +9,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  *
  * @param status     DRAFT / PUBLISHED / DELETED
  * @param visibility PUBLIC / PRIVATE
- * @param categoryId 카테고리 ID(US2 전에는 {@code posts.category_id} 값 그대로)
+ * @param categoryId 카테고리 ID(상위면 하위 카테고리 글 포함)
  * @param q          제목 검색어(부분 일치, 대소문자 무시). 앞뒤 공백을 지우고 비었으면 조건 없음
  */
 public record ManagePostFilter(PostStatus status, PostVisibility visibility, Long categoryId, String q) {

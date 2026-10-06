@@ -17,6 +17,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.repository.PostDraftRepository;
 import net.java21.blog.backend.post.repository.PostQueryRepository;
 import net.java21.blog.backend.post.repository.PostRepository;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,15 +33,18 @@ public class PostDraftService {
     private final PostRepository postRepository;
     private final PostDraftRepository postDraftRepository;
     private final PostQueryRepository postQueryRepository;
+    private final TagQueryRepository tagQueryRepository;
     private final Clock clock;
 
     public PostDraftService(BlogAccess blogAccess, PostAccess postAccess, PostRepository postRepository,
-            PostDraftRepository postDraftRepository, PostQueryRepository postQueryRepository, Clock clock) {
+            PostDraftRepository postDraftRepository, PostQueryRepository postQueryRepository,
+            TagQueryRepository tagQueryRepository, Clock clock) {
         this.blogAccess = blogAccess;
         this.postAccess = postAccess;
         this.postRepository = postRepository;
         this.postDraftRepository = postDraftRepository;
         this.postQueryRepository = postQueryRepository;
+        this.tagQueryRepository = tagQueryRepository;
         this.clock = clock;
     }
 
@@ -67,15 +71,17 @@ public class PostDraftService {
         return new SavedDraftResponse(postId, now);
     }
 
-    /** 작성 화면 불러오기. 사본이 없으면 발행본 내용을 그대로 준다. */
+    /** 작성 화면 불러오기. 사본이 없으면 발행본 내용(카테고리·태그 포함)을 그대로 준다. */
     @Transactional(readOnly = true)
     public DraftResponse get(long userId, Long postId) {
         Post post = postAccess.requireOwnedEditablePost(postId, userId);
         return postDraftRepository.findById(postId)
                 .map(d -> new DraftResponse(d.getTitle(), d.getContentMarkdown(), d.getCategoryId(), d.getTags(),
                         d.getSavedAt()))
-                .orElseGet(() -> new DraftResponse(post.getTitle(), post.getContentMarkdown(), post.getCategoryId(),
-                        List.of(), post.getUpdatedAt()));
+                .orElseGet(() -> new DraftResponse(post.getTitle(), post.getContentMarkdown(),
+                        post.getCategory() == null ? null : post.getCategory().getId(),
+                        tagQueryRepository.findTagNames(List.of(postId)).getOrDefault(postId, List.of()),
+                        post.getUpdatedAt()));
     }
 
     /**

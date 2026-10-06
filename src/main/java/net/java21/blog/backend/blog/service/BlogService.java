@@ -14,6 +14,7 @@ import net.java21.blog.backend.blog.dto.MyBlogsResponse;
 import net.java21.blog.backend.blog.dto.UpdateBlogRequest;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.blog.repository.BlogRepository;
+import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
@@ -39,11 +40,13 @@ public class BlogService {
     private final HandlePolicy handlePolicy;
     private final PasswordEncoder passwordEncoder;
     private final BlogsProperties blogsProperties;
+    private final CategoryQueryRepository categoryQueryRepository;
     private final Clock clock;
 
     public BlogService(BlogRepository blogRepository, BlogQueryRepository blogQueryRepository,
             UserRepository userRepository, BlogAccess blogAccess, HandlePolicy handlePolicy,
-            PasswordEncoder passwordEncoder, BlogsProperties blogsProperties, Clock clock) {
+            PasswordEncoder passwordEncoder, BlogsProperties blogsProperties,
+            CategoryQueryRepository categoryQueryRepository, Clock clock) {
         this.blogRepository = blogRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.userRepository = userRepository;
@@ -51,6 +54,7 @@ public class BlogService {
         this.handlePolicy = handlePolicy;
         this.passwordEncoder = passwordEncoder;
         this.blogsProperties = blogsProperties;
+        this.categoryQueryRepository = categoryQueryRepository;
         this.clock = clock;
     }
 
@@ -102,9 +106,11 @@ public class BlogService {
         return BlogResponse.of(blog);
     }
 
+    /** 블로그와 카테고리 트리(목록 노출 가능 글 수). 쿼리 3회(블로그, 카테고리, 글 수). */
     @Transactional(readOnly = true)
     public BlogResponse get(String handle) {
-        return BlogResponse.of(blogAccess.requireVisibleBlog(handle));
+        Blog blog = blogAccess.requireVisibleBlog(handle);
+        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()));
     }
 
     @Transactional
@@ -125,7 +131,7 @@ public class BlogService {
             }
             blog.changeCommentEnabled(request.getCommentEnabled());
         }
-        return BlogResponse.of(blog);
+        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()));
     }
 
     /**

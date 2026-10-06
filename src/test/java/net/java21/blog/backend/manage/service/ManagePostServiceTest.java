@@ -15,10 +15,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.LongStream;
 
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
+import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.job.JobsProperties;
@@ -29,8 +31,10 @@ import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.manage.repository.ManagePostRow;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
+import net.java21.blog.backend.post.dto.CategoryRef;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,13 +55,17 @@ class ManagePostServiceTest {
     private BlogAccess blogAccess;
     @Mock
     private ManagePostQueryRepository repository;
+    @Mock
+    private CategoryAccess categoryAccess;
+    @Mock
+    private TagQueryRepository tagQueryRepository;
 
     private ManagePostService service;
     private Blog blog;
 
     @BeforeEach
     void setUp() {
-        service = new ManagePostService(blogAccess, repository,
+        service = new ManagePostService(blogAccess, repository, categoryAccess, tagQueryRepository,
                 new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), Clock.fixed(NOW, ZoneOffset.UTC));
         blog = TestEntities.blog(10L, TestEntities.user(OWNER), "marco");
     }
@@ -67,10 +75,11 @@ class ManagePostServiceTest {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
         ManagePostFilter trash = new ManagePostFilter(PostStatus.DELETED, null, null, null);
         Instant deletedAt = NOW.minus(Duration.ofDays(2));
-        ManagePostRow row = new ManagePostRow(5L, "버린 글", "요약", null, 3, 0, PostVisibility.PRIVATE,
+        ManagePostRow row = new ManagePostRow(5L, "버린 글", "요약", null, 7L, "Spring", 3, 0, PostVisibility.PRIVATE,
                 PostStatus.DELETED, NOW.minus(Duration.ofDays(9)), deletedAt, false, deletedAt);
         when(repository.findPosts(eq(10L), eq(trash), eq(NOW.minus(Duration.ofDays(30))), any()))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+        when(tagQueryRepository.findTagNames(List.of(5L))).thenReturn(Map.of(5L, List.of("jpa", "spring")));
 
         Page<PostSummaryResponse> page = service.posts(OWNER, "marco", trash, PageRequest.of(0, 20));
 
@@ -78,14 +87,15 @@ class ManagePostServiceTest {
         assertThat(item.deletedAt()).isEqualTo(deletedAt);
         assertThat(item.purgeAt()).isEqualTo(deletedAt.plus(Duration.ofDays(30)));
         assertThat(item.visibility()).isEqualTo(PostVisibility.PRIVATE);
-        assertThat(item.tags()).isEmpty();
+        assertThat(item.tags()).containsExactly("jpa", "spring");
+        assertThat(item.category()).isEqualTo(new CategoryRef(7L, "Spring"));
         assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test
     void liveListHasNoPurgeAt() {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
-        ManagePostRow row = new ManagePostRow(5L, "글", null, null, 0, 0, PostVisibility.PUBLIC,
+        ManagePostRow row = new ManagePostRow(5L, "글", null, null, null, null, 0, 0, PostVisibility.PUBLIC,
                 PostStatus.DRAFT, null, NOW, true, null);
         when(repository.findPosts(eq(10L), eq(ManagePostFilter.ALL), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(row)));
@@ -94,6 +104,8 @@ class ManagePostServiceTest {
                 .getContent().getFirst();
 
         assertThat(item.hasDraft()).isTrue();
+        assertThat(item.category()).isNull();
+        assertThat(item.tags()).isEmpty();
         assertThat(item.deletedAt()).isNull();
         assertThat(item.purgeAt()).isNull();
     }
@@ -105,7 +117,7 @@ class ManagePostServiceTest {
 
         assertCode(() -> service.posts(2L, "marco", ManagePostFilter.ALL, PageRequest.of(0, 20)),
                 ErrorCode.FORBIDDEN);
-        assertCode(() -> service.bulk(2L, "marco", new BulkPostRequest(List.of(1L), BulkAction.DELETE, null)),
+        assertCode(() -> service.bulk(2L, "marco", new BulkPostRequest(List.of(1L), BulkAction.DELETE, null, null)),
                 ErrorCode.FORBIDDEN);
         verify(repository, never()).moveToTrash(anyLong(), anyCollection(), any());
     }
@@ -117,7 +129,7 @@ class ManagePostServiceTest {
         when(repository.changeVisibility(10L, List.of(1L, 2L, 3L), PostVisibility.PRIVATE, NOW)).thenReturn(3L);
 
         var result = service.bulk(OWNER, "marco",
-                new BulkPostRequest(List.of(1L, 2L, 3L, 2L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE));
+                new BulkPostRequest(List.of(1L, 2L, 3L, 2L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE, null));
 
         assertThat(result.updated()).isEqualTo(3);
     }
@@ -127,7 +139,7 @@ class ManagePostServiceTest {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
 
         assertThatThrownBy(() -> service.bulk(OWNER, "marco",
-                new BulkPostRequest(List.of(1L), BulkAction.CHANGE_VISIBILITY, null)))
+                new BulkPostRequest(List.of(1L), BulkAction.CHANGE_VISIBILITY, null, null)))
                 .isInstanceOfSatisfying(BusinessException.class, e -> {
                     assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
                     assertThat(e.fieldErrors()).singleElement()
@@ -143,7 +155,7 @@ class ManagePostServiceTest {
         when(repository.countOwned(10L, List.of(4L, 5L))).thenReturn(2L);
         when(repository.moveToTrash(10L, List.of(4L, 5L), NOW)).thenReturn(1L);
 
-        assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L), BulkAction.DELETE, null))
+        assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L), BulkAction.DELETE, null, null))
                 .updated()).isEqualTo(1);
     }
 
@@ -153,9 +165,9 @@ class ManagePostServiceTest {
         when(repository.countOwned(10L, List.of(1L, 99L))).thenReturn(1L);
 
         assertCode(() -> service.bulk(OWNER, "marco",
-                new BulkPostRequest(List.of(1L, 99L), BulkAction.DELETE, null)), ErrorCode.FORBIDDEN);
+                new BulkPostRequest(List.of(1L, 99L), BulkAction.DELETE, null, null)), ErrorCode.FORBIDDEN);
         assertCode(() -> service.bulk(OWNER, "marco",
-                new BulkPostRequest(List.of(1L, 99L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PUBLIC)),
+                new BulkPostRequest(List.of(1L, 99L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PUBLIC, null)),
                 ErrorCode.FORBIDDEN);
         verify(repository, never()).moveToTrash(anyLong(), anyCollection(), any());
         verify(repository, never()).changeVisibility(anyLong(), anyCollection(), any(), any());
@@ -166,7 +178,7 @@ class ManagePostServiceTest {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
         List<Long> ids = LongStream.rangeClosed(1, 101).boxed().toList();
 
-        assertCode(() -> service.bulk(OWNER, "marco", new BulkPostRequest(ids, BulkAction.DELETE, null)),
+        assertCode(() -> service.bulk(OWNER, "marco", new BulkPostRequest(ids, BulkAction.DELETE, null, null)),
                 ErrorCode.VALIDATION_FAILED);
         verify(repository, never()).countOwned(anyLong(), anyCollection());
     }

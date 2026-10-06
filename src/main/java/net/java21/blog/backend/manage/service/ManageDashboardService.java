@@ -1,10 +1,15 @@
 package net.java21.blog.backend.manage.service;
 
+import java.util.List;
+import java.util.Map;
+
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
+import net.java21.blog.backend.manage.repository.ManagePostRow;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,24 +25,29 @@ public class ManageDashboardService {
 
     private final BlogAccess blogAccess;
     private final ManagePostQueryRepository repository;
+    private final TagQueryRepository tagQueryRepository;
     private final JobsProperties jobsProperties;
     private final ManageCommentService commentService;
 
     public ManageDashboardService(BlogAccess blogAccess, ManagePostQueryRepository repository,
-            JobsProperties jobsProperties, ManageCommentService commentService) {
+            TagQueryRepository tagQueryRepository, JobsProperties jobsProperties,
+            ManageCommentService commentService) {
         this.blogAccess = blogAccess;
         this.repository = repository;
+        this.tagQueryRepository = tagQueryRepository;
         this.jobsProperties = jobsProperties;
         this.commentService = commentService;
     }
 
-    /** 쿼리 5회(블로그, 임시저장 수, 최근 글, 새 댓글 수, 최근 댓글). */
+    /** 쿼리 6회(블로그, 임시저장 수, 최근 글, 태그 일괄 조회, 새 댓글 수, 최근 댓글). */
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(long userId, String handle) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
         long draftCount = repository.countDrafts(blog.getId());
-        var recentPosts = repository.findRecentPosts(blog.getId(), RECENT_SIZE).stream()
-                .map(row -> row.toResponse(jobsProperties.trashRetention()))
+        List<ManagePostRow> rows = repository.findRecentPosts(blog.getId(), RECENT_SIZE);
+        Map<Long, List<String>> tags = tagQueryRepository.findTagNames(rows.stream().map(ManagePostRow::id).toList());
+        var recentPosts = rows.stream()
+                .map(row -> row.toResponse(jobsProperties.trashRetention(), tags.get(row.id())))
                 .toList();
         ManageCommentService.CommentStats comments = commentService.stats(blog.getId(), RECENT_SIZE);
         return new DashboardResponse(draftCount, recentPosts, comments.newComments7d(), comments.recentComments());

@@ -19,6 +19,8 @@ import net.java21.blog.backend.blog.BlogsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.domain.BlogStatus;
 import net.java21.blog.backend.blog.dto.BlogResponse;
+import net.java21.blog.backend.category.dto.CategoryNode;
+import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.blog.dto.CreateBlogRequest;
 import net.java21.blog.backend.blog.dto.HandleAvailabilityResponse;
 import net.java21.blog.backend.blog.dto.MyBlogsResponse;
@@ -59,6 +61,8 @@ class BlogServiceTest {
     private UserRepository userRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
+    @Mock
+    private CategoryQueryRepository categoryQueryRepository;
 
     private BlogService service;
     private User owner;
@@ -67,7 +71,7 @@ class BlogServiceTest {
     void setUp() {
         BlogAccess access = new BlogAccess(blogRepository);
         service = new BlogService(blogRepository, blogQueryRepository, userRepository, access, new HandlePolicy(),
-                passwordEncoder, new BlogsProperties(3), Clock.fixed(NOW, ZoneOffset.UTC));
+                passwordEncoder, new BlogsProperties(3), categoryQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -161,6 +165,9 @@ class BlogServiceTest {
     void getReturnsVisibleBlogWithOwner() {
         Blog blog = TestEntities.blog(10L, TestEntities.with(owner, "bio", "자바 개발자"), "marco");
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        List<CategoryNode> tree = List.of(new CategoryNode(1L, "Spring", 3,
+                List.of(new CategoryNode(2L, "Boot", 2, List.of()))));
+        when(categoryQueryRepository.findTree(10L)).thenReturn(tree);
 
         BlogResponse response = service.get("marco");
 
@@ -170,7 +177,7 @@ class BlogServiceTest {
         assertThat(response.coverImageUrl()).isNull();
         assertThat(response.commentEnabled()).isTrue();
         assertThat(response.owner()).isEqualTo(new BlogResponse.Owner("마르코", null, "자바 개발자"));
-        assertThat(response.categories()).isEmpty();
+        assertThat(response.categories()).isEqualTo(tree);
     }
 
     @Test

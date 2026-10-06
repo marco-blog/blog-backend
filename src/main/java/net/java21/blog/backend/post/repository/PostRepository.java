@@ -10,8 +10,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
 
-    /** 글과 블로그·주인을 함께 읽는다(쿼리 1회). 노출·소유 판단은 호출한 쪽({@link PostExposure}, {@code PostAccess})이 한다. */
-    @Query("select p from Post p join fetch p.blog b join fetch b.user where p.id = :id")
+    /**
+     * 글과 블로그·주인·카테고리를 함께 읽는다(쿼리 1회). 노출·소유 판단은 호출한 쪽({@link PostExposure}, {@code PostAccess})이 한다.
+     */
+    @Query("select p from Post p join fetch p.blog b join fetch b.user left join fetch p.category where p.id = :id")
     Optional<Post> findWithBlogAndOwner(@Param("id") Long id);
 
     /**

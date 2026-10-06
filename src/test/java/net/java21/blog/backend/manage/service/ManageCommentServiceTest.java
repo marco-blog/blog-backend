@@ -24,6 +24,7 @@ import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -44,6 +45,8 @@ class ManageCommentServiceTest {
 
     @Mock
     private BlogAccess blogAccess;
+    @Mock
+    private TagQueryRepository tagQueryRepository;
     @Mock
     private CommentQueryRepository repository;
     @Mock
@@ -100,7 +103,7 @@ class ManageCommentServiceTest {
         when(repository.countBlogCommentsSince(10L, NOW.minus(Duration.ofDays(7)))).thenReturn(4L);
         when(repository.findRecentBlogComments(10L, 5)).thenReturn(List.of(ROW));
 
-        DashboardResponse dashboard = new ManageDashboardService(blogAccess, postRepository,
+        DashboardResponse dashboard = new ManageDashboardService(blogAccess, postRepository, tagQueryRepository,
                 new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), service()).dashboard(1L, "marco");
 
         assertThat(dashboard.newComments7d()).isEqualTo(4);

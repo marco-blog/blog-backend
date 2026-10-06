@@ -17,6 +17,7 @@ import net.java21.blog.backend.post.dto.DraftResponse;
 import net.java21.blog.backend.post.dto.DraftWriteRequest;
 import net.java21.blog.backend.post.dto.LatestDraftResponse;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
+import net.java21.blog.backend.post.dto.PostListFilter;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
 import net.java21.blog.backend.post.dto.SavedDraftResponse;
@@ -66,8 +67,10 @@ public class PostController {
 
     @GetMapping("/api/v1/blogs/{handle}/posts")
     ApiResponse<List<PostSummaryResponse>> blogPosts(@PathVariable String handle,
+            @RequestParam(required = false) Long category, @RequestParam(required = false) String tag,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return ApiResponse.page(postService.blogPosts(handle, BLOG_POSTS.resolve(page, size, null)));
+        return ApiResponse.page(postService.blogPosts(handle, new PostListFilter(category, tag),
+                BLOG_POSTS.resolve(page, size, null)));
     }
 
     @PostMapping("/api/v1/blogs/{handle}/posts/drafts")

@@ -3,9 +3,10 @@ package net.java21.blog.backend.blog.dto;
 import java.util.List;
 
 import net.java21.blog.backend.blog.domain.Blog;
+import net.java21.blog.backend.category.dto.CategoryNode;
 
 /**
- * {@code GET /blogs/{handle}} 응답. 대표·프로필 이미지 주소는 미디어(US4) 전까지 null, 카테고리는 US2 전까지 빈 배열.
+ * {@code GET /blogs/{handle}} 응답. 대표·프로필 이미지 주소는 미디어(US4) 전까지 null. 카테고리는 트리({@link CategoryNode}).
  */
 public record BlogResponse(
         String handle,
@@ -19,10 +20,15 @@ public record BlogResponse(
     public record Owner(String nickname, String profileImageUrl, String bio) {
     }
 
-    /** 블로그와 주인(이미 읽어 둔 연관)으로 만든다. */
+    /** 블로그와 주인(이미 읽어 둔 연관)으로 만든다. 카테고리 없음(새 블로그). */
     public static BlogResponse of(Blog blog) {
+        return of(blog, List.of());
+    }
+
+    /** 블로그와 주인(이미 읽어 둔 연관), 카테고리 트리로 만든다. */
+    public static BlogResponse of(Blog blog, List<CategoryNode> categories) {
         var user = blog.getUser();
         return new BlogResponse(blog.getHandle(), blog.getTitle(), blog.getDescription(), null,
-                blog.isCommentEnabled(), new Owner(user.getNickname(), null, user.getBio()), List.of());
+                blog.isCommentEnabled(), new Owner(user.getNickname(), null, user.getBio()), categories);
     }
 }

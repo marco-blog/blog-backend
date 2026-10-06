@@ -35,6 +35,7 @@ import net.java21.blog.backend.post.dto.DraftResponse;
 import net.java21.blog.backend.post.dto.DraftWriteRequest;
 import net.java21.blog.backend.post.dto.LatestDraftResponse;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
+import net.java21.blog.backend.post.dto.PostListFilter;
 import net.java21.blog.backend.post.dto.PostLink;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
@@ -96,7 +97,7 @@ class PostControllerTest {
 
     @Test
     void blogPostsIsPublicPageWithTotalCount() throws Exception {
-        when(postService.blogPosts(eq("marco"), any(Pageable.class)))
+        when(postService.blogPosts(eq("marco"), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(SUMMARY), PageRequest.of(1, 20), 21));
 
         mvc.perform(get("/api/v1/blogs/marco/posts").param("page", "1"))
@@ -113,15 +114,34 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.result[0].purgeAt").doesNotExist())
                 .andExpect(jsonPath("$.totalCount").value(21));
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(postService).blogPosts(eq("marco"), pageable.capture());
+        verify(postService).blogPosts(eq("marco"), eq(PostListFilter.NONE), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
     }
 
     @Test
     void blogPostsOfMissingBlogIs404() throws Exception {
-        when(postService.blogPosts(eq("none"), any())).thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "x"));
+        when(postService.blogPosts(eq("none"), any(), any()))
+                .thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "x"));
         expectError(mvc.perform(get("/api/v1/blogs/none/posts")), 404, "BLOG_NOT_FOUND");
+    }
+
+    @Test
+    void blogPostsPassesCategoryAndTagFilters() throws Exception {
+        when(postService.blogPosts(eq("marco"), any(), any())).thenReturn(new PageImpl<>(List.of()));
+
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("category", "12").param("tag", "Spring Boot"))
+                .andExpect(status().isOk());
+
+        verify(postService).blogPosts(eq("marco"), eq(new PostListFilter(12L, "Spring Boot")), any());
+    }
+
+    @Test
+    void blogPostsWithOtherBlogsCategoryIs404() throws Exception {
+        when(postService.blogPosts(eq("marco"), any(), any()))
+                .thenThrow(new BusinessException(ErrorCode.CATEGORY_NOT_FOUND, "x"));
+        expectError(mvc.perform(get("/api/v1/blogs/marco/posts").param("category", "99")), 404,
+                "CATEGORY_NOT_FOUND");
     }
 
     @Test

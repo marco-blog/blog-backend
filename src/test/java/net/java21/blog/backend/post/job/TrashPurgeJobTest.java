@@ -10,6 +10,7 @@ import jakarta.persistence.EntityManager;
 
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.domain.BlogStatus;
+import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.post.domain.Post;
@@ -87,12 +88,6 @@ class TrashPurgeJobTest {
 
     @BeforeEach
     void setUp() {
-        // 카테고리 엔티티는 US2에서 생긴다. 그 전까지 H2에는 엔티티로 만든 테이블만 있으므로 같은 모양으로 만든다.
-        jdbc.execute("CREATE TABLE IF NOT EXISTS categories (id BIGINT AUTO_INCREMENT PRIMARY KEY, blog_id BIGINT NOT NULL,"
-                + " parent_id BIGINT, name VARCHAR(50) NOT NULL, sort_order INT DEFAULT 0 NOT NULL,"
-                + " created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) NOT NULL,"
-                + " updated_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) NOT NULL,"
-                + " CONSTRAINT fk_test_categories_parent FOREIGN KEY (parent_id) REFERENCES categories (id))");
         // 트랙백(005)·포털(003) 엔티티는 아직 없다. 영구 삭제가 이 테이블들의 posts FK(ON DELETE CASCADE 없음)를 먼저 정리하는지
         // 확인하려고 실제 스키마와 같은 FK만 가진 모양으로 만든다.
         jdbc.execute("CREATE TABLE IF NOT EXISTS trackbacks (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
@@ -139,17 +134,21 @@ class TrashPurgeJobTest {
         Blog second = new Blog(owner, "marco-old", "옛 블로그");
         second.changeDescription("소개");
         em.persist(second);
+        Category parent = category(second, null, "상위");
+        Category child = category(second, parent, "하위");
+        Category keep = category(blog, null, "남는 카테고리");
         Post post = new Post(second, "글");
         post.publish("글", "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PUBLIC, true, NOW);
+        post.classify(parent);
         em.persist(post);
-        em.flush();
-        long parent = insertCategory(second.getId(), null, "상위");
-        insertCategory(second.getId(), parent, "하위");
-        long keep = insertCategory(blog.getId(), null, "남는 카테고리");
-        jdbc.update("UPDATE posts SET category_id = ? WHERE id = ?", parent, post.getId());
+        // 휴지통 보관 기간 안에 버린 글: 블로그를 비울 때 아직 남아 있으므로 카테고리 참조를 먼저 비워야 한다(T181).
+        Post recentTrash = new Post(second, "최근에 버린 글");
+        recentTrash.classify(child);
+        em.persist(recentTrash);
         Instant deletedAt = NOW.minus(Duration.ofDays(31));
         second.delete(deletedAt);
         post.moveToTrash(deletedAt);
+        recentTrash.moveToTrash(NOW.minus(Duration.ofDays(1)));
         Blog recentlyDeleted = new Blog(owner, "marco-new", "최근 삭제");
         em.persist(recentlyDeleted);
         recentlyDeleted.delete(NOW.minus(Duration.ofDays(1)));
@@ -164,7 +163,8 @@ class TrashPurgeJobTest {
         assertThat(purged.getHandle()).isEqualTo("marco-old");
         assertThat(purged.getTitle()).isEmpty();
         assertThat(purged.getDescription()).isNull();
-        assertThat(jdbc.queryForList("SELECT id FROM categories", Long.class)).containsExactly(keep);
+        assertThat(jdbc.queryForList("SELECT id FROM categories", Long.class)).containsExactly(keep.getId());
+        assertThat(em.find(Post.class, recentTrash.getId()).getCategory()).isNull();
         assertThat(em.find(Blog.class, recentlyDeleted.getId()).getTitle()).isEqualTo("최근 삭제");
 
         assertThat(job.purge()).isEqualTo(new TrashPurgeJob.Result(0, 0));
@@ -219,9 +219,10 @@ class TrashPurgeJobTest {
         assertThat(postRepository.findById(old.getId())).isEmpty();
     }
 
-    private long insertCategory(Long blogId, Long parentId, String name) {
-        jdbc.update("INSERT INTO categories (blog_id, parent_id, name) VALUES (?, ?, ?)", blogId, parentId, name);
-        return jdbc.queryForObject("SELECT MAX(id) FROM categories", Long.class);
+    private Category category(Blog owner, Category parent, String name) {
+        Category category = new Category(owner, parent, name, 0);
+        em.persist(category);
+        return category;
     }
 
     private Post trashed(Instant deletedAt) {
