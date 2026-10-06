@@ -2,11 +2,14 @@ package net.java21.blog.backend.blog.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import net.java21.blog.backend.blog.BlogsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.domain.BlogStatus;
+import net.java21.blog.backend.blog.domain.FeedContentMode;
 import net.java21.blog.backend.blog.dto.BlogResponse;
 import net.java21.blog.backend.blog.dto.CreateBlogRequest;
 import net.java21.blog.backend.blog.dto.HandleAvailabilityResponse;
@@ -158,7 +161,38 @@ public class BlogService {
         if (request.hasCoverImageMediaKey()) {
             changeCover(blog, cover);
         }
+        if (request.hasFeedItemCount() || request.hasFeedContentMode()) {
+            changeFeedSettings(blog, request);
+        }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
+    }
+
+    /** 피드 설정(002 FR-046, contracts/api.md): 보낸 값만 바꾸며 지울 수 없고, 허용 값이 아니면 {@code INVALID}(params.allowed). */
+    private static void changeFeedSettings(Blog blog, UpdateBlogRequest request) {
+        int count = blog.getFeedItemCount();
+        if (request.hasFeedItemCount()) {
+            if (request.getFeedItemCount() == null) {
+                throw required("feedItemCount");
+            }
+            if (!Blog.FEED_ITEM_COUNTS.contains(request.getFeedItemCount())) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Validation failed", List.of(new FieldError(
+                        "feedItemCount", "INVALID", Map.of("allowed", Blog.FEED_ITEM_COUNTS.stream().sorted().toList()))));
+            }
+            count = request.getFeedItemCount();
+        }
+        FeedContentMode mode = blog.getFeedContentMode();
+        if (request.hasFeedContentMode()) {
+            if (request.getFeedContentMode() == null) {
+                throw required("feedContentMode");
+            }
+            mode = Arrays.stream(FeedContentMode.values())
+                    .filter(m -> m.name().equals(request.getFeedContentMode()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED, "Validation failed",
+                            List.of(new FieldError("feedContentMode", "INVALID", Map.of("allowed",
+                                    Arrays.stream(FeedContentMode.values()).map(Enum::name).toList())))));
+        }
+        blog.changeFeedSettings(count, mode);
     }
 
     /**

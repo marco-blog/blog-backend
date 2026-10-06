@@ -12,6 +12,7 @@ import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.web.RequestIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -133,7 +134,9 @@ public class GlobalExceptionHandler {
     private static ResponseEntity<ApiResponse<Void>> error(ErrorCode code, String message, List<FieldError> fieldErrors) {
         ApiResponse.Header header = ApiResponse.Header.failure(
                 code.name(), message, fieldErrors, RequestIdFilter.currentTraceId());
-        return ResponseEntity.status(code.status()).body(ApiResponse.failure(header));
+        // 형식을 정해 두어 Accept가 JSON이 아닌 요청(피드 리더의 application/rss+xml 등)에도 공통 틀 JSON으로 답한다(002 contracts/api.md).
+        return ResponseEntity.status(code.status()).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiResponse.failure(header));
     }
 
     private static FieldError toFieldError(org.springframework.validation.FieldError error) {
