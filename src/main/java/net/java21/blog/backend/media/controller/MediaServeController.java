@@ -2,7 +2,6 @@ package net.java21.blog.backend.media.controller;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
@@ -17,7 +16,6 @@ import net.java21.blog.backend.security.AuthUser;
 import net.java21.blog.backend.security.CurrentUser;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -39,8 +37,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class MediaServeController {
 
-    private static final CacheControl PUBLIC_IMMUTABLE = CacheControl.maxAge(365, TimeUnit.DAYS).cachePublic().immutable();
-    private static final CacheControl PRIVATE_NO_STORE = CacheControl.noStore().cachePrivate();
+    /** contracts/api.md 그대로의 값(Spring CacheControl은 지시어 순서를 바꾼다) */
+    static final String PUBLIC_IMMUTABLE = "public, max-age=31536000, immutable";
+    static final String PRIVATE_NO_STORE = "private, no-store";
 
     private final MediaQueryRepository mediaQueryRepository;
     private final MediaStorage storage;
@@ -91,7 +90,7 @@ public class MediaServeController {
 
     private static ResponseEntity<Resource> image(MediaFileRow media, Resource file, String mime) throws IOException {
         return ResponseEntity.ok()
-                .cacheControl(media.isTemp() ? PRIVATE_NO_STORE : PUBLIC_IMMUTABLE)
+                .header(HttpHeaders.CACHE_CONTROL, media.isTemp() ? PRIVATE_NO_STORE : PUBLIC_IMMUTABLE)
                 .contentType(MediaType.parseMediaType(mime))
                 .contentLength(file.contentLength())
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().build().toString())

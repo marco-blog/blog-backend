@@ -1,7 +1,6 @@
 package net.java21.blog.backend.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -102,7 +101,7 @@ class MediaIntegrationHooksTest {
         mvc.perform(get("/media/" + a)).andExpect(status().isNotFound());
         mvc.perform(get("/media/" + a).cookie(other)).andExpect(status().isNotFound());
         mvc.perform(get("/media/" + a).cookie(marco)).andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", containsString("no-store")));
+                .andExpect(header().string("Cache-Control", "private, no-store"));
 
         // 남의 이미지를 본문에 넣어도 연결하지 않는다(남의 TEMP는 그대로).
         json(post("/api/v1/blogs/other/posts/drafts"), "{\"title\":\"남\",\"contentMarkdown\":\"![x](/media/" + a + ")\"}",
@@ -118,7 +117,7 @@ class MediaIntegrationHooksTest {
         assertThat(jdbc.queryForObject("SELECT stored_path FROM media WHERE media_key = ?", String.class, a))
                 .matches("\\d{4}/\\d{2}/[0-9a-f-]{36}\\.png");
         mvc.perform(get("/media/" + a)).andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"));
+                .andExpect(header().string("Cache-Control", "public, max-age=31536000, immutable"));
 
         // 발행: 대표 이미지는 고른 본문 이미지, 생략하면 첫 이미지
         json(post("/api/v1/posts/" + postId + "/publish"), "{\"visibility\":\"PUBLIC\",\"thumbnailMediaKey\":\"" + b + "\"}",

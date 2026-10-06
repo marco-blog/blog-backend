@@ -1,6 +1,5 @@
 package net.java21.blog.backend.media.controller;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -163,7 +162,7 @@ class MediaControllerTest {
         mvc.perform(get("/media/" + KEY))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "image/png"))
-                .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"))
+                .andExpect(header().string("Cache-Control", "public, max-age=31536000, immutable"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string("Content-Disposition", "inline"))
                 .andExpect(header().longValue("Content-Length", png.length))
@@ -182,8 +181,7 @@ class MediaControllerTest {
 
         mvc.perform(get("/media/" + KEY).cookie(authCookies.user(OWNER)))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", containsString("no-store")))
-                .andExpect(header().string("Cache-Control", containsString("private")))
+                .andExpect(header().string("Cache-Control", "private, no-store"))
                 .andExpect(content().bytes(png));
         mvc.perform(get("/media/" + KEY).cookie(authCookies.user(8L)))
                 .andExpect(status().isNotFound())
@@ -223,7 +221,7 @@ class MediaControllerTest {
         mvc.perform(get("/media/" + KEY + "/300x200").param("fit", "contain"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "image/png"))
-                .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"))
+                .andExpect(header().string("Cache-Control", "public, max-age=31536000, immutable"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(content().bytes(png));
         mvc.perform(get("/media/" + KEY + "/300x200")).andExpect(status().isOk());
