@@ -143,6 +143,26 @@ class AdminRepositoriesTest {
         assertThat(new String(raw, java.nio.charset.StandardCharsets.ISO_8859_1)).doesNotContain("203.0.113.9");
     }
 
+    /** 003 T086·T094: 설정 키처럼 숫자 ID가 없는 대상은 {@code target_key}로, 포털 제외 사유는 {@code reason}에도 남긴다. */
+    @Test
+    void auditRecordKeyAndReasonAreStored() {
+        auditService.recordKey(admin.getId(), AuditActions.SETTING_CHANGE, AuditActions.TARGET_SETTING,
+                "portal.min-content-length", Map.of("value", 200), Map.of("value", 500), "::1");
+        auditService.record(admin.getId(), AuditActions.PORTAL_EXCLUDE, AuditActions.TARGET_POST, 77L, null,
+                Map.of(), Map.of("reason", "광고"), "광고", "::1");
+        em.flush();
+        em.clear();
+
+        List<AdminAuditLog> logs = em.createQuery("select l from AdminAuditLog l order by l.id", AdminAuditLog.class)
+                .getResultList();
+        assertThat(logs).hasSize(2);
+        assertThat(logs.get(0).getTargetKey()).isEqualTo("portal.min-content-length");
+        assertThat(logs.get(0).getTargetId()).isNull();
+        assertThat(logs.get(0).getAfter()).containsEntry("value", 500);
+        assertThat(logs.get(1).getTargetId()).isEqualTo(77L);
+        assertThat(logs.get(1).getReason()).isEqualTo("광고");
+    }
+
     @Test
     void bootstrapPromotesConfiguredMemberOnlyWhileNoSuperAdminExists() {
         assertThat(adminUserRepository.existsByRole(UserRole.SUPER_ADMIN)).isFalse();
