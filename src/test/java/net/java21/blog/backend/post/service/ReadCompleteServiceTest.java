@@ -1,6 +1,6 @@
 package net.java21.blog.backend.post.service;
 
-import static net.java21.blog.backend.post.service.PostDraftServiceTest.assertCode;
+import static net.java21.blog.backend.support.BusinessAssertions.assertCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -31,104 +31,78 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/**
- * 조회수 중복 판단(T064, FR-020): 키 postId + 방문자 키, 30분 안 재조회는 세지 않음. 늘 때 그날(UTC) 일별 집계도 1 올린다(003 T028).
- */
+/** 끝까지 읽음(003 T029, FR-086, research P4): 상세를 볼 수 있는 글만, 같은 방문자 30분 안 재요청은 세지 않음. */
 @ExtendWith(MockitoExtension.class)
-class ViewCountServiceTest {
+class ReadCompleteServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
+    private static final LocalDate TODAY = LocalDate.parse("2026-10-06");
 
     @Mock
     private PostRepository postRepository;
     @Mock
     private PostDailyStatsRepository dailyStats;
-    private final MutableClock clock = new MutableClock(NOW);
 
     private final AtomicLong nanos = new AtomicLong();
     private final Ticker ticker = nanos::get;
-    private ViewCountService service;
+    private final MutableClock clock = new MutableClock(NOW);
+    private final PostsProperties properties =
+            new PostsProperties(Duration.ofMinutes(30), 1000, "visitor_id", Duration.ofDays(365));
+    private ReadCompleteService service;
     private Post post;
 
     @BeforeEach
     void setUp() {
-        service = new ViewCountService(postRepository, dailyStats,
-                new PostsProperties(Duration.ofMinutes(30), 1000, "visitor_id", Duration.ofDays(365)), clock, ticker);
+        service = new ReadCompleteService(postRepository, dailyStats, properties, clock, ticker);
         post = TestEntities.post(100L, TestEntities.blog(10L, TestEntities.user(1L), "marco"), "t");
     }
 
     @Test
-    void sameVisitorWithin30MinutesCountsOnce() {
-        publishPublic();
+    void sameVisitorWithin30MinutesCountsOnceThenAgainAfter() {
+        publish(PostVisibility.PUBLIC);
 
         assertThat(service.record(100L, null, "v:abc")).isTrue();
         nanos.addAndGet(Duration.ofMinutes(29).toNanos());
         assertThat(service.record(100L, null, "v:abc")).isFalse();
-        verify(postRepository, times(1)).incrementViewCount(100L);
+        verify(dailyStats, times(1)).upsertReadComplete(100L, TODAY, NOW);
 
         nanos.addAndGet(Duration.ofMinutes(2).toNanos());
         assertThat(service.record(100L, null, "v:abc")).isTrue();
-        verify(postRepository, times(2)).incrementViewCount(100L);
+        verify(dailyStats, times(2)).upsertReadComplete(100L, TODAY, NOW);
     }
 
     @Test
-    void differentVisitorsOrMembersCountSeparately() {
-        publishPublic();
+    void differentVisitorsCountSeparately() {
+        publish(PostVisibility.PUBLIC);
 
         assertThat(service.record(100L, null, "v:abc")).isTrue();
         assertThat(service.record(100L, null, "v:def")).isTrue();
         assertThat(service.record(100L, 7L, "u:7")).isTrue();
-        assertThat(service.record(100L, 7L, "u:7")).isFalse();
-        verify(postRepository, times(3)).incrementViewCount(100L);
+        verify(dailyStats, times(3)).upsertReadComplete(100L, TODAY, NOW);
     }
 
     @Test
-    void invisiblePostIsNotFoundAndNotCounted() {
-        post.publish("t", "b", "<p>b</p>", "b", "b", null, PostVisibility.PRIVATE, true, NOW);
-        when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
+    void postNotVisibleInDetailIsNotFoundAndNotCounted() {
+        publish(PostVisibility.PRIVATE);
         when(postRepository.findWithBlogAndOwner(404L)).thenReturn(Optional.empty());
 
         assertCode(() -> service.record(100L, null, "v:abc"), ErrorCode.POST_NOT_FOUND);
         assertCode(() -> service.record(100L, 2L, "u:2"), ErrorCode.POST_NOT_FOUND);
         assertCode(() -> service.record(404L, null, "v:abc"), ErrorCode.POST_NOT_FOUND);
-        verify(postRepository, never()).incrementViewCount(anyLong());
-        verify(dailyStats, never()).upsertView(anyLong(), any(), any());
-    }
-
-    /** T028: 조회수가 늘 때만 오늘(UTC) 일별 집계 1회, 중복이면 호출 없음. 날짜가 바뀌면 그날 행. */
-    @Test
-    void countedViewAlsoUpsertsTodaysDailyStat() {
-        publishPublic();
-        clock.set(Instant.parse("2026-10-06T23:59:00Z"));
-
-        service.record(100L, null, "v:abc");
-        service.record(100L, null, "v:abc");
-        verify(dailyStats, times(1)).upsertView(100L, LocalDate.parse("2026-10-06"), clock.instant());
-
-        clock.set(Instant.parse("2026-10-07T00:01:00Z"));
-        service.record(100L, null, "v:other");
-        verify(dailyStats, times(1)).upsertView(100L, LocalDate.parse("2026-10-07"), clock.instant());
-    }
-
-    @Test
-    void ownerCanViewOwnPrivatePost() {
-        post.publish("t", "b", "<p>b</p>", "b", "b", null, PostVisibility.PRIVATE, true, NOW);
-        when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
-
-        assertThat(service.record(100L, 1L, "u:1")).isTrue();
+        verify(dailyStats, never()).upsertReadComplete(anyLong(), any(), any());
+        assertThat(service.record(100L, 1L, "u:1")).as("주인은 자기 비공개 글 상세를 본다").isTrue();
     }
 
     @Test
     void productionConstructorUsesSystemTicker() {
-        publishPublic();
-        ViewCountService real = new ViewCountService(postRepository, dailyStats,
-                new PostsProperties(Duration.ofMinutes(30), 10, "v", Duration.ofDays(1)), clock);
+        publish(PostVisibility.PUBLIC);
+        ReadCompleteService real = new ReadCompleteService(postRepository, dailyStats, properties, clock);
         assertThat(real.record(100L, null, "v:x")).isTrue();
         assertThat(real.record(100L, null, "v:x")).isFalse();
     }
 
-    private void publishPublic() {
-        post.publish("t", "b", "<p>b</p>", "b", "b", null, PostVisibility.PUBLIC, true, NOW);
+    private void publish(PostVisibility visibility) {
+        post.publish("t", "b", "<p>b</p>", "b", "b", null, visibility, true, NOW);
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
     }
 }

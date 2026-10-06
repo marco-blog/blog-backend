@@ -25,6 +25,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.ReadCompleteService;
 import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
 import net.java21.blog.backend.security.AuthUser;
@@ -58,11 +59,13 @@ public class PostController {
     private final ViewCountService viewCountService;
     private final PostsProperties postsProperties;
     private final RelatedPostService relatedPostService;
+    private final ReadCompleteService readCompleteService;
 
     public PostController(PostService postService, PostDraftService postDraftService,
             PostPublishService postPublishService, ViewCountService viewCountService, PostsProperties postsProperties,
-            RelatedPostService relatedPostService) {
+            RelatedPostService relatedPostService, ReadCompleteService readCompleteService) {
         this.postService = postService;
+        this.readCompleteService = readCompleteService;
         this.relatedPostService = relatedPostService;
         this.postDraftService = postDraftService;
         this.postPublishService = postPublishService;
@@ -149,6 +152,24 @@ public class PostController {
     ApiResponse<Void> view(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
             HttpServletRequest request, HttpServletResponse response) {
         Long viewerId = viewer == null ? null : viewer.userId();
+        viewCountService.record(id, viewerId, visitorKey(viewerId, request, response));
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 끝까지 읽음(003 FR-086). 글 상세가 본문 끝에 닿으면 브라우저가 한 번 보낸다. 셌는지와 관계없이 200 {@code result: null}.
+     * 방문자 키와 쿠키 발급은 조회수 API와 같다.
+     */
+    @PostMapping("/api/v1/posts/{id}/read-complete")
+    ApiResponse<Void> readComplete(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
+            HttpServletRequest request, HttpServletResponse response) {
+        Long viewerId = viewer == null ? null : viewer.userId();
+        readCompleteService.record(id, viewerId, visitorKey(viewerId, request, response));
+        return ApiResponse.ok();
+    }
+
+    /** 중복 판단 키: 회원이면 {@code u:{id}}, 아니면 방문자 쿠키 {@code v:{id}}(없으면 새로 만들어 내려준다). */
+    private String visitorKey(Long viewerId, HttpServletRequest request, HttpServletResponse response) {
         String visitorKey;
         if (viewerId != null) {
             visitorKey = "u:" + viewerId;
@@ -167,8 +188,7 @@ public class PostController {
             }
             visitorKey = "v:" + visitorId;
         }
-        viewCountService.record(id, viewerId, visitorKey);
-        return ApiResponse.ok();
+        return visitorKey;
     }
 
     /** 요청의 방문자 쿠키 값. 없거나 형식이 맞지 않으면 null. */

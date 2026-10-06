@@ -133,8 +133,9 @@ class OpenApiContractTest {
             "GET /sitemap/pages.xml",
             "GET /sitemap/posts-{n}.xml",
             "GET /robots.txt",
-            // 003 포털(003 contracts/api.md)
-            "GET /api/v1/topics");
+            // 003 포털(003 contracts/api.md): 주제·포털 메인·끝까지 읽음
+            "GET /api/v1/topics",
+            "POST /api/v1/posts/{id}/read-complete");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
