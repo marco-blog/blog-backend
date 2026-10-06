@@ -1,6 +1,7 @@
 package net.java21.blog.backend.post.service;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -84,8 +85,11 @@ public class PostPublishService {
         String thumbnailUrl = thumbnailUrl(content, settings.thumbnailMediaKey());
         boolean commentEnabled = settings.commentEnabled() == null || settings.commentEnabled();
         post.classify(category);
+        Instant now = clock.instant();
         post.publish(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
-                settings.visibility(), commentEnabled, clock.instant());
+                settings.visibility(), commentEnabled, now);
+        // 003 FR-087 "새로 시작한 블로그": 블로그의 첫 발행(비공개 발행 포함)만 남긴다. 004 예약 발행도 같은 메서드를 부른다.
+        post.getBlog().markFirstPublished(now);
         if (draft != null) {
             postDraftRepository.delete(draft);
         }
