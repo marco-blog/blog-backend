@@ -13,14 +13,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import net.java21.blog.backend.blog.BlogsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.domain.BlogStatus;
+import net.java21.blog.backend.blog.domain.FeedContentMode;
 import net.java21.blog.backend.blog.dto.BlogResponse;
-import net.java21.blog.backend.category.dto.CategoryNode;
-import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.blog.dto.CreateBlogRequest;
 import net.java21.blog.backend.blog.dto.HandleAvailabilityResponse;
 import net.java21.blog.backend.blog.dto.MyBlogsResponse;
@@ -28,6 +28,8 @@ import net.java21.blog.backend.blog.dto.UpdateBlogRequest;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.repository.MyBlogRow;
+import net.java21.blog.backend.category.dto.CategoryNode;
+import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
@@ -297,6 +299,45 @@ class BlogServiceTest {
     }
 
     @Test
+    void patchChangesFeedSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+
+        UpdateBlogRequest count = new UpdateBlogRequest();
+        count.setFeedItemCount(30);
+        BlogResponse counted = service.update(1L, "marco", count);
+        assertThat(counted.feedItemCount()).isEqualTo(30);
+        assertThat(counted.feedContentMode()).isEqualTo(FeedContentMode.FULL);
+
+        UpdateBlogRequest mode = new UpdateBlogRequest();
+        mode.setFeedContentMode("SUMMARY");
+        BlogResponse summarized = service.update(1L, "marco", mode);
+        assertThat(summarized.feedItemCount()).isEqualTo(30);
+        assertThat(summarized.feedContentMode()).isEqualTo(FeedContentMode.SUMMARY);
+        assertThat(blog.getFeedContentMode()).isEqualTo(FeedContentMode.SUMMARY);
+    }
+
+    @Test
+    void patchRejectsFeedSettingsOutsideAllowedValues() {
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
+        UpdateBlogRequest fifteen = new UpdateBlogRequest();
+        fifteen.setFeedItemCount(15);
+        assertFieldError(() -> service.update(1L, "marco", fifteen),
+                new FieldError("feedItemCount", "INVALID", Map.of("allowed", List.of(10, 20, 30, 50))));
+        UpdateBlogRequest noCount = new UpdateBlogRequest();
+        noCount.setFeedItemCount(null);
+        assertFieldError(() -> service.update(1L, "marco", noCount), new FieldError("feedItemCount", "REQUIRED", Map.of()));
+        UpdateBlogRequest both = new UpdateBlogRequest();
+        both.setFeedContentMode("BOTH");
+        assertFieldError(() -> service.update(1L, "marco", both),
+                new FieldError("feedContentMode", "INVALID", Map.of("allowed", List.of("FULL", "SUMMARY"))));
+        UpdateBlogRequest noMode = new UpdateBlogRequest();
+        noMode.setFeedContentMode(null);
+        assertFieldError(() -> service.update(1L, "marco", noMode),
+                new FieldError("feedContentMode", "REQUIRED", Map.of()));
+    }
+
+    @Test
     void onlyOwnerCanPatch() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
         expect(() -> service.update(2L, "marco", new UpdateBlogRequest()), ErrorCode.FORBIDDEN);
@@ -361,6 +402,14 @@ class BlogServiceTest {
     private static void expect(Runnable action, ErrorCode code) {
         assertThatThrownBy(action::run)
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(code));
+    }
+
+    private static void assertFieldError(Runnable action, FieldError expected) {
+        assertThatThrownBy(action::run)
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(e.fieldErrors()).containsExactly(expected);
+                });
     }
 
     private static void expectField(Runnable action, String field) {

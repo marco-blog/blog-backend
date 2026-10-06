@@ -1,12 +1,16 @@
 package net.java21.blog.backend.security;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import net.java21.blog.backend.support.AuthCookies;
 import net.java21.blog.backend.support.WebMvcTestSupport;
@@ -79,5 +83,42 @@ class CacheHeadersWebMvcTest {
         mvc.perform(get("/media/k3Jd9fQ2xLmA7pZ0bR5tYw"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/me/feed", "/api/v1/me/notifications"})
+    void discoveryReadsOfMyResourcesAreNotStored(String path) throws Exception {
+        mvc.perform(get(path).cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+    }
+
+    @Test
+    void discoveryWritesOfMyResourcesAreNotStored() throws Exception {
+        for (var request : List.of(put("/api/v1/me/likes/1"), delete("/api/v1/me/likes/1"),
+                put("/api/v1/me/subscriptions/marco"), delete("/api/v1/me/subscriptions/marco"),
+                post("/api/v1/me/notifications/3/read"), post("/api/v1/me/notifications/bulk"))) {
+            mvc.perform(request.cookie(authCookies.user(7L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+    }
+
+    @Test
+    void viewerDependentPublicReadKeepsPrivateNoCache() throws Exception {
+        mvc.perform(get("/api/v1/blogs/marco").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-cache"));
+        mvc.perform(get("/api/v1/blogs/marco"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-cache"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/marco/rss", "/marco/atom", "/sitemap.xml", "/sitemap/pages.xml"})
+    void feedsAndSitemapsAreOpenAndRevalidated(String path) throws Exception {
+        mvc.perform(get(path))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-cache"));
     }
 }

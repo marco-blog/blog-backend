@@ -72,6 +72,9 @@
 | `blog.posts.view-dedup-ttl` / `view-dedup-max-size` | 30m / 100000 | 조회수 중복 제거 |
 | `blog.privacy.withdrawn-retention` / `login-history-retention` | 30d / 90d | 개인정보 보관 기간 |
 | `blog.jobs.trash-retention` / `purge-batch-size` | 30d / 500 | 휴지통 보관 기간, 정리 작업 한 번에 처리하는 건수 |
+| `blog.notifications.retention` / `subscriber-dedup-window` | 90d / 24h | 알림 보관 기간, 같은 구독자의 새 구독 알림을 다시 만들지 않는 기간(002) |
+| `blog.search.max-terms` / `min-term-length` | 5 / 2 | 검색어 낱말 수 상한, 낱말 최소 길이(MySQL `ngram_token_size`와 같게, 002) |
+| `blog.sitemap.urls-per-file` | 50000 | `/sitemap/posts-{n}.xml` 파일 하나의 주소 수(002) |
 | `blog.media.temp-ttl` / `temp-quota` / `max-size` / `max-pixels` | 24h / 200MB / 10MB / 40000000 | 이미지 한도 |
 | `blog.media.allowed-types` | jpeg, png, gif, webp | 업로드 허용 형식(내용 기준) |
 | `blog.media.thumbnail.sizes` | `application.yml` 참고 | 허용 썸네일 크기 |
@@ -131,8 +134,20 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 | 이미지 정리 | `MediaCleanupJob` | `blog.media.cleanup-cron` | `0 0 * * * *`(매시 정각) | 24시간 지난 TEMP와 어디서도 쓰지 않는 ORPHANED 이미지의 행·원본·썸네일 삭제 (FR-072·073) |
 | 휴지통 비우기 | `TrashPurgeJob` | `blog.jobs.trash-purge-cron` | `0 30 3 * * *`(매일 03:30) | 휴지통 30일 지난 글 영구 삭제, 삭제 30일 지난 블로그의 카테고리 삭제·제목 비우기(주소는 재사용 방지로 남김) (FR-084·159) |
 | 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139) |
+| 알림 정리 | `NotificationPurgeJob` | `blog.jobs.notification-purge-cron` | `0 15 4 * * *`(매일 04:15) | `blog.notifications.retention`(90일) 지난 알림 삭제 (002 FR-033) |
 
 cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 멈추려면 cron을 `-`로 준다(예: `BLOG_JOBS_TRASHPURGECRON=-`).
+
+## 5.1 검색(MySQL FULLTEXT, 002)
+
+글 검색은 `post`의 FULLTEXT(ngram) 색인을 쓴다. 배포 전에 MySQL에서 다음을 확인한다.
+
+- `SHOW VARIABLES LIKE 'ngram_token_size';` 값이 **2**여야 한다(`blog.search.min-term-length`와 같게).
+  다르면 `my.cnf`에 `ngram_token_size=2`를 넣고 재시작한 뒤 FULLTEXT 색인을 다시 만든다(`ALTER TABLE … DROP INDEX …, ADD FULLTEXT …`).
+- InnoDB 기본 불용어 목록(`a`, `i`, `the` 등)이 켜져 있으면 ngram 토큰 중 불용어를 **포함한** 토큰이 색인에서 빠진다.
+  그래서 `java`처럼 `a`가 들어간 낱말은 검색되지 않는다(로컬 MySQL 8.4에서 확인). 이를 피하려면
+  `innodb_ft_enable_stopword=OFF`(또는 빈 사용자 불용어 표 `innodb_ft_server_stopword_table`)로 설정하고 FULLTEXT 색인을 다시 만든다.
+  스키마 변경이 아니라 서버 설정이다.
 
 ## 6. 첫 최고 관리자(SUPER_ADMIN) 지정
 

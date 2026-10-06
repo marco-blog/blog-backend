@@ -46,6 +46,13 @@ public final class PostExposure {
         return listable().and(post.visibility.eq(PostVisibility.PUBLIC));
     }
 
+    /**
+     * 목록에는 나오지만 본문은 볼 수 없는(004 보호 글) 공개 범위가 있는지. 없으면(002) 그런 글만 따로 찾는 조건을 쿼리에 넣지 않는다.
+     */
+    public static boolean hasListableWithoutBody() {
+        return LISTABLE_VISIBILITIES.stream().anyMatch(visibility -> !isBodyVisibleListed(visibility));
+    }
+
     /** 이미 읽은 글(블로그·작성자 포함)이 목록 노출 가능인지. */
     public static boolean isListable(Post p) {
         return p.getStatus() == PostStatus.PUBLISHED

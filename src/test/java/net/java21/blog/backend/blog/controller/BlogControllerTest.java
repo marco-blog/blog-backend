@@ -20,12 +20,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import net.java21.blog.backend.blog.dto.BlogResponse;
 import net.java21.blog.backend.blog.dto.CreateBlogRequest;
 import net.java21.blog.backend.blog.dto.MyBlogsResponse;
 import net.java21.blog.backend.blog.dto.UpdateBlogRequest;
 import net.java21.blog.backend.blog.service.BlogService;
+import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.support.AuthCookies;
@@ -194,6 +196,39 @@ class BlogControllerTest {
         when(blogService.update(eq(8L), eq("marco"), any())).thenThrow(new BusinessException(code, "x"));
         expectError(mvc.perform(patch("/api/v1/blogs/marco").cookie(authCookies.user(8L))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"남의 블로그\"}")), httpStatus, code.name());
+    }
+
+    @Test
+    void patchPassesFeedSettings() throws Exception {
+        when(blogService.update(eq(7L), eq("marco"), any(UpdateBlogRequest.class))).thenReturn(MARCO);
+
+        mvc.perform(patch("/api/v1/blogs/marco").cookie(authCookies.user(7L)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"feedItemCount\":30,\"feedContentMode\":\"SUMMARY\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.feedItemCount").exists())
+                .andExpect(jsonPath("$.result.feedContentMode").exists());
+
+        ArgumentCaptor<UpdateBlogRequest> request = ArgumentCaptor.forClass(UpdateBlogRequest.class);
+        verify(blogService).update(eq(7L), eq("marco"), request.capture());
+        assertThat(request.getValue().hasFeedItemCount()).isTrue();
+        assertThat(request.getValue().getFeedItemCount()).isEqualTo(30);
+        assertThat(request.getValue().hasFeedContentMode()).isTrue();
+        assertThat(request.getValue().getFeedContentMode()).isEqualTo("SUMMARY");
+        assertThat(request.getValue().hasTitle()).isFalse();
+    }
+
+    @Test
+    void invalidFeedItemCountIs400WithAllowedValues() throws Exception {
+        when(blogService.update(eq(7L), eq("marco"), any(UpdateBlogRequest.class))).thenThrow(new BusinessException(
+                ErrorCode.VALIDATION_FAILED, "x",
+                List.of(new FieldError("feedItemCount", "INVALID", Map.of("allowed", List.of(10, 20, 30, 50))))));
+
+        mvc.perform(patch("/api/v1/blogs/marco").cookie(authCookies.user(7L)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"feedItemCount\":15}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("feedItemCount"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].params.allowed[3]").value(50));
     }
 
     @Test
