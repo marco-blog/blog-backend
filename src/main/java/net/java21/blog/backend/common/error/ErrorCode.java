@@ -39,7 +39,10 @@ public enum ErrorCode {
     POST_NOT_FOUND(HttpStatus.NOT_FOUND),
     DRAFT_NOT_FOUND(HttpStatus.NOT_FOUND),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND),
-    CATEGORY_NAME_TAKEN(HttpStatus.CONFLICT);
+    CATEGORY_NAME_TAKEN(HttpStatus.CONFLICT),
+
+    // 001 계정 설정 (Phase 4)
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST);
 
     private final HttpStatus status;
 

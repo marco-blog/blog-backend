@@ -26,3 +26,9 @@ blog:
     jwt-secret: test-only-jwt-secret-not-for-production-0000
   security:
     allowed-origins: http://localhost:5173
+  # 메일은 보내지 않는다(테스트는 JavaMailSender를 흉내 낸다). 기동에 필요한 값만 둔다.
+  mail:
+    host: localhost
+    port: 1025
+    from: no-reply@blog.test
+    starttls: false
