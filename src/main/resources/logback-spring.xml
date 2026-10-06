@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  로그 최소 범위(헌법 "1.0 운영 범위", tasks T242).
+  - 모든 줄에 요청 추적 ID(MDC traceId, RequestIdFilter가 넣고 응답 헤더 X-Request-Id·오류 응답 header.traceId와 같다)를 남긴다.
+  - 오류 스택은 로그에만 남긴다. 응답의 resultMessage에는 넣지 않는다(GlobalExceptionHandler: 500은 "Internal error").
+  - 콘솔: 모든 프로필. 파일: prod 프로필만, 일별 롤링·30일 보관(압축).
+    위치는 logging.file.path(환경 변수 LOGGING_FILE_PATH, 기본 ./logs), 보관 일수는
+    logging.logback.rollingpolicy.max-history(LOGGING_LOGBACK_ROLLINGPOLICY_MAX_HISTORY, 기본 30).
+  - 시각은 UTC(api-guidelines 1절과 같게).
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="BLOG_LOG_DIR" source="logging.file.path" defaultValue="logs"/>
+    <springProperty scope="context" name="BLOG_LOG_MAX_HISTORY" source="logging.logback.rollingpolicy.max-history"
+                    defaultValue="30"/>
+
+    <property name="BLOG_LOG_PATTERN"
+              value="%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z',UTC} %5p [%X{traceId:-}] [%t] %logger{40} : %m%n%wEx"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${BLOG_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <springProfile name="prod">
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${BLOG_LOG_DIR}/blog-backend.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>${BLOG_LOG_DIR}/blog-backend.%d{yyyy-MM-dd,UTC}.log.gz</fileNamePattern>
+                <maxHistory>${BLOG_LOG_MAX_HISTORY}</maxHistory>
+                <cleanHistoryOnStart>true</cleanHistoryOnStart>
+            </rollingPolicy>
+            <encoder>
+                <pattern>${BLOG_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <springProfile name="prod">
+            <appender-ref ref="FILE"/>
+        </springProfile>
+    </root>
+</configuration>
