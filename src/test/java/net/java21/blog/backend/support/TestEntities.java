@@ -1,0 +1,43 @@
+package net.java21.blog.backend.support;
+
+import java.time.Instant;
+
+import net.java21.blog.backend.blog.domain.Blog;
+import net.java21.blog.backend.crypto.CryptoProperties;
+import net.java21.blog.backend.crypto.PersonalDataHasher;
+import net.java21.blog.backend.user.domain.User;
+import org.springframework.test.util.ReflectionTestUtils;
+
+/** 서비스 단위 테스트용 엔티티 준비(저장하지 않고 ID·상태를 직접 넣는다). */
+public final class TestEntities {
+
+    /** 테스트 전용 고정 해시 키(비밀 아님, application-test.yml과 같은 값). */
+    public static final PersonalDataHasher HASHER = new PersonalDataHasher(new CryptoProperties(1,
+            java.util.Map.of(1, "dGVzdC1vbmx5LWtleS12MS0wMDAwMDAwMDAwMDAwMDA="),
+            "dGVzdC1vbmx5LWhhc2gta2V5LTAwMDAwMDAwMDAwMDA="));
+
+    private TestEntities() {
+    }
+
+    public static User user(long id, String email, String passwordHash, String nickname) {
+        User user = new User(PersonalDataHasher.normalizeEmail(email), HASHER.hashEmail(email), passwordHash, nickname,
+                "ko", null, "2026-10-06", Instant.parse("2026-10-06T00:00:00Z"));
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    public static User user(long id) {
+        return user(id, "user" + id + "@example.com", "{hash}", "닉네임" + id);
+    }
+
+    public static Blog blog(long id, User owner, String handle) {
+        Blog blog = new Blog(owner, handle, Blog.defaultTitle(owner.getNickname()));
+        ReflectionTestUtils.setField(blog, "id", id);
+        return blog;
+    }
+
+    public static <T> T with(T entity, String field, Object value) {
+        ReflectionTestUtils.setField(entity, field, value);
+        return entity;
+    }
+}

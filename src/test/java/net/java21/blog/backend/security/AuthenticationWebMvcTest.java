@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** {@code access_token} 쿠키 인증, 공개 경로, {@link CurrentUser} 주입(T028). */
 @WebMvcTest(controllers = AuthenticationTestController.class)
-@Import(WebMvcTestSupport.class)
+@Import({WebMvcTestSupport.class, AuthenticationTestController.class})
 class AuthenticationWebMvcTest {
 
     @Autowired

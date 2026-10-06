@@ -8,6 +8,7 @@ import java.lang.annotation.Target;
 
 import net.java21.blog.backend.common.time.TimeConfig;
 import net.java21.blog.backend.config.JpaAuditingConfig;
+import net.java21.blog.backend.crypto.CryptoConfig;
 import net.java21.blog.backend.config.QuerydslConfig;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -28,6 +29,7 @@ import org.springframework.test.context.TestPropertySource;
  *   <li>{@code BLOG_TEST_DATASOURCE_URL}이 없으면 테스트를 건너뛴다.</li>
  *   <li>QueryDSL({@link QuerydslConfig}), JPA Auditing({@link JpaAuditingConfig})과 UTC Clock({@link TimeConfig})을 함께 올린다.
  *       시각을 고정하려면 테스트에서 {@code @Primary} {@link MutableClock} 빈을 더한다.</li>
+ *   <li>개인정보 암호화({@link CryptoConfig}): 회원 엔티티의 {@code EncryptedStringConverter}가 쓴다(test 프로필의 고정 키).</li>
  * </ul>
  */
 @Target(ElementType.TYPE)
@@ -43,6 +45,6 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=${BLOG_TEST_DATASOURCE_USERNAME}",
         "spring.datasource.password=${BLOG_TEST_DATASOURCE_PASSWORD}"
 })
-@Import({TestSchemaInitializer.class, QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class})
+@Import({TestSchemaInitializer.class, QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class, CryptoConfig.class})
 public @interface MySqlRepositoryTest {
 }
