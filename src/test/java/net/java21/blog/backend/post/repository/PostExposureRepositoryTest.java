@@ -107,6 +107,8 @@ class PostExposureRepositoryTest {
         assertThat(all).filteredOn(PostExposure::isListable).extracting(Post::getId).containsExactly(publicPost.getId());
         assertThat(all).filteredOn(PostExposure::isBodyVisible).extracting(Post::getId)
                 .containsExactly(publicPost.getId());
+        // 002에는 목록에만 나오는(본문은 못 보는) 공개 범위가 없다(004가 PROTECTED를 더한다).
+        assertThat(PostExposure.hasListableWithoutBody()).isFalse();
     }
 
     @Test
