@@ -30,6 +30,8 @@
         <owasp-html-sanitizer.version>20260924.2</owasp-html-sanitizer.version>
         <thumbnailator.version>0.4.21</thumbnailator.version>
         <twelvemonkeys.version>3.15.2</twelvemonkeys.version>
+        <!-- RSS 2.0·Atom 1.0 쓰기(002 research D6, plan Complexity Tracking). 007 외부 피드 읽기도 같은 라이브러리 -->
+        <rome.version>2.1.0</rome.version>
     </properties>
 
     <dependencies>
@@ -118,6 +120,12 @@
             <groupId>com.twelvemonkeys.imageio</groupId>
             <artifactId>imageio-webp</artifactId>
             <version>${twelvemonkeys.version}</version>
+        </dependency>
+        <!-- RSS·Atom 피드(002 research D6) -->
+        <dependency>
+            <groupId>com.rometools</groupId>
+            <artifactId>rome</artifactId>
+            <version>${rome.version}</version>
         </dependency>
         <!-- 조회수 중복 판단 캐시(research R10). 버전은 Boot BOM -->
         <dependency>
