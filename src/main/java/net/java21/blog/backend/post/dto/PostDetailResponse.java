@@ -11,7 +11,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * 글 상세(contracts/api.md {@code PostDetail}). {@code contentMarkdown}은 주인에게만 주고 그 외에는 null.
  * {@code commentEnabled}는 주인 외에게는 블로그 설정을 반영한 값(블로그와 글 모두 허용일 때만 true, FR-029·107)이고,
  * 주인에게는 작성 화면이 그대로 다시 저장하는 글별 설정 값이다(댓글 API는 두 설정을 모두 검사한다).
- * 카테고리는 미분류면 null, 태그는 이름순. 프로필 이미지는 US4 전까지 null.
+ * 카테고리는 미분류면 null, 태그는 이름순. 작성자 프로필 이미지는 {@code /media/{key}} 또는 null.
  */
 public record PostDetailResponse(
         Long id,
@@ -45,7 +45,7 @@ public record PostDetailResponse(
                 tags == null ? List.of() : tags,
                 post.getVisibility(), post.getStatus(), post.getViewCount(), post.getCommentCount(),
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
-                new Author(user.getNickname(), null), prev, next,
+                new Author(user.getNickname(), user.profileImageUrl()), prev, next,
                 post.getPublishedAt(), post.getUpdatedAt());
     }
 }

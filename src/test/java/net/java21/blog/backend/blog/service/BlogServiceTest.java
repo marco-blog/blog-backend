@@ -31,6 +31,7 @@ import net.java21.blog.backend.blog.repository.MyBlogRow;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
@@ -63,6 +64,8 @@ class BlogServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private CategoryQueryRepository categoryQueryRepository;
+    @Mock
+    private MediaReferenceService mediaReferences;
 
     private BlogService service;
     private User owner;
@@ -71,7 +74,8 @@ class BlogServiceTest {
     void setUp() {
         BlogAccess access = new BlogAccess(blogRepository);
         service = new BlogService(blogRepository, blogQueryRepository, userRepository, access, new HandlePolicy(),
-                passwordEncoder, new BlogsProperties(3), categoryQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                passwordEncoder, new BlogsProperties(3), categoryQueryRepository, mediaReferences,
+                Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -206,7 +210,7 @@ class BlogServiceTest {
         Instant created = Instant.parse("2026-10-01T00:00:00Z");
         when(blogQueryRepository.findMyBlogs(1L)).thenReturn(List.of(
                 new MyBlogRow(10L, "marco", "첫째", null, 3, created),
-                new MyBlogRow(11L, "marco-dev", "둘째", 99L, 0, created)));
+                new MyBlogRow(11L, "marco-dev", "둘째", "k3Jd9fQ2xLmA7pZ0bR5tYw", 0, created)));
 
         MyBlogsResponse response = service.myBlogs(1L);
 
@@ -214,7 +218,7 @@ class BlogServiceTest {
         assertThat(response.limit()).isEqualTo(3);
         assertThat(response.items()).containsExactly(
                 new MyBlogsResponse.Item("marco", "첫째", null, 3, created),
-                new MyBlogsResponse.Item("marco-dev", "둘째", null, 0, created));
+                new MyBlogsResponse.Item("marco-dev", "둘째", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", 0, created));
 
         TestEntities.with(owner, "maxBlogs", 1);
         assertThat(service.myBlogs(1L).limit()).isEqualTo(1);

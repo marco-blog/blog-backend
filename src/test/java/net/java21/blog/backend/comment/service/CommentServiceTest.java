@@ -109,7 +109,7 @@ class CommentServiceTest {
         assertThat(first.deleted()).isFalse();
         assertThat(first.author().nickname()).isEqualTo("작성자");
         assertThat(first.author().userId()).isEqualTo(WRITER);
-        assertThat(first.author().profileImageUrl()).isNull();
+        assertThat(first.author().profileImageUrl()).isEqualTo("/media/k3Jd9fQ2xLmA7pZ0bR5tYw");
         assertThat(first.replies()).singleElement().satisfies(reply -> {
             assertThat(reply.id()).isEqualTo(3L);
             assertThat(reply.replies()).isEmpty();
@@ -413,7 +413,8 @@ class CommentServiceTest {
 
     private static CommentRow row(Long id, Long parentId, String content, CommentStatus status, Long userId,
             String nickname) {
-        return new CommentRow(id, parentId, content, status, userId, nickname, NOW, NOW);
+        return new CommentRow(id, parentId, content, status, userId, nickname,
+                userId == null ? null : "k3Jd9fQ2xLmA7pZ0bR5tYw", NOW, NOW);
     }
 
     static void assertCode(ThrowingCallable call, ErrorCode code) {

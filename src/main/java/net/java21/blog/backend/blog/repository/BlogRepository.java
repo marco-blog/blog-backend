@@ -13,8 +13,11 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     /** 삭제된 블로그를 포함해 주소가 쓰였는지(FR-159: 삭제된 블로그의 주소도 다시 쓸 수 없다). */
     boolean existsByHandle(String handle);
 
-    /** 주소로 블로그와 주인을 함께 읽는다(쿼리 1회). 상태는 호출한 쪽({@code BlogAccess})이 판단한다. */
-    @Query("select b from Blog b join fetch b.user where b.handle = :handle")
+    /**
+     * 주소로 블로그와 주인, 대표·프로필 이미지를 함께 읽는다(쿼리 1회). 상태는 호출한 쪽({@code BlogAccess})이 판단한다.
+     */
+    @Query("select b from Blog b join fetch b.user u left join fetch b.coverMedia left join fetch u.profileMedia"
+            + " where b.handle = :handle")
     Optional<Blog> findByHandleWithOwner(@Param("handle") String handle);
 
     long countByUserIdAndStatus(Long userId, BlogStatus status);

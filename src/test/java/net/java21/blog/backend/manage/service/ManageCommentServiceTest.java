@@ -41,7 +41,8 @@ import org.springframework.data.domain.PageRequest;
 class ManageCommentServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
-    private static final BlogCommentRow ROW = new BlogCommentRow(7L, "좋은 글", 2L, "작성자", NOW, NOW, 100L, "첫 글");
+    private static final BlogCommentRow ROW = new BlogCommentRow(7L, "좋은 글", 2L, "작성자",
+            "k3Jd9fQ2xLmA7pZ0bR5tYw", NOW, NOW, 100L, "첫 글");
 
     @Mock
     private BlogAccess blogAccess;
@@ -86,13 +87,14 @@ class ManageCommentServiceTest {
     void statsCountSevenDaysAndRecentFive() {
         when(repository.countBlogCommentsSince(10L, NOW.minus(Duration.ofDays(7)))).thenReturn(3L);
         when(repository.findRecentBlogComments(10L, 5)).thenReturn(List.of(ROW,
-                new BlogCommentRow(8L, "비회원(004)", null, null, NOW, NOW, 100L, "첫 글")));
+                new BlogCommentRow(8L, "비회원(004)", null, null, null, NOW, NOW, 100L, "첫 글")));
 
         ManageCommentService.CommentStats stats = service().stats(10L, 5);
 
         assertThat(stats.newComments7d()).isEqualTo(3);
         assertThat(stats.recentComments()).extracting(ManageCommentResponse::id).containsExactly(7L, 8L);
         assertThat(stats.recentComments().get(1).author()).isNull();
+        assertThat(stats.recentComments().get(0).author().profileImageUrl()).isEqualTo("/media/k3Jd9fQ2xLmA7pZ0bR5tYw");
     }
 
     @Test

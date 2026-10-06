@@ -18,6 +18,9 @@ import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,12 +44,13 @@ public class BlogService {
     private final PasswordEncoder passwordEncoder;
     private final BlogsProperties blogsProperties;
     private final CategoryQueryRepository categoryQueryRepository;
+    private final MediaReferenceService mediaReferences;
     private final Clock clock;
 
     public BlogService(BlogRepository blogRepository, BlogQueryRepository blogQueryRepository,
             UserRepository userRepository, BlogAccess blogAccess, HandlePolicy handlePolicy,
             PasswordEncoder passwordEncoder, BlogsProperties blogsProperties,
-            CategoryQueryRepository categoryQueryRepository, Clock clock) {
+            CategoryQueryRepository categoryQueryRepository, MediaReferenceService mediaReferences, Clock clock) {
         this.blogRepository = blogRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.userRepository = userRepository;
@@ -55,6 +59,7 @@ public class BlogService {
         this.passwordEncoder = passwordEncoder;
         this.blogsProperties = blogsProperties;
         this.categoryQueryRepository = categoryQueryRepository;
+        this.mediaReferences = mediaReferences;
         this.clock = clock;
     }
 
@@ -79,7 +84,8 @@ public class BlogService {
     public MyBlogsResponse myBlogs(long userId) {
         User user = requireActiveUser(userRepository.findById(userId).orElse(null));
         List<MyBlogsResponse.Item> items = blogQueryRepository.findMyBlogs(userId).stream()
-                .map(row -> new MyBlogsResponse.Item(row.handle(), row.title(), null, row.postCount(), row.createdAt()))
+                .map(row -> new MyBlogsResponse.Item(row.handle(), row.title(),
+                        Media.urlOf(row.coverMediaKey()), row.postCount(), row.createdAt()))
                 .toList();
         return new MyBlogsResponse(items, items.size(), user.effectiveBlogLimit(blogsProperties.defaultMaxPerMember()));
     }
@@ -116,6 +122,15 @@ public class BlogService {
     @Transactional
     public BlogResponse update(long userId, String handle, UpdateBlogRequest request) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
+        Media cover = null;
+        if (request.hasCoverImageMediaKey() && request.getCoverImageMediaKey() != null) {
+            // 대표 이미지는 purpose=BLOG_COVER로 올린 본인 이미지만(FR-012, contracts/api.md)
+            cover = mediaReferences.findOwned(userId, request.getCoverImageMediaKey(), MediaPurpose.BLOG_COVER);
+            if (cover == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Validation failed",
+                        List.of(FieldError.of("coverImageMediaKey", "INVALID")));
+            }
+        }
         if (request.hasTitle()) {
             if (isBlank(request.getTitle())) {
                 throw required("title");
@@ -130,6 +145,9 @@ public class BlogService {
                 throw required("commentEnabled");
             }
             blog.changeCommentEnabled(request.getCommentEnabled());
+        }
+        if (request.hasCoverImageMediaKey()) {
+            changeCover(blog, cover);
         }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()));
     }
@@ -152,6 +170,21 @@ public class BlogService {
         blog.delete(now);
         blogRepository.flush();
         blogQueryRepository.moveAllPostsToTrash(blog.getId(), now);
+    }
+
+    /** 대표 이미지를 바꾸고(ATTACHED로) 이전 이미지는 정리 대상 판단(FR-073). */
+    private void changeCover(Blog blog, Media cover) {
+        Long previousId = blog.getCoverMediaId();
+        if (cover != null) {
+            if (cover.getId().equals(previousId)) {
+                return;
+            }
+            mediaReferences.attach(cover);
+        }
+        blog.changeCoverMedia(cover);
+        if (previousId != null) {
+            mediaReferences.reevaluate(List.of(previousId));
+        }
     }
 
     private static User requireActiveUser(User user) {

@@ -11,6 +11,7 @@ import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.content.MarkdownRenderer;
 import net.java21.blog.backend.content.RenderedContent;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>카테고리·태그(FR-024·025, T169): 발행 설정에 값이 있으면 그것을, 없으면(null) 작성 중 사본의 값을, 사본도 없으면 지금 발행본의
  * 값을 쓴다. 카테고리는 같은 블로그의 것이어야 하고(아니면 404 {@code CATEGORY_NOT_FOUND}), 태그는 정규화·검증한 뒤
  * {@code post_tags}를 통째로 바꾼다(글당 10개 초과는 422 {@code TAG_LIMIT_EXCEEDED}). 검증은 글을 바꾸기 전에 모두 한다.
+ * <p>발행 때 본문의 이미지 참조를 PUBLISHED로 바꾸고 DRAFT 참조를 지운다(US4, FR-071·073).
  */
 @Service
 public class PostPublishService {
@@ -40,17 +42,19 @@ public class PostPublishService {
     private final PostService postService;
     private final CategoryAccess categoryAccess;
     private final TagService tagService;
+    private final MediaReferenceService mediaReferences;
     private final Clock clock;
 
     public PostPublishService(PostAccess postAccess, PostDraftRepository postDraftRepository,
             MarkdownRenderer markdownRenderer, PostService postService, CategoryAccess categoryAccess,
-            TagService tagService, Clock clock) {
+            TagService tagService, MediaReferenceService mediaReferences, Clock clock) {
         this.postAccess = postAccess;
         this.postDraftRepository = postDraftRepository;
         this.markdownRenderer = markdownRenderer;
         this.postService = postService;
         this.categoryAccess = categoryAccess;
         this.tagService = tagService;
+        this.mediaReferences = mediaReferences;
         this.clock = clock;
     }
 
@@ -89,6 +93,7 @@ public class PostPublishService {
             tagService.replacePostTags(post, tags);
         }
         postDraftRepository.flush();
+        mediaReferences.syncPublished(postId, userId, markdown);
         return postService.detailOf(post, true);
     }
 

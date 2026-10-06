@@ -16,6 +16,8 @@ import net.java21.blog.backend.auth.repository.RefreshTokenRepository;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.media.domain.MediaPurpose;
+import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
@@ -49,6 +51,8 @@ class AccountServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
+    @Mock
+    private MediaReferenceService mediaReferences;
 
     private AccountService service;
     private User user;
@@ -56,7 +60,7 @@ class AccountServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountService(userRepository, withdrawalRepository, refreshTokenRepository, passwordEncoder,
-                new MutableClock(NOW));
+                mediaReferences, new MutableClock(NOW));
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -171,10 +175,11 @@ class AccountServiceTest {
     }
 
     @Test
-    void profileImageIsNotAvailableBeforeMediaUploads() {
+    void profileImageMustBeOwnProfileUpload() {
         userExists();
         UpdateMeRequest request = request();
         request.setProfileImageMediaKey("k3Jd9fQ2xLmA7pZ0bR5tYw");
+        when(mediaReferences.findOwned(7L, "k3Jd9fQ2xLmA7pZ0bR5tYw", MediaPurpose.PROFILE)).thenReturn(null);
 
         assertThatThrownBy(() -> service.updateProfile(7L, request))
                 .isInstanceOfSatisfying(BusinessException.class, e ->

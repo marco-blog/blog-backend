@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.comment.domain.CommentStatus;
 import net.java21.blog.backend.comment.dto.CommentAuthor;
@@ -163,7 +164,7 @@ public class CommentService {
     }
 
     private static CommentAuthor authorOf(User user) {
-        return user == null ? null : new CommentAuthor(user.getId(), user.getNickname(), null);
+        return user == null ? null : new CommentAuthor(user.getId(), user.getNickname(), user.profileImageUrl());
     }
 
     /** 작성순 행 → 1단계 트리. 답글이 하나도 남지 않은 삭제 자리는 뺀다. */
@@ -191,7 +192,8 @@ public class CommentService {
         if (row.status() != CommentStatus.ACTIVE) {
             return new CommentResponse(row.id(), null, null, true, row.createdAt(), row.updatedAt(), replies);
         }
-        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(), null);
+        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(),
+                Media.urlOf(row.profileMediaKey()));
         return new CommentResponse(row.id(), row.content(), author, false, row.createdAt(), row.updatedAt(),
                 replies);
     }

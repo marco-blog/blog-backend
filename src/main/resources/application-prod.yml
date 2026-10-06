@@ -13,6 +13,8 @@
 #   BLOG_MAIL_USERNAME / BLOG_MAIL_PASSWORD  SMTP 인증(비밀 값)
 #   BLOG_MAIL_FROM                  보내는 사람 주소
 #   BLOG_MAIL_STARTTLS              STARTTLS 사용(기본 true)
+#   BLOG_MEDIA_UPLOAD_DIR / BLOG_MEDIA_TEMP_DIR / BLOG_MEDIA_THUMBNAIL_DIR  이미지 정식·임시·썸네일 디렉터리(US4).
+#                                   쓰기 가능해야 하며(없으면 만든다) 정식 디렉터리는 백업 대상, 썸네일은 다시 만들 수 있어 제외.
 #   BLOG_ADMIN_BOOTSTRAP_SUPER_ADMIN_EMAIL  (선택) SUPER_ADMIN이 없을 때 기동 시 최고 관리자로 지정할 회원 이메일(006 FR-105).
 # 키 교체: 새 버전 키를 BLOG_CRYPTO_KEYS_2 처럼 추가 → BLOG_CRYPTO_ACTIVE_KEY_VERSION=2 → 재암호화 후 이전 키 제거.
 spring:
@@ -46,6 +48,10 @@ blog:
     hash-key: ${BLOG_CRYPTO_HASH_KEY}
   auth:
     jwt-secret: ${BLOG_AUTH_JWT_SECRET}
+  media:
+    upload-dir: ${BLOG_MEDIA_UPLOAD_DIR}
+    temp-dir: ${BLOG_MEDIA_TEMP_DIR}
+    thumbnail-dir: ${BLOG_MEDIA_THUMBNAIL_DIR}
   security:
     allowed-origins: https://blog.java21.net
     trusted-proxies: "${BLOG_SECURITY_TRUSTED_PROXIES:127.0.0.1,::1}"

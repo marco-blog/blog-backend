@@ -12,7 +12,7 @@ import net.java21.blog.backend.user.domain.User;
  *   <li>{@code bio}: 300자까지, 비우거나 null이면 지운다.</li>
  *   <li>{@code locale}: ko·en·ja·zh-CN, null이면 미설정으로 되돌린다.</li>
  *   <li>{@code timeZone}: IANA ID, 지울 수 없다.</li>
- *   <li>{@code profileImageMediaKey}: 이미지 업로드(US4) 전까지는 받지 않는다.</li>
+ *   <li>{@code profileImageMediaKey}: {@code purpose=PROFILE}로 올린 본인 이미지의 키, null이면 프로필 이미지를 지운다.</li>
  * </ul>
  * 길이는 여기서 먼저 막고(400 {@code TOO_LONG}), 나머지 규칙은 {@code AccountService}가 확인한다.
  */
