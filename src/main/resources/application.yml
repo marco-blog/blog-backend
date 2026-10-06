@@ -30,6 +30,11 @@ spring:
         # N+1 완화: LAZY 연관을 IN 절로 100개씩 묶어 읽는다(원칙 v2.5.0). 목록은 fetch join 또는 DTO projection이 우선.
         default_batch_fetch_size: 100
 
+server:
+  # 방문자 주소는 ClientAddressFilter가 blog.security.trusted-proxies(front 서버)가 보낸 X-Forwarded-For에서만 꺼낸다.
+  # framework(ForwardedHeaderFilter)·native는 쓰지 않는다(framework는 아무 접속자의 헤더나 믿는다).
+  forward-headers-strategy: none
+
 management:
   endpoints:
     web:
