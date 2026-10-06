@@ -7,7 +7,7 @@ Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../docs/specs/`에
 - Java 21, Maven, Spring Boot 4.x, Spring Web, Spring Security, Spring Data JPA
 - 인증: JWT Access Token(30분) + Refresh Token(4시간)
 - DB: MySQL 8(기본값), Flyway 마이그레이션
-- 테스트: JUnit 5, Testcontainers
+- 테스트: Spring 슬라이스 테스트 + JUnit 5 + Mockito + Testcontainers, 커버리지 JaCoCo
 
 ## 규칙
 - 스펙(tasks.md)에 없는 기능은 구현하지 않는다.
@@ -15,6 +15,15 @@ Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../docs/specs/`에
 - 에러 응답: `{ "code": "POST_NOT_FOUND", "message": "..." }`
 - 쓰기 API는 소유자 검증 테스트를 함께 작성한다.
 
+## 테스트 규칙
+- 라인 커버리지 80% 이상. 미만이면 `./mvnw verify`가 실패한다(JaCoCo check).
+- Controller: `@WebMvcTest(XxxController.class)` + MockMvc, 서비스는 `@MockitoBean`. 검증 실패, 401/403/404, 응답 JSON 형식을 확인한다.
+- Service: Spring 컨텍스트 없이 `@ExtendWith(MockitoExtension.class)` 단위 테스트.
+- Repository: `@DataJpaTest` + `@AutoConfigureTestDatabase(replace = NONE)` + Testcontainers MySQL(`@ServiceConnection`).
+- `@SpringBootTest`는 핵심 흐름 통합 확인에만 쓴다.
+- Spring Boot 4 기준: `@MockBean` 대신 `@MockitoBean`을 쓴다.
+
 ## 명령 (앱 생성 후)
 - 테스트: `./mvnw test`
+- 테스트 + 커버리지 검사: `./mvnw verify`
 - 실행: `./mvnw spring-boot:run`
