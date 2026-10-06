@@ -47,6 +47,7 @@ public class SecurityConfig {
             "/api/v1/blogs/**",
             "/api/v1/auth/handle-availability",
             "/api/v1/posts/{id}",
+            "/api/v1/posts/{id}/comments",
             "/api/v1/tags/**",
             "/api/v1/legal/**",
             "/media/**",
