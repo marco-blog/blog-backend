@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /** SecurityConfig에 등록된 Origin 검사(R3·R27). 허용 목록은 application-test.yml(http://localhost:5173). */
 @WebMvcTest(controllers = OriginCheckTestController.class)
-@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class})
+@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class, OriginCheckTestController.class})
 class OriginCheckWebMvcTest {
 
     private static final String ALLOWED = "http://localhost:5173";

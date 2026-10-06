@@ -14,6 +14,7 @@ import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.api.PageRequests;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import org.springframework.boot.test.context.TestComponent;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 공통 응답·예외 처리 확인용 컨트롤러(테스트 전용). */
+@TestComponent
 @RestController
 @RequestMapping("/api/v1/test")
 class CommonResponseTestController {

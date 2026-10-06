@@ -25,6 +25,13 @@ spring:
   jpa:
     show-sql: false
 
+# OpenAPI 문서(/v3/api-docs, Swagger UI)는 운영에서 끈다. front 타입 생성(gen:api)은 로컬 backend에서 한다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 server:
   error:
     include-stacktrace: never
