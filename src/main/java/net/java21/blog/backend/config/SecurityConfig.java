@@ -30,7 +30,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
  * <ol>
  *   <li>상태 변경 요청은 먼저 Origin 검사({@link OriginCheckFilter}, R3·R27)를 거친다.</li>
  *   <li>{@code access_token} 쿠키의 JWT로 인증한다({@link JwtAuthenticationFilter}). {@code Authorization} 헤더는 쓰지 않는다.</li>
- *   <li>{@link #PUBLIC_GET} 경로의 GET과 {@link #PUBLIC_POST}(가입·로그인·리프레시·로그아웃)만 비로그인으로 허용하고, 나머지는 로그인이 필요하다.
+ *   <li>{@link #PUBLIC_GET} 경로의 GET과 {@link #PUBLIC_POST}(가입·로그인·리프레시·로그아웃·비밀번호 재설정)만 비로그인으로 허용하고, 나머지는 로그인이 필요하다.
  *       인증·권한 오류도 공통 틀(401 {@code UNAUTHENTICATED}, 403 {@code FORBIDDEN})로 응답한다.</li>
  *   <li>관리자 API({@code /api/v1/admin/**})는 인증 뒤 {@link AdminAccessFilter}가 요청마다 DB의 현재 권한을 확인하고,
  *       관리자가 아니면(비로그인 포함) 404 {@code NOT_FOUND}로 응답한다(006 FR-097). 권한 확인 빈이 없으면 모두 거부한다.</li>
@@ -70,6 +70,8 @@ public class SecurityConfig {
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
+            "/api/v1/auth/password-reset/request",
+            "/api/v1/auth/password-reset/confirm",
             "/api/v1/posts/*/views"
     };
 

@@ -169,7 +169,7 @@ class AuthControllerTest {
 
     @Test
     void loginReturnsMemberAndBlogsWithCookies() throws Exception {
-        when(loginService.login(any(LoginRequest.class))).thenReturn(new LoginService.Result(
+        when(loginService.login(any(), any(LoginRequest.class))).thenReturn(new LoginService.Result(
                 new LoginResponse(7L, "마르코", "USER",
                         List.of(new BlogLink("marco", "마르코의 블로그"), new BlogLink("marco-dev", "개발"))),
                 TOKENS));
@@ -189,9 +189,30 @@ class AuthControllerTest {
     @ParameterizedTest
     @CsvSource({"INVALID_CREDENTIALS, 401", "ACCOUNT_LOCKED, 423"})
     void loginErrors(ErrorCode code, int httpStatus) throws Exception {
-        when(loginService.login(any())).thenThrow(new BusinessException(code, "x"));
+        when(loginService.login(any(), any())).thenThrow(new BusinessException(code, "x"));
         expectError(mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"marco@example.com\",\"password\":\"password1\"}")), httpStatus, code.name());
+    }
+
+    /** 로그인 기록(T139)에 남길 방문자 주소와 User-Agent를 서비스에 넘긴다. */
+    @Test
+    void loginPassesClientAddressAndUserAgent() throws Exception {
+        when(loginService.login(any(), any(LoginRequest.class))).thenReturn(new LoginService.Result(
+                new LoginResponse(7L, "마르코", "USER", List.of()), TOKENS));
+
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .header("User-Agent", "Mozilla/5.0 Test")
+                        .with(request -> {
+                            request.setRemoteAddr("211.234.56.78");
+                            return request;
+                        })
+                        .content("{\"email\":\"marco@example.com\",\"password\":\"password1\"}"))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.verify(loginService).login(
+                org.mockito.ArgumentMatchers.eq(new net.java21.blog.backend.common.web.ClientInfo(
+                        "211.234.56.78", "Mozilla/5.0 Test")),
+                any(LoginRequest.class));
     }
 
     @Test

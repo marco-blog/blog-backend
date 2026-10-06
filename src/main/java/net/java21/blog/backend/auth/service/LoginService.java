@@ -8,10 +8,12 @@ import net.java21.blog.backend.auth.dto.LoginResponse;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
 import net.java21.blog.backend.security.AuthProperties;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
+import net.java21.blog.backend.user.service.LoginHistoryService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>없는 이메일·틀린 비밀번호·정지·탈퇴 회원은 모두 401 {@code INVALID_CREDENTIALS}(어느 쪽인지 밝히지 않음).</li>
  *   <li>연속 {@code login-max-failures}(5)번 틀리면 {@code login-lock-duration}(10분) 동안 423 {@code ACCOUNT_LOCKED}.</li>
  *   <li>성공하면 실패 횟수를 0으로 되돌리고 새 로그인 계열을 시작한다.</li>
+ *   <li>성공·실패마다 로그인 기록을 남긴다(FR-139). 없는 이메일은 회원 없이 남긴다.</li>
  * </ul>
- * 실패 횟수·잠금은 오류를 던져도 저장해야 하므로 {@code BusinessException}에는 롤백하지 않는다.
+ * 실패 횟수·잠금·로그인 기록은 오류를 던져도 저장해야 하므로 {@code BusinessException}에는 롤백하지 않는다.
  */
 @Service
 public class LoginService {
@@ -36,17 +39,19 @@ public class LoginService {
     private final PersonalDataHasher hasher;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
+    private final LoginHistoryService loginHistoryService;
     private final AuthProperties authProperties;
     private final Clock clock;
 
     public LoginService(UserRepository userRepository, BlogQueryRepository blogQueryRepository,
             PersonalDataHasher hasher, PasswordEncoder passwordEncoder, RefreshTokenService refreshTokenService,
-            AuthProperties authProperties, Clock clock) {
+            LoginHistoryService loginHistoryService, AuthProperties authProperties, Clock clock) {
         this.userRepository = userRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.hasher = hasher;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
+        this.loginHistoryService = loginHistoryService;
         this.authProperties = authProperties;
         this.clock = clock;
     }
@@ -54,26 +59,34 @@ public class LoginService {
     public record Result(LoginResponse response, AuthTokens tokens) {
     }
 
+    /**
+     * @param client 방문자 주소·기기 정보(로그인 기록용)
+     */
     @Transactional(noRollbackFor = BusinessException.class)
-    public Result login(LoginRequest request) {
+    public Result login(ClientInfo client, LoginRequest request) {
         User user = userRepository.findByEmailHash(hasher.hashEmail(request.email())).orElse(null);
         if (user == null) {
             passwordEncoder.matches(request.password(), DUMMY_HASH);
+            loginHistoryService.record(null, false, client);
             throw invalidCredentials();
         }
         if (!user.isActive()) {
+            loginHistoryService.record(user, false, client);
             throw invalidCredentials();
         }
         Instant now = clock.instant();
         if (user.isLocked(now)) {
+            loginHistoryService.record(user, false, client);
             throw locked();
         }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             boolean lockedNow = user.recordLoginFailure(authProperties.loginMaxFailures(),
                     authProperties.loginLockDuration(), now);
+            loginHistoryService.record(user, false, client);
             throw lockedNow ? locked() : invalidCredentials();
         }
         user.recordLoginSuccess();
+        loginHistoryService.record(user, true, client);
         AuthTokens tokens = refreshTokenService.startSession(user);
         LoginResponse response = new LoginResponse(user.getId(), user.getNickname(), user.getRole().name(),
                 blogQueryRepository.findActiveBlogLinks(user.getId()));

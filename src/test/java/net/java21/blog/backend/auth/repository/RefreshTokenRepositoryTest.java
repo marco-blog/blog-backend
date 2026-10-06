@@ -83,6 +83,20 @@ class RefreshTokenRepositoryTest {
         assertThat(revokedAt("4")).isNull();
     }
 
+    /** 비밀번호 변경(T122): 현재 기기의 계열만 남기고 그 회원의 나머지 계열을 한 번에 폐기한다. */
+    @Test
+    void revokeAllByUserIdExceptFamilyKeepsCurrentDevice() {
+        queryCounter.reset();
+        int updated = repository.revokeAllByUserIdExceptFamily(marco.getId(), "family-b", NOW);
+        assertThat(queryCounter.count()).isEqualTo(1);
+        assertThat(updated).isEqualTo(2);
+
+        assertThat(revokedAt("1")).isEqualTo(NOW);
+        assertThat(revokedAt("2")).isEqualTo(NOW);
+        assertThat(revokedAt("3")).isNull();
+        assertThat(revokedAt("4")).isNull();
+    }
+
     private Instant revokedAt(String suffix) {
         return repository.findByTokenHash(hash(suffix)).orElseThrow().getRevokedAt();
     }

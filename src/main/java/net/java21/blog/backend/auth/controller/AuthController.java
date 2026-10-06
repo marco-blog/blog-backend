@@ -2,6 +2,7 @@ package net.java21.blog.backend.auth.controller;
 
 import java.net.URI;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
@@ -17,6 +18,7 @@ import net.java21.blog.backend.blog.dto.HandleAvailabilityResponse;
 import net.java21.blog.backend.blog.service.BlogService;
 import net.java21.blog.backend.common.api.ApiResponse;
 import net.java21.blog.backend.common.error.BusinessException;
+import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.security.AuthUser;
 import net.java21.blog.backend.security.CurrentUser;
 import org.springframework.http.ResponseEntity;
@@ -62,9 +64,11 @@ public class AuthController {
         return ApiResponse.ok(blogService.handleAvailability(handle));
     }
 
+    /** 로그인 기록(FR-139)에 방문자 주소(믿는 프록시가 전달한 값, {@code ClientAddressFilter})와 User-Agent를 남긴다. */
     @PostMapping("/login")
-    ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-        LoginService.Result result = loginService.login(request);
+    ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest,
+            HttpServletResponse response) {
+        LoginService.Result result = loginService.login(ClientInfo.of(httpRequest), request);
         cookieWriter.write(response, result.tokens());
         return ApiResponse.ok(result.response());
     }

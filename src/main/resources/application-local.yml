@@ -17,6 +17,16 @@ logging:
     net.java21.blog: DEBUG
 
 blog:
+  # 메일 링크가 front 개발 서버로 가게 한다.
+  base-url: ${BLOG_BASE_URL:http://localhost:5173}
+  # 개발 메일은 Mailpit(docker run -p 1025:1025 -p 8025:8025 axllent/mailpit, 화면 http://localhost:8025)으로 보낸다.
+  mail:
+    host: ${BLOG_MAIL_HOST:localhost}
+    port: ${BLOG_MAIL_PORT:1025}
+    username: ${BLOG_MAIL_USERNAME:}
+    password: ${BLOG_MAIL_PASSWORD:}
+    from: ${BLOG_MAIL_FROM:no-reply@localhost}
+    starttls: ${BLOG_MAIL_STARTTLS:false}
   crypto:
     # 개인정보 암호화 키(Base64 32바이트). .env 의 값을 쓴다. 생성: openssl rand -base64 32
     keys:

@@ -43,8 +43,14 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    # 메일 발송기(MailConfig)가 있어도 SMTP 접속을 health에 넣지 않는다(메일 서버 장애로 서비스가 DOWN이 되지 않게).
+    mail:
+      enabled: false
 
 blog:
+  # 서비스 주소(허용 Origin과 별개로 메일 링크 같은 절대 URL에 쓴다). 운영 기본값, 개발은 프로필 파일에서 덮어쓴다.
+  base-url: https://blog.java21.net
   crypto:
     # 개인정보 암호화(FR-134~136). 키 값은 프로필 파일이 .env 또는 환경 변수에서 읽는다.
     active-key-version: ${BLOG_CRYPTO_ACTIVE_KEY_VERSION:1}
@@ -71,7 +77,16 @@ blog:
     visitor-cookie: visitor_id
     visitor-cookie-max-age: 365d
   # 정기 작업(research R26). 휴지통 비우기(FR-084, FR-159): 보관 기간이 지난 휴지통 글과 삭제된 블로그를 건수 단위로 정리한다.
+  # 메일(FR-133, research R23). host·port·from은 프로필 파일이, username·password는 환경 변수가 준다.
+  mail:
+    starttls: true
+  # 개인정보 보관 기간(FR-138·139). 파기 작업은 blog.jobs.privacy-purge-cron.
+  privacy:
+    withdrawn-retention: 30d
+    login-history-retention: 90d
   jobs:
+    # 개인정보 파기(FR-138·139): 탈퇴 30일 경과 회원의 개인정보, 90일 지난 로그인 기록, 만료된 재설정·리프레시 토큰.
+    privacy-purge-cron: "0 0 4 * * *"
     trash-purge-cron: "0 30 3 * * *"
     trash-retention: 30d
     purge-batch-size: 500

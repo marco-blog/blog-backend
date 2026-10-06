@@ -28,6 +28,15 @@ import org.hibernate.type.SqlTypes;
 public class User extends BaseTimeEntity {
 
     public static final String DEFAULT_TIME_ZONE = "Asia/Seoul";
+    public static final int NICKNAME_MAX = 30;
+    public static final int BIO_MAX = 300;
+    /** 개인정보 파기 후의 닉네임(FR-138). */
+    public static final String PURGED_NICKNAME = "withdrawn";
+    /**
+     * 개인정보 파기를 마쳤다는 표시. BCrypt 형식이 아니라 어떤 비밀번호와도 맞지 않는다.
+     * 스키마를 바꾸지 않고 파기 작업이 같은 회원을 다시 처리하지 않게 한다.
+     */
+    public static final String PURGED_PASSWORD_HASH = "PURGED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -130,6 +139,50 @@ public class User extends BaseTimeEntity {
     public void recordLoginSuccess() {
         failedLoginCount = 0;
         lockedUntil = null;
+    }
+
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void changeBio(String bio) {
+        this.bio = bio;
+    }
+
+    /** ko / en / ja / zh-CN, null=미설정(FR-149). */
+    public void changeLocale(String locale) {
+        this.locale = locale;
+    }
+
+    /** IANA 시간대 ID(FR-153). */
+    public void changeTimeZone(String timeZone) {
+        this.timeZone = timeZone;
+    }
+
+    /** 비밀번호 변경·재설정. 재설정은 잠금도 풀어 준다(새 비밀번호로 바로 로그인할 수 있게). */
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.failedLoginCount = 0;
+        this.lockedUntil = null;
+    }
+
+    /** 탈퇴(FR-009). 되돌릴 수 없다. 글 비공개·토큰 폐기는 서비스가 같은 트랜잭션에서 한다. */
+    public void withdraw(Instant now) {
+        this.status = UserStatus.WITHDRAWN;
+        this.withdrawnAt = now;
+    }
+
+    /**
+     * 탈퇴 보존 기간 뒤 개인정보 파기(FR-138, tasks.md "구현 전 결정 사항" 10번). NOT NULL·UNIQUE를 지키도록
+     * 이메일 자리에는 {@code withdrawn:{id}}(암호화), 해시 자리에는 그 HMAC을 넣는다.
+     */
+    public void purgePersonalData(String anonymousEmail, String anonymousEmailHash) {
+        this.email = anonymousEmail;
+        this.emailHash = anonymousEmailHash;
+        this.nickname = PURGED_NICKNAME;
+        this.bio = null;
+        this.profileMediaId = null;
+        this.passwordHash = PURGED_PASSWORD_HASH;
     }
 
     /** 실제 적용되는 블로그 한도. */
