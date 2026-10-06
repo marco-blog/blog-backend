@@ -4,7 +4,7 @@ Blog Platform의 REST API 서버. 스펙은 형제 저장소 `../docs/specs/`에
 
 ## 스택
 - Java 21, Maven, Spring Boot 3.x, Spring Web, Spring Security, Spring Data JPA
-- 인증: JWT Access Token + Refresh Token
+- 인증: JWT Access Token(30분) + Refresh Token(4시간)
 - DB: MySQL 8(기본값), Flyway 마이그레이션
 - 테스트: JUnit 5, Testcontainers
 
