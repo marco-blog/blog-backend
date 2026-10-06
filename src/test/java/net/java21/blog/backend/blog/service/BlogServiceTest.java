@@ -66,6 +66,8 @@ class BlogServiceTest {
     private CategoryQueryRepository categoryQueryRepository;
     @Mock
     private MediaReferenceService mediaReferences;
+    @Mock
+    private net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository subscriptionRepository;
 
     private BlogService service;
     private User owner;
@@ -75,7 +77,7 @@ class BlogServiceTest {
         BlogAccess access = new BlogAccess(blogRepository);
         service = new BlogService(blogRepository, blogQueryRepository, userRepository, access, new HandlePolicy(),
                 passwordEncoder, new BlogsProperties(3), categoryQueryRepository, mediaReferences,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                subscriptionRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -173,7 +175,7 @@ class BlogServiceTest {
                 List.of(new CategoryNode(2L, "Boot", 2, List.of()))));
         when(categoryQueryRepository.findTree(10L)).thenReturn(tree);
 
-        BlogResponse response = service.get("marco");
+        BlogResponse response = service.get("marco", null);
 
         assertThat(response.handle()).isEqualTo("marco");
         assertThat(response.title()).isEqualTo("마르코의 블로그");
@@ -182,17 +184,42 @@ class BlogServiceTest {
         assertThat(response.commentEnabled()).isTrue();
         assertThat(response.owner()).isEqualTo(new BlogResponse.Owner("마르코", null, "자바 개발자"));
         assertThat(response.categories()).isEqualTo(tree);
+        assertThat(response.subscriberCount()).isZero();
+        assertThat(response.subscribedByMe()).isNull();
+        assertThat(response.feedItemCount()).isEqualTo(20);
+        assertThat(response.feedContentMode()).isEqualTo(net.java21.blog.backend.blog.domain.FeedContentMode.FULL);
+        verify(subscriptionRepository, never()).existsByUserIdAndBlogId(any(), any());
+    }
+
+    /** 002 T023: 구독자 수·피드 설정과 요청한 회원의 구독 여부(비로그인 null, 구독 중 true, 아니면 false). */
+    @Test
+    void getCarriesSubscriberCountSubscribedByMeAndFeedSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        TestEntities.with(blog, "subscriberCount", 7);
+        blog.changeFeedSettings(50, net.java21.blog.backend.blog.domain.FeedContentMode.SUMMARY);
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        when(categoryQueryRepository.findTree(10L)).thenReturn(List.of());
+        when(subscriptionRepository.existsByUserIdAndBlogId(2L, 10L)).thenReturn(true);
+        when(subscriptionRepository.existsByUserIdAndBlogId(3L, 10L)).thenReturn(false);
+
+        BlogResponse subscriber = service.get("marco", 2L);
+        assertThat(subscriber.subscriberCount()).isEqualTo(7);
+        assertThat(subscriber.subscribedByMe()).isTrue();
+        assertThat(subscriber.feedItemCount()).isEqualTo(50);
+        assertThat(subscriber.feedContentMode()).isEqualTo(net.java21.blog.backend.blog.domain.FeedContentMode.SUMMARY);
+        assertThat(service.get("marco", 3L).subscribedByMe()).isFalse();
+        assertThat(service.get("marco", null).subscribedByMe()).isNull();
     }
 
     @Test
     void missingOrDeletedBlogIsNotFound() {
         when(blogRepository.findByHandleWithOwner("nope")).thenReturn(Optional.empty());
-        expect(() -> service.get("nope"), ErrorCode.BLOG_NOT_FOUND);
+        expect(() -> service.get("nope", null), ErrorCode.BLOG_NOT_FOUND);
 
         Blog deleted = TestEntities.blog(10L, owner, "gone");
         deleted.delete(NOW);
         when(blogRepository.findByHandleWithOwner("gone")).thenReturn(Optional.of(deleted));
-        expect(() -> service.get("gone"), ErrorCode.BLOG_NOT_FOUND);
+        expect(() -> service.get("gone", 5L), ErrorCode.BLOG_NOT_FOUND);
     }
 
     @ParameterizedTest
@@ -200,7 +227,7 @@ class BlogServiceTest {
     void blogOfSuspendedOrWithdrawnMemberIsNotFoundEvenForOwner(UserStatus status) {
         TestEntities.with(owner, "status", status);
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
-        expect(() -> service.get("marco"), ErrorCode.BLOG_NOT_FOUND);
+        expect(() -> service.get("marco", null), ErrorCode.BLOG_NOT_FOUND);
         expect(() -> service.update(1L, "marco", new UpdateBlogRequest()), ErrorCode.BLOG_NOT_FOUND);
     }
 

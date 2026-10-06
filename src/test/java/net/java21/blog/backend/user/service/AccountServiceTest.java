@@ -18,6 +18,7 @@ import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
@@ -53,6 +54,8 @@ class AccountServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private MediaReferenceService mediaReferences;
+    @Mock
+    private BlogSubscriptionRepository subscriptionRepository;
 
     private AccountService service;
     private User user;
@@ -60,7 +63,7 @@ class AccountServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountService(userRepository, withdrawalRepository, refreshTokenRepository, passwordEncoder,
-                mediaReferences, new MutableClock(NOW));
+                mediaReferences, subscriptionRepository, new MutableClock(NOW));
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -212,6 +215,7 @@ class AccountServiceTest {
         assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
         verify(withdrawalRepository, never()).makeAllPostsPrivate(anyLong());
         verify(refreshTokenRepository, never()).revokeAllByUserId(anyLong(), any());
+        verify(subscriptionRepository, never()).deleteAllByUser(anyLong());
     }
 
     @Test
@@ -226,6 +230,22 @@ class AccountServiceTest {
         assertThat(user.isActive()).isFalse();
         verify(withdrawalRepository).makeAllPostsPrivate(7L);
         verify(refreshTokenRepository).revokeAllByUserId(7L, NOW);
+    }
+
+    /**
+     * 002 T024(결정 3): 탈퇴하면 같은 트랜잭션에서 그 회원의 구독 행을 지우고 구독했던 블로그들의 구독자 수를 줄인다(수를 먼저 줄이고 행을 지움).
+     * 좋아요 행과 좋아요 수는 건드리지 않는다(이 서비스는 좋아요 저장소를 쓰지 않는다).
+     */
+    @Test
+    void withdrawRemovesSubscriptionsAndDecrementsSubscriberCounts() {
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
+
+        service.withdraw(7L, "password1");
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(subscriptionRepository);
+        order.verify(subscriptionRepository).decrementSubscriberCountsOf(7L);
+        order.verify(subscriptionRepository).deleteAllByUser(7L);
     }
 
     @Test

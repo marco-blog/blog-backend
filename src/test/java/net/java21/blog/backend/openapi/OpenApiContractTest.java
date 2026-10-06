@@ -111,7 +111,13 @@ class OpenApiContractTest {
             "GET /api/v1/legal/terms",
             "GET /api/v1/legal/privacy",
             // 관리자 API(001이 정한 것, 결정 #8에 따라 Phase 5에서 구현)
-            "PATCH /api/v1/admin/users/{id}/blog-limit");
+            "PATCH /api/v1/admin/users/{id}/blog-limit",
+            // 002 발견·피드(specs/002-discovery-feeds/contracts/api.md) — 좋아요·구독·구독 피드
+            "PUT /api/v1/me/likes/{postId}",
+            "DELETE /api/v1/me/likes/{postId}",
+            "PUT /api/v1/me/subscriptions/{handle}",
+            "DELETE /api/v1/me/subscriptions/{handle}",
+            "GET /api/v1/me/feed");
 
     /** 공통 틀 대신 표준 형식(바이너리)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}");

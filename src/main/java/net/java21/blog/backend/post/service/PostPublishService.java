@@ -94,7 +94,7 @@ public class PostPublishService {
         }
         postDraftRepository.flush();
         mediaReferences.syncPublished(postId, userId, markdown);
-        return postService.detailOf(post, true);
+        return postService.detailOf(post, userId);
     }
 
     /** 발행 설정 → 작성 중 사본 → 지금 발행본 순으로 고른 카테고리. 이 블로그의 카테고리여야 한다. */

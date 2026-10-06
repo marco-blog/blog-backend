@@ -12,6 +12,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * {@code commentEnabled}는 주인 외에게는 블로그 설정을 반영한 값(블로그와 글 모두 허용일 때만 true, FR-029·107)이고,
  * 주인에게는 작성 화면이 그대로 다시 저장하는 글별 설정 값이다(댓글 API는 두 설정을 모두 검사한다).
  * 카테고리는 미분류면 null, 태그는 이름순. 작성자 프로필 이미지는 {@code /media/{key}} 또는 null.
+ * 002: {@code likeCount}(좋아요 수), {@code likedByMe}(로그인 회원이 눌렀으면 true, 아니면 false, 비로그인이면 null).
  */
 public record PostDetailResponse(
         Long id,
@@ -32,13 +33,16 @@ public record PostDetailResponse(
         PostLink prev,
         PostLink next,
         Instant publishedAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        int likeCount,
+        Boolean likedByMe) {
 
     public record Author(String nickname, String profileImageUrl) {
     }
 
-    /** 이미 읽은 글(블로그·주인·카테고리 포함)과 태그 이름으로 만든다. */
-    public static PostDetailResponse of(Post post, boolean owner, PostLink prev, PostLink next, List<String> tags) {
+    /** 이미 읽은 글(블로그·주인·카테고리 포함)과 태그 이름, 좋아요 여부(비로그인 null)로 만든다. */
+    public static PostDetailResponse of(Post post, boolean owner, PostLink prev, PostLink next, List<String> tags,
+            Boolean likedByMe) {
         var user = post.getBlog().getUser();
         return new PostDetailResponse(post.getId(), post.getBlog().getHandle(), post.getTitle(), post.getContentHtml(),
                 owner ? post.getContentMarkdown() : null, post.getSummary(), post.getThumbnailUrl(), CategoryRef.of(post.getCategory()),
@@ -46,6 +50,6 @@ public record PostDetailResponse(
                 post.getVisibility(), post.getStatus(), post.getViewCount(), post.getCommentCount(),
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
                 new Author(user.getNickname(), user.profileImageUrl()), prev, next,
-                post.getPublishedAt(), post.getUpdatedAt());
+                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe);
     }
 }

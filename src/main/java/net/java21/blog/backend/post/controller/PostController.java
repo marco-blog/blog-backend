@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 
 import net.java21.blog.backend.common.api.ApiResponse;
 import net.java21.blog.backend.common.api.PageRequests;
+import net.java21.blog.backend.common.web.CacheHeaders;
 import net.java21.blog.backend.post.PostsProperties;
 import net.java21.blog.backend.post.dto.DraftResponse;
 import net.java21.blog.backend.post.dto.DraftWriteRequest;
@@ -86,9 +87,13 @@ public class PostController {
         return ApiResponse.ok(postDraftService.latest(user.userId(), handle));
     }
 
+    /** 요청한 사람에 따라 {@code likedByMe}가 다르므로 공개 GET이지만 {@code Cache-Control: private, no-cache}(002 contracts/api.md). */
     @GetMapping("/api/v1/posts/{id}")
-    ApiResponse<PostDetailResponse> detail(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id) {
-        return ApiResponse.ok(postService.detail(id, viewer == null ? null : viewer.userId()));
+    ResponseEntity<ApiResponse<PostDetailResponse>> detail(@CurrentUser(required = false) AuthUser viewer,
+            @PathVariable Long id) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, CacheHeaders.PRIVATE_NO_CACHE)
+                .body(ApiResponse.ok(postService.detail(id, viewer == null ? null : viewer.userId())));
     }
 
     @DeleteMapping("/api/v1/posts/{id}")

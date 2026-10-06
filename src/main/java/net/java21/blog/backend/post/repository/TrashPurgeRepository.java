@@ -15,6 +15,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 
 import net.java21.blog.backend.blog.domain.BlogStatus;
 import net.java21.blog.backend.post.domain.PostStatus;
+import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -22,16 +23,21 @@ import org.springframework.stereotype.Repository;
  * 글의 {@code post_drafts}·{@code post_tags}·{@code post_media}는 DB의 {@code ON DELETE CASCADE}로 함께 지워진다
  * (작성 중 사본은 엔티티가 있으므로 먼저 명시적으로 지운다). {@code ON DELETE CASCADE}가 없는 FK(댓글, 트랙백, 포털 추천·제외)는
  * 글보다 먼저 지운다(T196·T189): 댓글은 답글 → 댓글 순, 트랙백(005)·포털(003)은 엔티티가 없으므로 SQL로.
+ * 002: 좋아요({@code post_likes})는 {@code ON DELETE CASCADE}로 글과 함께 지워지고, 블로그 구독({@code blog_subscriptions})은
+ * CASCADE가 없으므로 블로그를 비울 때 먼저 지운다.
  */
 @Repository
 public class TrashPurgeRepository {
 
     private final JPAQueryFactory queryFactory;
     private final EntityManager em;
+    private final BlogSubscriptionRepository subscriptionRepository;
 
-    public TrashPurgeRepository(JPAQueryFactory queryFactory, EntityManager em) {
+    public TrashPurgeRepository(JPAQueryFactory queryFactory, EntityManager em,
+            BlogSubscriptionRepository subscriptionRepository) {
         this.queryFactory = queryFactory;
         this.em = em;
+        this.subscriptionRepository = subscriptionRepository;
     }
 
     /** {@code deleted_at < cutoff}인 휴지통 글 id(오래된 순, 최대 {@code limit}개). */
@@ -92,12 +98,13 @@ public class TrashPurgeRepository {
     /**
      * 삭제된 블로그를 비운다(FR-159, data-model blogs, T181): 아직 남은 글의 카테고리를 먼저 비우고(외래 키) 카테고리를
      * 하위 → 상위 순으로 지운 뒤, 주소 재사용을 막기 위해 {@code blogs} 행은 남기되 제목·소개·대표 이미지 참조를 비운다.
-     * 모두 집합 UPDATE·DELETE다.
+     * 그 블로그들의 구독 행(002)을 먼저 지운다. 모두 집합 UPDATE·DELETE다.
      */
     public long purgeBlogs(List<Long> ids) {
         if (ids.isEmpty()) {
             return 0;
         }
+        subscriptionRepository.deleteByBlogIds(ids);
         queryFactory.update(post).setNull(post.category).where(post.blog.id.in(ids)).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids), category.parent.isNotNull()).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids)).execute();

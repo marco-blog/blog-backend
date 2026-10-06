@@ -21,6 +21,7 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -45,12 +46,14 @@ public class BlogService {
     private final BlogsProperties blogsProperties;
     private final CategoryQueryRepository categoryQueryRepository;
     private final MediaReferenceService mediaReferences;
+    private final BlogSubscriptionRepository subscriptionRepository;
     private final Clock clock;
 
     public BlogService(BlogRepository blogRepository, BlogQueryRepository blogQueryRepository,
             UserRepository userRepository, BlogAccess blogAccess, HandlePolicy handlePolicy,
             PasswordEncoder passwordEncoder, BlogsProperties blogsProperties,
-            CategoryQueryRepository categoryQueryRepository, MediaReferenceService mediaReferences, Clock clock) {
+            CategoryQueryRepository categoryQueryRepository, MediaReferenceService mediaReferences,
+            BlogSubscriptionRepository subscriptionRepository, Clock clock) {
         this.blogRepository = blogRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.userRepository = userRepository;
@@ -60,6 +63,7 @@ public class BlogService {
         this.blogsProperties = blogsProperties;
         this.categoryQueryRepository = categoryQueryRepository;
         this.mediaReferences = mediaReferences;
+        this.subscriptionRepository = subscriptionRepository;
         this.clock = clock;
     }
 
@@ -112,11 +116,16 @@ public class BlogService {
         return BlogResponse.of(blog);
     }
 
-    /** 블로그와 카테고리 트리(목록 노출 가능 글 수). 쿼리 3회(블로그, 카테고리, 글 수). */
+    /**
+     * 블로그와 카테고리 트리(목록 노출 가능 글 수), 구독자 수·피드 설정, 요청한 회원({@code viewerId}, 비로그인 null)의 구독 여부.
+     * 쿼리 3회(블로그, 카테고리, 글 수) + 로그인했으면 구독 여부 1회.
+     */
     @Transactional(readOnly = true)
-    public BlogResponse get(String handle) {
+    public BlogResponse get(String handle, Long viewerId) {
         Blog blog = blogAccess.requireVisibleBlog(handle);
-        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()));
+        Boolean subscribedByMe = viewerId == null ? null
+                : subscriptionRepository.existsByUserIdAndBlogId(viewerId, blog.getId());
+        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), subscribedByMe);
     }
 
     @Transactional
@@ -149,7 +158,7 @@ public class BlogService {
         if (request.hasCoverImageMediaKey()) {
             changeCover(blog, cover);
         }
-        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()));
+        return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
     }
 
     /**

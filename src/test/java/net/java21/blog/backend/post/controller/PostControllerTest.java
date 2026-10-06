@@ -75,7 +75,7 @@ class PostControllerTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final PostDetailResponse DETAIL = new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>", null,
             "본문", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2,
-            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW);
+            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null);
     private static final PostSummaryResponse SUMMARY = new PostSummaryResponse(123L, "제목", "본문", null, null,
             List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, null, null);
 
@@ -246,13 +246,21 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.result.prev.title").value("이전"))
                 .andExpect(jsonPath("$.result.next").value(nullValue()))
                 .andExpect(jsonPath("$.result.publishedAt").value("2026-10-06T04:24:19Z"))
-                .andExpect(jsonPath("$.result.updatedAt").value("2026-10-06T04:24:19Z"));
+                .andExpect(jsonPath("$.result.updatedAt").value("2026-10-06T04:24:19Z"))
+                .andExpect(jsonPath("$.result.likeCount").value(5))
+                .andExpect(jsonPath("$.result.likedByMe").value(nullValue()))
+                .andExpect(header().string("Cache-Control", "private, no-cache"));
     }
 
     @Test
     void detailPassesLoggedInViewer() throws Exception {
-        when(postService.detail(123L, 7L)).thenReturn(DETAIL);
-        mvc.perform(get("/api/v1/posts/123").cookie(authCookies.user(7L))).andExpect(status().isOk());
+        when(postService.detail(123L, 7L)).thenReturn(new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>",
+                null, "본문", null, null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2, true,
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true));
+        mvc.perform(get("/api/v1/posts/123").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.likedByMe").value(true))
+                .andExpect(header().string("Cache-Control", "private, no-cache"));
         verify(postService).detail(123L, 7L);
     }
 
