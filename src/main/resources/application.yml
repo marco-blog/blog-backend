@@ -149,6 +149,9 @@ blog:
     topic-auto-hide-threshold: 20
     popular-window: 7d
     topic-count-window: 30d
+  release-notes:
+    # 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시 시각부터, 003 FR-162)
+    portal-card-days: 14d
   # 관리자(006 FR-105): 기동 시 SUPER_ADMIN이 한 명도 없으면 이 이메일의 회원을 SUPER_ADMIN으로 지정한다(첫 최고 관리자 지정의 유일한 경로).
   # 값은 환경 변수(또는 .env)로만 주고 저장소에 커밋하지 않는다. 비우면 아무것도 하지 않는다.
   admin:

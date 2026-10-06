@@ -168,4 +168,12 @@ class MarkdownRendererTest {
     void linksGetSafeRel() {
         assertThat(renderer.render("[a](https://example.com)").html()).contains("rel=\"nofollow noopener noreferrer\"");
     }
+
+    /** 003 T104: 회원 글 본문은 릴리스 노트와 달리 제목에도 {@code id}를 남기지 않는다. */
+    @Test
+    void memberPostsNeverKeepIds() {
+        RenderedContent out = renderer.render("## 새 기능\n\n<h2 id=\"anchor\">직접</h2>\n\n<p id=\"x\">문단</p>");
+
+        assertThat(out.html()).doesNotContain("id=").contains("<h2>새 기능</h2>", "<h2>직접</h2>");
+    }
 }

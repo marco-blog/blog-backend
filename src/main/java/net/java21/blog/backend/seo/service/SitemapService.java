@@ -22,7 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>색인: {@code /sitemap/pages.xml}과 {@code /sitemap/posts-1.xml} … {@code posts-N.xml}
  *       (N = ceil(본문 노출 가능 글 수 / {@code urls-per-file}), 0이면 posts 파일 없음). 쿼리 1회.</li>
  *   <li>pages: {@code /}, {@code /terms}, {@code /privacy}, 본문 노출 가능 글이 있는 블로그 홈, 운영자 숨김이 아닌 주제 페이지
- *       (003 FR-094, {@code lastmod} 없음). 쿼리 2회.</li>
+ *       (003 FR-094, {@code lastmod} 없음), 게시된 릴리스 노트 {@code /updates/v{version}}({@code lastmod} = 노트 수정 시각,
+ *       003 FR-164). 쿼리 3회.</li>
  *   <li>posts-n: id 순 n번째 묶음. 범위 밖이면 404 {@code NOT_FOUND}. 쿼리 2회(수, 목록).</li>
  * </ul>
  */
@@ -62,7 +63,9 @@ public class SitemapService {
         FIXED_PAGES.forEach(path -> entries.add(new SitemapWriter.Entry(site.url(path), null)));
         blogs.forEach(b -> entries.add(new SitemapWriter.Entry(site.url("/" + b.handle()), b.lastPublishedAt())));
         repository.findTopicPaths().forEach(path -> entries.add(new SitemapWriter.Entry(site.url(path), null)));
-        return new SitemapDocument(writer.urlset(entries), blogs.stream().map(SitemapBlogRow::lastPublishedAt)
+        repository.findReleaseNotes().forEach(note -> entries.add(
+                new SitemapWriter.Entry(site.url("/updates/v" + note.version()), note.updatedAt())));
+        return new SitemapDocument(writer.urlset(entries), entries.stream().map(SitemapWriter.Entry::lastModified)
                 .filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null));
     }
 

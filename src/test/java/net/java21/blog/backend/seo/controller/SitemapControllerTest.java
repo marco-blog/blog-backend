@@ -27,6 +27,7 @@ import net.java21.blog.backend.config.SiteProperties;
 import net.java21.blog.backend.seo.SitemapProperties;
 import net.java21.blog.backend.seo.repository.SitemapBlogRow;
 import net.java21.blog.backend.seo.repository.SitemapPostRow;
+import net.java21.blog.backend.seo.repository.SitemapReleaseNoteRow;
 import net.java21.blog.backend.seo.repository.SitemapQueryRepository;
 import net.java21.blog.backend.seo.repository.SitemapStats;
 import net.java21.blog.backend.seo.service.SitemapService;
@@ -133,6 +134,22 @@ class SitemapControllerTest {
                 "https://blog.example.com/privacy", "https://blog.example.com/marco",
                 "https://blog.example.com/topics/knowledge", "https://blog.example.com/topics/knowledge/it-internet");
         assertThat(texts(doc, "lastmod")).containsExactly("2026-10-06T04:24:19Z");
+    }
+
+    /** 003 T112: pages.xml에 게시된 릴리스 노트 {@code /updates/v{version}}(lastmod = 노트 수정 시각). */
+    @Test
+    void pagesIncludePublishedReleaseNotes() throws Exception {
+        when(repository.findReleaseNotes()).thenReturn(List.of(
+                new SitemapReleaseNoteRow("1.10.0", Instant.parse("2026-10-07T00:00:00Z")),
+                new SitemapReleaseNoteRow("1.9.0", Instant.parse("2026-09-01T00:00:00Z"))));
+
+        MvcResult result = mvc.perform(get("/sitemap/pages.xml")).andExpect(status().isOk()).andReturn();
+        Document doc = parse(result);
+
+        assertThat(texts(doc, "loc")).contains("https://blog.example.com/updates/v1.10.0",
+                "https://blog.example.com/updates/v1.9.0");
+        assertThat(texts(doc, "lastmod")).containsExactly("2026-10-07T00:00:00Z", "2026-09-01T00:00:00Z");
+        assertThat(result.getResponse().getHeader(HttpHeaders.LAST_MODIFIED)).contains("07 Oct 2026");
     }
 
     @Test

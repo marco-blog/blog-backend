@@ -97,6 +97,19 @@ public class ReleaseNote extends BaseTimeEntity {
         this.currentRevisionNo++;
     }
 
+    /**
+     * 내용을 고쳐 저장한다. 수정본 번호는 저장소의 조건부 UPDATE({@code current_revision_no = base}일 때만 + 1, 006 FR-168)가 이미 올렸으므로
+     * 여기서는 바꾸지 않는다. 버전은 게시한 적이 없을 때만 바꿀 수 있다(검증은 서비스).
+     */
+    public void edit(String version, int major, int minor, int patch, LocalDate releaseDate, User editor) {
+        this.version = version;
+        this.versionMajor = major;
+        this.versionMinor = minor;
+        this.versionPatch = patch;
+        this.releaseDate = releaseDate;
+        this.updatedBy = editor;
+    }
+
     /** 게시. 처음 게시면 처음 게시 시각·수정본 번호를 남긴다. */
     public void publish(Instant now, User editor) {
         this.status = ReleaseNoteStatus.PUBLISHED;

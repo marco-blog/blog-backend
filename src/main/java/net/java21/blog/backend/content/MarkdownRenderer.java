@@ -48,7 +48,7 @@ public class MarkdownRenderer {
     }
 
     /** 살균된 HTML에서 태그를 빼고(엔티티는 풀어서) 공백을 한 칸으로 줄인 텍스트. */
-    static String textOf(String safeHtml) {
+    public static String textOf(String safeHtml) {
         StringBuilder sb = new StringBuilder();
         HtmlSanitizer.sanitize(safeHtml, new HtmlSanitizer.Policy() {
             @Override

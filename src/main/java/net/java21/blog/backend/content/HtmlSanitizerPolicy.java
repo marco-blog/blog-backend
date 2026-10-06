@@ -32,7 +32,20 @@ public class HtmlSanitizerPolicy {
             "no-referrer|origin|strict-origin|strict-origin-when-cross-origin|same-origin");
     private static final Pattern ANY = Pattern.compile(".*", Pattern.DOTALL);
 
-    private final PolicyFactory policy = new HtmlPolicyBuilder()
+    /**
+     * 릴리스 노트 제목 앵커(003 research P11): 소문자 글자(한글·한자·가나 포함)·숫자·{@code -}만. 대문자·기호·공백이 있으면 지운다.
+     */
+    static final Pattern ANCHOR_ID = Pattern.compile("[[\\p{L}\\p{M}\\p{N}-]&&[^\\p{Lu}\\p{Lt}]]{1,200}");
+
+    private final PolicyFactory policy = base().toFactory();
+
+    /** 릴리스 노트: 글 본문 정책 + h2~h4의 앵커 {@code id}(형식이 맞을 때만). 회원 글 본문에는 {@code id}를 허용하지 않는다. */
+    private final PolicyFactory releaseNotePolicy = base()
+            .allowAttributes("id").matching(ANCHOR_ID).onElements("h2", "h3", "h4")
+            .toFactory();
+
+    private static HtmlPolicyBuilder base() {
+        return new HtmlPolicyBuilder()
             .allowElements("p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6",
                     "strong", "em", "b", "i", "del", "s", "blockquote", "ul", "ol", "li",
                     "code", "pre", "table", "thead", "tbody", "tr", "th", "td", "a", "img")
@@ -50,10 +63,15 @@ public class HtmlSanitizerPolicy {
             .allowAttributes("loading").matching(LOADING).onElements("iframe")
             .allowAttributes("referrerpolicy").matching(REFERRER_POLICY).onElements("iframe")
             .allowAttributes("title", "allowfullscreen").matching(ANY).onElements("iframe")
-            .allowElements((elementName, attrs) -> attrs.contains("src") ? elementName : null, "iframe")
-            .toFactory();
+            .allowElements((elementName, attrs) -> attrs.contains("src") ? elementName : null, "iframe");
+    }
 
     public String sanitize(String html) {
         return policy.sanitize(html);
+    }
+
+    /** 릴리스 노트 본문 살균({@link #sanitize}와 같고 제목 앵커만 더 허용). */
+    public String sanitizeReleaseNote(String html) {
+        return releaseNotePolicy.sanitize(html);
     }
 }
