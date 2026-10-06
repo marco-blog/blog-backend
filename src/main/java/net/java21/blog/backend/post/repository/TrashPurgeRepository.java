@@ -1,6 +1,7 @@
 package net.java21.blog.backend.post.repository;
 
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
+import static net.java21.blog.backend.category.domain.QCategory.category;
 import static net.java21.blog.backend.post.domain.QPost.post;
 import static net.java21.blog.backend.post.domain.QPostDraft.postDraft;
 
@@ -65,19 +66,17 @@ public class TrashPurgeRepository {
     }
 
     /**
-     * 삭제된 블로그를 비운다(FR-159, data-model blogs): 카테고리(하위 → 상위 순)를 지우고, 주소 재사용을 막기 위해
-     * {@code blogs} 행은 남기되 제목·소개·대표 이미지 참조를 비운다. 카테고리 엔티티는 US2에서 생기므로 SQL로 지운다.
+     * 삭제된 블로그를 비운다(FR-159, data-model blogs, T181): 아직 남은 글의 카테고리를 먼저 비우고(외래 키) 카테고리를
+     * 하위 → 상위 순으로 지운 뒤, 주소 재사용을 막기 위해 {@code blogs} 행은 남기되 제목·소개·대표 이미지 참조를 비운다.
+     * 모두 집합 UPDATE·DELETE다.
      */
     public long purgeBlogs(List<Long> ids) {
         if (ids.isEmpty()) {
             return 0;
         }
-        em.createNativeQuery("UPDATE posts SET category_id = NULL WHERE blog_id IN (:ids)")
-                .setParameter("ids", ids).executeUpdate();
-        em.createNativeQuery("DELETE FROM categories WHERE blog_id IN (:ids) AND parent_id IS NOT NULL")
-                .setParameter("ids", ids).executeUpdate();
-        em.createNativeQuery("DELETE FROM categories WHERE blog_id IN (:ids)")
-                .setParameter("ids", ids).executeUpdate();
+        queryFactory.update(post).setNull(post.category).where(post.blog.id.in(ids)).execute();
+        queryFactory.delete(category).where(category.blog.id.in(ids), category.parent.isNotNull()).execute();
+        queryFactory.delete(category).where(category.blog.id.in(ids)).execute();
         long purged = queryFactory.update(blog)
                 .set(blog.title, "")
                 .setNull(blog.description)

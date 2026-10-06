@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 
+import net.java21.blog.backend.category.domain.Category;
+import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
@@ -14,13 +16,18 @@ import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
 import net.java21.blog.backend.post.repository.PostDraftRepository;
+import net.java21.blog.backend.tag.domain.TagNormalizer;
+import net.java21.blog.backend.tag.service.TagService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 발행·수정 발행(FR-013, FR-015, FR-070, FR-107·108). 작성 중 사본(없으면 지금 발행본)을 HTML로 바꾸고 살균해 {@code posts}에
  * 반영한 뒤 사본을 지운다. 제목 1~200자 필수, 본문이 비면 422 {@code POST_CONTENT_EMPTY}.
- * 글 번호는 바뀌지 않고 {@code published_at}은 처음 발행할 때만 정한다. 카테고리·태그 반영은 US2(T169).
+ * 글 번호는 바뀌지 않고 {@code published_at}은 처음 발행할 때만 정한다.
+ * <p>카테고리·태그(FR-024·025, T169): 발행 설정에 값이 있으면 그것을, 없으면(null) 작성 중 사본의 값을, 사본도 없으면 지금 발행본의
+ * 값을 쓴다. 카테고리는 같은 블로그의 것이어야 하고(아니면 404 {@code CATEGORY_NOT_FOUND}), 태그는 정규화·검증한 뒤
+ * {@code post_tags}를 통째로 바꾼다(글당 10개 초과는 422 {@code TAG_LIMIT_EXCEEDED}). 검증은 글을 바꾸기 전에 모두 한다.
  */
 @Service
 public class PostPublishService {
@@ -31,14 +38,19 @@ public class PostPublishService {
     private final PostDraftRepository postDraftRepository;
     private final MarkdownRenderer markdownRenderer;
     private final PostService postService;
+    private final CategoryAccess categoryAccess;
+    private final TagService tagService;
     private final Clock clock;
 
     public PostPublishService(PostAccess postAccess, PostDraftRepository postDraftRepository,
-            MarkdownRenderer markdownRenderer, PostService postService, Clock clock) {
+            MarkdownRenderer markdownRenderer, PostService postService, CategoryAccess categoryAccess,
+            TagService tagService, Clock clock) {
         this.postAccess = postAccess;
         this.postDraftRepository = postDraftRepository;
         this.markdownRenderer = markdownRenderer;
         this.postService = postService;
+        this.categoryAccess = categoryAccess;
+        this.tagService = tagService;
         this.clock = clock;
     }
 
@@ -60,16 +72,37 @@ public class PostPublishService {
             throw new BusinessException(ErrorCode.POST_CONTENT_EMPTY, "Post content is empty: " + postId);
         }
 
+        Category category = category(post, draft, settings);
+        List<String> rawTags = settings.tags() != null ? settings.tags() : draft != null ? draft.getTags() : null;
+        List<String> tags = rawTags == null ? null : TagNormalizer.normalizeAll(rawTags, "tags");
+
         RenderedContent content = markdownRenderer.render(markdown);
         String thumbnailUrl = thumbnailUrl(content, settings.thumbnailMediaKey());
         boolean commentEnabled = settings.commentEnabled() == null || settings.commentEnabled();
+        post.classify(category);
         post.publish(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
                 settings.visibility(), commentEnabled, clock.instant());
         if (draft != null) {
             postDraftRepository.delete(draft);
         }
+        if (tags != null) {
+            tagService.replacePostTags(post, tags);
+        }
         postDraftRepository.flush();
         return postService.detailOf(post, true);
+    }
+
+    /** 발행 설정 → 작성 중 사본 → 지금 발행본 순으로 고른 카테고리. 이 블로그의 카테고리여야 한다. */
+    private Category category(Post post, PostDraft draft, PublishSettingsRequest settings) {
+        Long categoryId;
+        if (settings.categoryId() != null) {
+            categoryId = settings.categoryId();
+        } else if (draft != null) {
+            categoryId = draft.getCategoryId();
+        } else {
+            categoryId = post.getCategory() == null ? null : post.getCategory().getId();
+        }
+        return categoryId == null ? null : categoryAccess.requireInBlog(post.getBlog().getId(), categoryId);
     }
 
     /** 대표 이미지: 고른 키가 본문 이미지면 그것, 고르지 않았으면 본문 첫 이미지(FR-107). */

@@ -17,18 +17,22 @@ import java.util.Optional;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
+import net.java21.blog.backend.category.repository.CategoryRepository;
+import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
 import net.java21.blog.backend.post.dto.PostLink;
+import net.java21.blog.backend.post.dto.PostListFilter;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.post.repository.PostDraftRepository;
 import net.java21.blog.backend.post.repository.PostQueryRepository;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.post.repository.PostSummaryRow;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +61,10 @@ class PostServiceTest {
     private PostQueryRepository postQueryRepository;
     @Mock
     private BlogRepository blogRepository;
+    @Mock
+    private CategoryRepository categoryRepository;
+    @Mock
+    private TagQueryRepository tagQueryRepository;
 
     private PostService service;
     private User owner;
@@ -66,7 +74,8 @@ class PostServiceTest {
     @BeforeEach
     void setUp() {
         service = new PostService(postRepository, postDraftRepository, postQueryRepository,
-                new PostAccess(postRepository), new BlogAccess(blogRepository), Clock.fixed(NOW, ZoneOffset.UTC));
+                new PostAccess(postRepository), new BlogAccess(blogRepository), new CategoryAccess(categoryRepository),
+                tagQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(OWNER);
         blog = TestEntities.blog(10L, owner, "marco");
         post = TestEntities.post(100L, blog, "제목");
@@ -158,12 +167,12 @@ class PostServiceTest {
     @Test
     void blogPostsUsesVisibleBlogAndMapsRows() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
-        PostSummaryRow row = new PostSummaryRow(100L, "제목", "요약", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", 3, 1,
-                PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW);
-        when(postQueryRepository.findListablePosts(10L, PageRequest.of(0, 20)))
+        PostSummaryRow row = new PostSummaryRow(100L, "제목", "요약", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, null, 3,
+                1, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW);
+        when(postQueryRepository.findListablePosts(10L, PostListFilter.NONE, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 
-        var page = service.blogPosts("marco", PageRequest.of(0, 20));
+        var page = service.blogPosts("marco", PostListFilter.NONE, PageRequest.of(0, 20));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         PostSummaryResponse item = page.getContent().getFirst();
@@ -177,7 +186,7 @@ class PostServiceTest {
     void blogPostsOfDeletedBlogIsNotFound() {
         blog.delete(NOW);
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
-        assertCode(() -> service.blogPosts("marco", PageRequest.of(0, 20)), ErrorCode.BLOG_NOT_FOUND);
+        assertCode(() -> service.blogPosts("marco", PostListFilter.NONE, PageRequest.of(0, 20)), ErrorCode.BLOG_NOT_FOUND);
     }
 
     // ---- 휴지통 ----

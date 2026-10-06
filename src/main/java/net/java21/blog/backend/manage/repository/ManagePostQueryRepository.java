@@ -1,5 +1,6 @@
 package net.java21.blog.backend.manage.repository;
 
+import static net.java21.blog.backend.category.domain.QCategory.category;
 import static net.java21.blog.backend.post.domain.QPost.post;
 import static net.java21.blog.backend.post.domain.QPostDraft.postDraft;
 
@@ -12,9 +13,11 @@ import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
+import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
@@ -27,7 +30,7 @@ import org.springframework.stereotype.Repository;
  * 블로그 관리 글 조회·일괄 작업(T157, QueryDSL, 006 FR-100·101). 주인 화면이라 노출 조각({@code PostExposure})을 쓰지 않고
  * 그 블로그의 모든 글을 다룬다(블로그·주인 확인은 서비스가 {@code BlogAccess}로 먼저 한다).
  * <ul>
- *   <li>목록은 DTO projection과 작성 중 사본 LEFT JOIN으로 읽어 글 수와 관계없이 쿼리 2회(목록, 전체 수)다.</li>
+ *   <li>목록은 DTO projection과 카테고리·작성 중 사본 LEFT JOIN으로 읽어 글 수와 관계없이 쿼리 2회(목록, 전체 수)다.</li>
  *   <li>일괄 작업은 {@code blog_id} 조건이 붙은 집합 UPDATE 한 번이다. 남의 글은 바뀌지 않는다.</li>
  * </ul>
  */
@@ -54,7 +57,8 @@ public class ManagePostQueryRepository {
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
-        Long total = queryFactory.select(post.count()).from(post).where(where).fetchOne();
+        Long total = queryFactory.select(post.count()).from(post).leftJoin(post.category, category).where(where)
+                .fetchOne();
         return new PageImpl<>(rows, pageable, total == null ? 0 : total);
     }
 
@@ -106,14 +110,42 @@ public class ManagePostQueryRepository {
                 .execute();
     }
 
+    /**
+     * 이 블로그 글을 한 번에 다른 카테고리로(미분류는 null) 옮기고(006 FR-101 {@code MOVE_CATEGORY}), 작성 중 사본의 카테고리도 맞춘다
+     * (다음 발행 때 되돌아가지 않게). 집합 UPDATE 2회. 바뀐 글 수.
+     */
+    public long moveCategory(Long blogId, Collection<Long> postIds, Category target, Instant now) {
+        var update = queryFactory.update(post);
+        if (target == null) {
+            update.setNull(post.category);
+        } else {
+            update.set(post.category, target);
+        }
+        long moved = update.set(post.updatedAt, now)
+                .where(post.blog.id.eq(blogId), post.id.in(postIds))
+                .execute();
+        var drafts = queryFactory.update(postDraft);
+        if (target == null) {
+            drafts.setNull(postDraft.categoryId);
+        } else {
+            drafts.set(postDraft.categoryId, target.getId());
+        }
+        drafts.where(postDraft.postId.in(JPAExpressions.select(post.id).from(post)
+                        .where(post.blog.id.eq(blogId), post.id.in(postIds))))
+                .execute();
+        return moved;
+    }
+
     private JPAQuery<ManagePostRow> selectRows() {
         Expression<Boolean> hasDraft = new CaseBuilder().when(postDraft.postId.isNotNull()).then(true)
                 .otherwise(false);
         return queryFactory
                 .select(Projections.constructor(ManagePostRow.class,
-                        post.id, post.title, post.summary, post.thumbnailUrl, post.viewCount, post.commentCount,
-                        post.visibility, post.status, post.publishedAt, post.updatedAt, hasDraft, post.deletedAt))
+                        post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
+                        post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
+                        post.updatedAt, hasDraft, post.deletedAt))
                 .from(post)
+                .leftJoin(post.category, category)
                 .leftJoin(postDraft).on(postDraft.postId.eq(post.id));
     }
 
@@ -130,7 +162,8 @@ public class ManagePostQueryRepository {
             where = where.and(post.visibility.eq(filter.visibility()));
         }
         if (filter.categoryId() != null) {
-            where = where.and(post.categoryId.eq(filter.categoryId()));
+            // 상위 카테고리는 하위 카테고리 글을 포함한다(공개 목록과 같은 규칙, tasks.md 결정 4).
+            where = where.and(category.id.eq(filter.categoryId()).or(category.parent.id.eq(filter.categoryId())));
         }
         if (filter.q() != null) {
             where = where.and(post.title.containsIgnoreCase(filter.q()));

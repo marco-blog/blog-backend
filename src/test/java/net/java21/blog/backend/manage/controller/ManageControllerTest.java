@@ -156,7 +156,33 @@ class ManageControllerTest {
                 .andExpect(jsonPath("$.result.updated").value(3));
 
         verify(postService).bulk(1L, "marco",
-                new BulkPostRequest(List.of(1L, 2L, 3L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE));
+                new BulkPostRequest(List.of(1L, 2L, 3L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE, null));
+    }
+
+    @Test
+    void bulkMovesCategory() throws Exception {
+        when(postService.bulk(eq(1L), eq("marco"), any())).thenReturn(new BulkPostResponse(2));
+
+        mvc.perform(post("/api/v1/blogs/marco/manage/posts/bulk").cookie(authCookies.user(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"postIds\":[1,2],\"action\":\"MOVE_CATEGORY\",\"categoryId\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.updated").value(2));
+
+        verify(postService).bulk(1L, "marco",
+                new BulkPostRequest(List.of(1L, 2L), BulkAction.MOVE_CATEGORY, null, 3L));
+    }
+
+    @Test
+    void bulkMoveToOtherBlogsCategoryIs404() throws Exception {
+        when(postService.bulk(eq(1L), eq("marco"), any()))
+                .thenThrow(new BusinessException(ErrorCode.CATEGORY_NOT_FOUND, "nope"));
+
+        mvc.perform(post("/api/v1/blogs/marco/manage/posts/bulk").cookie(authCookies.user(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"postIds\":[1],\"action\":\"MOVE_CATEGORY\",\"categoryId\":99}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.header.resultCode").value("CATEGORY_NOT_FOUND"));
     }
 
     @Test
@@ -180,7 +206,7 @@ class ManageControllerTest {
                 .andExpect(jsonPath("$.header.fieldErrors[0].field").value("action"));
         mvc.perform(post("/api/v1/blogs/marco/manage/posts/bulk").cookie(authCookies.user(1L))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"postIds\":[1],\"action\":\"MOVE_CATEGORY\",\"categoryId\":3}"))
+                        .content("{\"postIds\":[1],\"action\":\"RENAME\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.header.resultCode").value("VALIDATION_FAILED"));
         verifyNoInteractions(postService);

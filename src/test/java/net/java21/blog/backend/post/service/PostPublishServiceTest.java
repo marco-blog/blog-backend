@@ -18,6 +18,8 @@ import java.util.Optional;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
+import net.java21.blog.backend.category.repository.CategoryRepository;
+import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.content.HtmlSanitizerPolicy;
@@ -33,6 +35,8 @@ import net.java21.blog.backend.post.repository.PostDraftRepository;
 import net.java21.blog.backend.post.repository.PostQueryRepository;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.support.TestEntities;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
+import net.java21.blog.backend.tag.service.TagService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +59,12 @@ class PostPublishServiceTest {
     private PostQueryRepository postQueryRepository;
     @Mock
     private BlogRepository blogRepository;
+    @Mock
+    private CategoryRepository categoryRepository;
+    @Mock
+    private TagQueryRepository tagQueryRepository;
+    @Mock
+    private TagService tagService;
 
     private PostPublishService service;
     private Blog blog;
@@ -64,10 +74,12 @@ class PostPublishServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         PostAccess access = new PostAccess(postRepository);
+        CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         PostService postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access,
-                new BlogAccess(blogRepository), clock);
+                new BlogAccess(blogRepository), categoryAccess, tagQueryRepository, clock);
         service = new PostPublishService(access, postDraftRepository,
-                new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService, clock);
+                new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
+                categoryAccess, tagService, clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));

@@ -8,6 +8,7 @@ import java.util.List;
 import jakarta.persistence.EntityManager;
 
 import net.java21.blog.backend.blog.domain.Blog;
+import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
@@ -22,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * 블로그 관리 글 목록·대시보드·일괄 작업 쿼리(T148, 006 FR-100·101): {@code status}(생략 시 휴지통 제외, DELETED는 보관 기간 안의
@@ -124,7 +124,9 @@ class ManagePostQueryRepositoryTest {
         Post draft = persistPost(marco, "Spring 정리", PostStatus.DRAFT, PostVisibility.PUBLIC);
         Post springPublic = persistPost(marco, "spring boot 4", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
         Post jpaPrivate = persistPost(marco, "JPA 100% 정복", PostStatus.PUBLISHED, PostVisibility.PRIVATE);
-        ReflectionTestUtils.setField(jpaPrivate, "categoryId", 7L);
+        Category jpa = new Category(marco, null, "JPA", 0);
+        em.persist(jpa);
+        jpaPrivate.classify(jpa);
         persistPost(other, "spring 남의 글", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
         flushAndClear();
 
@@ -133,7 +135,7 @@ class ManagePostQueryRepositoryTest {
                 .containsExactly(jpaPrivate.getId(), springPublic.getId());
         assertThat(ids(new ManagePostFilter(null, PostVisibility.PRIVATE, null, null)))
                 .containsExactly(jpaPrivate.getId());
-        assertThat(ids(new ManagePostFilter(null, null, 7L, null))).containsExactly(jpaPrivate.getId());
+        assertThat(ids(new ManagePostFilter(null, null, jpa.getId(), null))).containsExactly(jpaPrivate.getId());
         assertThat(ids(new ManagePostFilter(null, null, null, "SPRING")))
                 .containsExactly(springPublic.getId(), draft.getId());
         assertThat(ids(new ManagePostFilter(PostStatus.PUBLISHED, PostVisibility.PUBLIC, null, "spring")))
@@ -228,6 +230,43 @@ class ManagePostQueryRepositoryTest {
 
         d.restore();
         assertThat(d.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void moveCategoryIsSetBasedLimitedToTheBlogAndAlignsDraftCopies() {
+        Category spring = new Category(marco, null, "Spring", 0);
+        em.persist(spring);
+        Category boot = new Category(marco, spring, "Boot", 0);
+        em.persist(boot);
+        Post a = persistPost(marco, "A", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        a.classify(spring);
+        Post b = persistPost(marco, "B", PostStatus.DRAFT, PostVisibility.PUBLIC);
+        persistDraft(b, "B");
+        Post theirs = persistPost(other, "C", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        persistDraft(theirs, "C");
+        flushAndClear();
+
+        queryCounter.reset();
+        long moved = repository.moveCategory(marco.getId(), List.of(a.getId(), b.getId(), theirs.getId()),
+                em.getReference(Category.class, boot.getId()), NOW);
+
+        assertThat(queryCounter.count()).isEqualTo(2);
+        assertThat(moved).isEqualTo(2);
+        em.clear();
+        assertThat(em.find(Post.class, a.getId()).getCategory().getId()).isEqualTo(boot.getId());
+        assertThat(em.find(Post.class, b.getId()).getCategory().getId()).isEqualTo(boot.getId());
+        assertThat(em.find(PostDraft.class, b.getId()).getCategoryId()).isEqualTo(boot.getId());
+        assertThat(em.find(Post.class, theirs.getId()).getCategory()).isNull();
+        assertThat(em.find(PostDraft.class, theirs.getId()).getCategoryId()).isNull();
+        assertThat(ids(new ManagePostFilter(null, null, spring.getId(), null)))
+                .containsExactly(b.getId(), a.getId());
+
+        assertThat(repository.moveCategory(marco.getId(), List.of(a.getId()), null, NOW)).isEqualTo(1);
+        em.clear();
+        assertThat(em.find(Post.class, a.getId()).getCategory()).isNull();
+        Page<ManagePostRow> rows = repository.findPosts(marco.getId(), ManagePostFilter.ALL, TRASH_CUTOFF,
+                PageRequest.of(0, 20));
+        assertThat(rows.getContent()).extracting(ManagePostRow::categoryName).containsExactly("Boot", null);
     }
 
     private List<Long> ids(ManagePostFilter filter) {

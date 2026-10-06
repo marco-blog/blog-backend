@@ -7,6 +7,8 @@ import java.util.Map;
 
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
+import net.java21.blog.backend.category.domain.Category;
+import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
@@ -15,7 +17,9 @@ import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
+import net.java21.blog.backend.manage.repository.ManagePostRow;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -30,27 +34,39 @@ public class ManagePostService {
 
     private final BlogAccess blogAccess;
     private final ManagePostQueryRepository repository;
+    private final CategoryAccess categoryAccess;
+    private final TagQueryRepository tagQueryRepository;
     private final JobsProperties jobsProperties;
     private final Clock clock;
 
     public ManagePostService(BlogAccess blogAccess, ManagePostQueryRepository repository,
-            JobsProperties jobsProperties, Clock clock) {
+            CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository, JobsProperties jobsProperties,
+            Clock clock) {
         this.blogAccess = blogAccess;
         this.repository = repository;
+        this.categoryAccess = categoryAccess;
+        this.tagQueryRepository = tagQueryRepository;
         this.jobsProperties = jobsProperties;
         this.clock = clock;
     }
 
-    /** 관리 글 목록. 쿼리 3회(블로그, 목록, 전체 수). 휴지통 글은 보관 기간 안의 것만, {@code purgeAt}과 함께. */
+    /**
+     * 관리 글 목록. 쿼리 4회(블로그, 목록, 전체 수, 태그 일괄 조회). 휴지통 글은 보관 기간 안의 것만, {@code purgeAt}과 함께.
+     */
     @Transactional(readOnly = true)
     public Page<PostSummaryResponse> posts(long userId, String handle, ManagePostFilter filter, Pageable pageable) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
         Instant trashCutoff = clock.instant().minus(jobsProperties.trashRetention());
-        return repository.findPosts(blog.getId(), filter, trashCutoff, pageable)
-                .map(row -> row.toResponse(jobsProperties.trashRetention()));
+        Page<ManagePostRow> rows = repository.findPosts(blog.getId(), filter, trashCutoff, pageable);
+        Map<Long, List<String>> tags = tagQueryRepository.findTagNames(
+                rows.getContent().stream().map(ManagePostRow::id).toList());
+        return rows.map(row -> row.toResponse(jobsProperties.trashRetention(), tags.get(row.id())));
     }
 
-    /** 일괄 공개 범위 변경·휴지통 이동. 같은 글 ID는 한 번만 센다. 쿼리 3회(블로그, 소유 확인, UPDATE). */
+    /**
+     * 일괄 공개 범위 변경·카테고리 이동·휴지통 이동. 같은 글 ID는 한 번만 센다. 쿼리 3회(블로그, 소유 확인, UPDATE),
+     * 카테고리 이동은 카테고리 확인 1회와 작성 중 사본 UPDATE 1회가 더해진다. 다른 블로그의 카테고리는 404 {@code CATEGORY_NOT_FOUND}.
+     */
     @Transactional
     public BulkPostResponse bulk(long userId, String handle, BulkPostRequest request) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
@@ -66,6 +82,12 @@ public class ManagePostService {
                 requireOwned(blog, postIds);
                 yield new BulkPostResponse(
                         repository.changeVisibility(blog.getId(), postIds, request.visibility(), clock.instant()));
+            }
+            case MOVE_CATEGORY -> {
+                Category target = request.categoryId() == null ? null
+                        : categoryAccess.requireInBlog(blog.getId(), request.categoryId());
+                requireOwned(blog, postIds);
+                yield new BulkPostResponse(repository.moveCategory(blog.getId(), postIds, target, clock.instant()));
             }
             case DELETE -> {
                 requireOwned(blog, postIds);

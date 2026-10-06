@@ -35,6 +35,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
+import net.java21.blog.backend.category.service.CategoryAccess;
+import net.java21.blog.backend.post.dto.PostListFilter;
+import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,7 +51,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class PostExposureRepositoryTest {
 
     @TestConfiguration(proxyBeanMethods = false)
-    @Import({PostQueryRepository.class, PostService.class, PostAccess.class, BlogAccess.class})
+    @Import({PostQueryRepository.class, PostService.class, PostAccess.class, BlogAccess.class, CategoryAccess.class,
+            TagQueryRepository.class})
     static class Services {
     }
 
@@ -143,14 +147,16 @@ class PostExposureRepositoryTest {
         flushAndClear();
 
         queryCounter.reset();
-        Page<PostSummaryResponse> page = postService.blogPosts("marco", PageRequest.of(0, 20));
+        Page<PostSummaryResponse> page = postService.blogPosts("marco", PostListFilter.NONE, PageRequest.of(0, 20));
         assertThat(page.getContent()).hasSize(10);
-        assertThat(queryCounter.count()).isEqualTo(3);
+        // 블로그, 목록(카테고리 LEFT JOIN), 전체 수, 태그 일괄 조회
+        assertThat(queryCounter.count()).isEqualTo(4);
 
         em.clear();
         queryCounter.reset();
         PostDetailResponse detail = postService.detail(target.getId(), null);
-        assertThat(queryCounter.count()).isEqualTo(3);
+        // 글(블로그·주인·카테고리 fetch join), 태그, 이전, 다음
+        assertThat(queryCounter.count()).isEqualTo(4);
         assertThat(detail.author().nickname()).isEqualTo("marco");
         assertThat(detail.blogHandle()).isEqualTo("marco");
         assertThat(detail.prev()).isNotNull();

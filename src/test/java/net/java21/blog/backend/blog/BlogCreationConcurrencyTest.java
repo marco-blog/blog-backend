@@ -20,6 +20,7 @@ import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.blog.service.BlogService;
+import net.java21.blog.backend.category.repository.CategoryQueryRepository;
 import net.java21.blog.backend.blog.service.HandlePolicy;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
@@ -48,7 +49,7 @@ class BlogCreationConcurrencyTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     @EnableConfigurationProperties(BlogsProperties.class)
-    @Import({BlogQueryRepository.class, BlogService.class, BlogAccess.class, HandlePolicy.class, PasswordConfig.class})
+    @Import({BlogQueryRepository.class, CategoryQueryRepository.class, BlogService.class, BlogAccess.class, HandlePolicy.class, PasswordConfig.class})
     static class Services {
     }
 
