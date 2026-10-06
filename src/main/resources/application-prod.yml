@@ -2,6 +2,10 @@
 #   SPRING_DATASOURCE_URL       예) jdbc:mysql://<host>:<port>/<schema>?connectionTimeZone=UTC&characterEncoding=UTF-8
 #   SPRING_DATASOURCE_USERNAME
 #   SPRING_DATASOURCE_PASSWORD
+#   BLOG_CRYPTO_KEY_V1              개인정보 암호화 키(Base64 32바이트, openssl rand -base64 32)
+#   BLOG_CRYPTO_HASH_KEY            검색용 HMAC 키(Base64 32바이트). 한번 정하면 바꾸지 않는다.
+#   BLOG_CRYPTO_ACTIVE_KEY_VERSION  현재 암호화 키 버전(기본 1)
+# 키 교체: 새 버전 키를 BLOG_CRYPTO_KEYS_2 처럼 추가 → BLOG_CRYPTO_ACTIVE_KEY_VERSION=2 → 재암호화 후 이전 키 제거.
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL}
@@ -19,3 +23,11 @@ server:
 logging:
   level:
     root: INFO
+
+blog:
+  crypto:
+    keys:
+      "[1]": ${BLOG_CRYPTO_KEY_V1}
+    hash-key: ${BLOG_CRYPTO_HASH_KEY}
+  security:
+    allowed-origins: https://blog.java21.net

@@ -15,3 +15,15 @@ spring:
 logging:
   level:
     net.java21.blog: DEBUG
+
+blog:
+  crypto:
+    # 개인정보 암호화 키(Base64 32바이트). .env 의 값을 쓴다. 생성: openssl rand -base64 32
+    keys:
+      "[1]": ${BLOG_CRYPTO_KEY_V1}
+    hash-key: ${BLOG_CRYPTO_HASH_KEY}
+  security:
+    # 상태 변경 요청의 Origin 허용 목록(R3): front 개발 서버
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000

@@ -10,3 +10,13 @@ spring:
     url: ${BLOG_TEST_DATASOURCE_URL:}
     username: ${BLOG_TEST_DATASOURCE_USERNAME:}
     password: ${BLOG_TEST_DATASOURCE_PASSWORD:}
+
+blog:
+  crypto:
+    # 테스트 전용 고정 키(비밀 아님). 운영·개발 키로 쓰지 않는다.
+    active-key-version: 1
+    keys:
+      "[1]": dGVzdC1vbmx5LWtleS12MS0wMDAwMDAwMDAwMDAwMDA=
+    hash-key: dGVzdC1vbmx5LWhhc2gta2V5LTAwMDAwMDAwMDAwMDA=
+  security:
+    allowed-origins: http://localhost:5173
