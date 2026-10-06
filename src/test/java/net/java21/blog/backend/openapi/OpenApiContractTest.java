@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * springdoc OpenAPI({@code /v3/api-docs})가 001 계약(blog-docs {@code specs/001-blog-core/contracts/api.md})과 맞는지 확인한다(T240,
- * api-guidelines 9절). 003(릴리스 노트)·006(릴리스 노트 관리) 절은 001 구현에서 빼기로 했으므로(tasks.md 결정 #8) 대상이 아니다.
+ * api-guidelines 9절). 001 계약의 릴리스 노트·릴리스 노트 관리 절은 003이 구현하므로(001 결정 #8, 003 T127) 003 관리자 API와 함께 넣었다.
  * <ul>
  *   <li>계약의 모든 엔드포인트(메서드·경로)가 문서에 있다. 경로 변수 이름은 비교하지 않는다({@code {id}}·{@code {postId}}).</li>
  *   <li>이미지 원본·썸네일({@code /media/**}, 바이너리) 외 모든 응답 스키마가 공통 틀 {@code { header, result, totalCount?, nextCursor? }}이고
@@ -138,19 +138,56 @@ class OpenApiContractTest {
             "GET /api/v1/topics/{slug}/posts",
             "GET /api/v1/portal",
             "GET /api/v1/portal/latest",
-            "POST /api/v1/posts/{id}/read-complete");
+            "POST /api/v1/posts/{id}/read-complete",
+            // 003 릴리스 노트 독자 API 6개(001 contracts "릴리스 노트")
+            "GET /api/v1/release-notes",
+            "GET /api/v1/release-notes/search",
+            "GET /api/v1/release-notes/{version}",
+            "GET /api/v1/release-notes/{version}/revisions",
+            "GET /api/v1/release-notes/{version}/revisions/{revisionNo}",
+            "POST /api/v1/me/release-notes/seen",
+            // 003 관리자: 주제 4, 포털 8, 운영 설정 3, 릴리스 노트 관리 9(001 contracts "릴리스 노트 관리")
+            "GET /api/v1/admin/topics",
+            "POST /api/v1/admin/topics",
+            "PATCH /api/v1/admin/topics/{id}",
+            "PUT /api/v1/admin/topics/order",
+            "GET /api/v1/admin/portal/curations",
+            "POST /api/v1/admin/portal/curations",
+            "PATCH /api/v1/admin/portal/curations/{id}",
+            "DELETE /api/v1/admin/portal/curations/{id}",
+            "GET /api/v1/admin/portal/exclusions",
+            "PUT /api/v1/admin/portal/exclusions/{postId}",
+            "DELETE /api/v1/admin/portal/exclusions/{postId}",
+            "GET /api/v1/admin/portal/posts/{id}",
+            "GET /api/v1/admin/settings",
+            "PUT /api/v1/admin/settings/{key}",
+            "DELETE /api/v1/admin/settings/{key}",
+            "GET /api/v1/admin/release-notes",
+            "POST /api/v1/admin/release-notes",
+            "GET /api/v1/admin/release-notes/{id}",
+            "PUT /api/v1/admin/release-notes/{id}",
+            "POST /api/v1/admin/release-notes/{id}/publish",
+            "POST /api/v1/admin/release-notes/{id}/unpublish",
+            "DELETE /api/v1/admin/release-notes/{id}",
+            "POST /api/v1/admin/release-notes/preview",
+            "GET /api/v1/admin/release-notes/{id}/revisions",
+            "GET /api/v1/admin/release-notes/{id}/revisions/{revisionNo}");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
             "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
             "GET /robots.txt");
 
-    /** 002가 001 응답에 더한 필드(002 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
+    /** 002·003이 001 응답에 더한 필드(각 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.of(
-            "MeResponse", List.of("unreadNotificationCount"),
-            "BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode"),
-            "PostDetailResponse", List.of("likeCount", "likedByMe"),
-            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode"));
+            "MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote"),
+            "BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
+                    "portalEnabled", "defaultTopicId"),
+            "PostDetailResponse", List.of("likeCount", "likedByMe", "topicId"),
+            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled", "defaultTopicId"),
+            "DraftWriteRequest", List.of("topicId"),
+            "DraftResponse", List.of("topicId"),
+            "PublishSettingsRequest", List.of("topicId"));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
@@ -217,7 +254,7 @@ class OpenApiContractTest {
     }
 
     @Test
-    void responseExtensionsOf002AreDocumented() {
+    void responseExtensionsOf002And003AreDocumented() {
         JsonNode schemas = doc.get("components").get("schemas");
         List<String> missing = new ArrayList<>();
         RESPONSE_EXTENSIONS.forEach((schema, fields) -> {
@@ -226,7 +263,7 @@ class OpenApiContractTest {
                     : names(node.get("properties"));
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
-        assertThat(missing).as("문서에 없는 002 응답 확장 필드").isEmpty();
+        assertThat(missing).as("문서에 없는 002·003 응답 확장 필드").isEmpty();
     }
 
     @Test

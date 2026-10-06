@@ -58,6 +58,13 @@ class CacheHeadersTestController {
         return ApiResponse.ok(user.userId());
     }
 
+    /** 003: 릴리스 노트 확인 버전 저장과 관리자 API. */
+    @RequestMapping(path = {"/api/v1/me/release-notes/seen", "/api/v1/admin/topics", "/api/v1/admin/settings/{key}",
+            "/api/v1/admin/release-notes"}, method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT})
+    ApiResponse<Long> portalWrite(@CurrentUser AuthUser user) {
+        return ApiResponse.ok(user.userId());
+    }
+
     @PostMapping({"/api/v1/me/notifications/{id}/read", "/api/v1/me/notifications/bulk"})
     ApiResponse<Long> notificationRead(@CurrentUser AuthUser user) {
         return ApiResponse.ok(user.userId());
