@@ -1,0 +1,457 @@
+[
+  {
+    "slug": "life",
+    "names": {
+      "ko": "라이프",
+      "en": "Life",
+      "ja": "ライフ",
+      "zh-CN": "生活"
+    },
+    "cardColor": "#F2A541",
+    "pinnedOnTab": false,
+    "children": [
+      {
+        "slug": "daily-thoughts",
+        "names": {
+          "ko": "일상·생각",
+          "en": "Daily Life & Thoughts",
+          "ja": "日常・考え",
+          "zh-CN": "日常·随想"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "parenting-marriage",
+        "names": {
+          "ko": "육아·결혼",
+          "en": "Parenting & Marriage",
+          "ja": "育児・結婚",
+          "zh-CN": "育儿·婚姻"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "pets",
+        "names": {
+          "ko": "반려동물",
+          "en": "Pets",
+          "ja": "ペット",
+          "zh-CN": "宠物"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "fashion-beauty",
+        "names": {
+          "ko": "패션·뷰티",
+          "en": "Fashion & Beauty",
+          "ja": "ファッション・美容",
+          "zh-CN": "时尚·美容"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "interior-diy",
+        "names": {
+          "ko": "인테리어·DIY",
+          "en": "Interior & DIY",
+          "ja": "インテリア・DIY",
+          "zh-CN": "家居·DIY"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "cooking-recipe",
+        "names": {
+          "ko": "요리·레시피",
+          "en": "Cooking & Recipes",
+          "ja": "料理・レシピ",
+          "zh-CN": "烹饪·食谱"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "product-review",
+        "names": {
+          "ko": "상품리뷰",
+          "en": "Product Reviews",
+          "ja": "商品レビュー",
+          "zh-CN": "商品评测"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "gardening",
+        "names": {
+          "ko": "원예·재배",
+          "en": "Gardening",
+          "ja": "園芸・栽培",
+          "zh-CN": "园艺·种植"
+        },
+        "pinnedOnTab": false
+      }
+    ]
+  },
+  {
+    "slug": "travel-food",
+    "names": {
+      "ko": "여행·맛집",
+      "en": "Travel & Food",
+      "ja": "旅行・グルメ",
+      "zh-CN": "旅行·美食"
+    },
+    "cardColor": "#3FA796",
+    "pinnedOnTab": false,
+    "children": [
+      {
+        "slug": "domestic-travel",
+        "names": {
+          "ko": "국내여행",
+          "en": "Domestic Travel",
+          "ja": "国内旅行",
+          "zh-CN": "国内旅行"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "overseas-travel",
+        "names": {
+          "ko": "해외여행",
+          "en": "Overseas Travel",
+          "ja": "海外旅行",
+          "zh-CN": "海外旅行"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "camping-hiking",
+        "names": {
+          "ko": "캠핑·등산",
+          "en": "Camping & Hiking",
+          "ja": "キャンプ・登山",
+          "zh-CN": "露营·登山"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "restaurants",
+        "names": {
+          "ko": "맛집",
+          "en": "Restaurants",
+          "ja": "グルメ",
+          "zh-CN": "美食探店"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "cafe-dessert",
+        "names": {
+          "ko": "카페·디저트",
+          "en": "Cafes & Desserts",
+          "ja": "カフェ・デザート",
+          "zh-CN": "咖啡·甜点"
+        },
+        "pinnedOnTab": false
+      }
+    ]
+  },
+  {
+    "slug": "culture",
+    "names": {
+      "ko": "문화·연예",
+      "en": "Culture & Entertainment",
+      "ja": "文化・芸能",
+      "zh-CN": "文化·娱乐"
+    },
+    "cardColor": "#8E6CCB",
+    "pinnedOnTab": false,
+    "children": [
+      {
+        "slug": "tv",
+        "names": {
+          "ko": "TV",
+          "en": "TV",
+          "ja": "テレビ",
+          "zh-CN": "电视"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "stars",
+        "names": {
+          "ko": "스타",
+          "en": "Celebrities",
+          "ja": "スター",
+          "zh-CN": "明星"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "movies",
+        "names": {
+          "ko": "영화",
+          "en": "Movies",
+          "ja": "映画",
+          "zh-CN": "电影"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "music",
+        "names": {
+          "ko": "음악",
+          "en": "Music",
+          "ja": "音楽",
+          "zh-CN": "音乐"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "books",
+        "names": {
+          "ko": "책",
+          "en": "Books",
+          "ja": "本",
+          "zh-CN": "书籍"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "comics-animation",
+        "names": {
+          "ko": "만화·애니",
+          "en": "Comics & Animation",
+          "ja": "漫画・アニメ",
+          "zh-CN": "漫画·动画"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "shows-exhibitions-festivals",
+        "names": {
+          "ko": "공연·전시·축제",
+          "en": "Shows, Exhibitions & Festivals",
+          "ja": "公演・展示・祭り",
+          "zh-CN": "演出·展览·节庆"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "creative-works",
+        "names": {
+          "ko": "창작",
+          "en": "Creative Works",
+          "ja": "創作",
+          "zh-CN": "创作"
+        },
+        "pinnedOnTab": false
+      }
+    ]
+  },
+  {
+    "slug": "sports",
+    "names": {
+      "ko": "스포츠",
+      "en": "Sports",
+      "ja": "スポーツ",
+      "zh-CN": "体育"
+    },
+    "cardColor": "#E2574C",
+    "pinnedOnTab": false,
+    "children": [
+      {
+        "slug": "soccer",
+        "names": {
+          "ko": "축구",
+          "en": "Soccer",
+          "ja": "サッカー",
+          "zh-CN": "足球"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "baseball",
+        "names": {
+          "ko": "야구",
+          "en": "Baseball",
+          "ja": "野球",
+          "zh-CN": "棒球"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "basketball",
+        "names": {
+          "ko": "농구",
+          "en": "Basketball",
+          "ja": "バスケットボール",
+          "zh-CN": "篮球"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "volleyball",
+        "names": {
+          "ko": "배구",
+          "en": "Volleyball",
+          "ja": "バレーボール",
+          "zh-CN": "排球"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "golf",
+        "names": {
+          "ko": "골프",
+          "en": "Golf",
+          "ja": "ゴルフ",
+          "zh-CN": "高尔夫"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "general-sports",
+        "names": {
+          "ko": "일반 스포츠",
+          "en": "General Sports",
+          "ja": "スポーツ全般",
+          "zh-CN": "综合体育"
+        },
+        "pinnedOnTab": false
+      }
+    ]
+  },
+  {
+    "slug": "knowledge",
+    "names": {
+      "ko": "지식·동향",
+      "en": "Knowledge & Trends",
+      "ja": "知識・トレンド",
+      "zh-CN": "知识·动态"
+    },
+    "cardColor": "#3D7DD8",
+    "pinnedOnTab": false,
+    "children": [
+      {
+        "slug": "it-internet",
+        "names": {
+          "ko": "IT 인터넷",
+          "en": "IT & Internet",
+          "ja": "IT・インターネット",
+          "zh-CN": "IT 互联网"
+        },
+        "pinnedOnTab": true
+      },
+      {
+        "slug": "mobile",
+        "names": {
+          "ko": "모바일",
+          "en": "Mobile",
+          "ja": "モバイル",
+          "zh-CN": "移动"
+        },
+        "pinnedOnTab": true
+      },
+      {
+        "slug": "science",
+        "names": {
+          "ko": "과학",
+          "en": "Science",
+          "ja": "科学",
+          "zh-CN": "科学"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "it-product-review",
+        "names": {
+          "ko": "IT 제품리뷰",
+          "en": "IT Product Reviews",
+          "ja": "IT製品レビュー",
+          "zh-CN": "IT 产品评测"
+        },
+        "pinnedOnTab": true
+      },
+      {
+        "slug": "business-work",
+        "names": {
+          "ko": "경영·직장",
+          "en": "Business & Work",
+          "ja": "経営・職場",
+          "zh-CN": "经营·职场"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "economy",
+        "names": {
+          "ko": "경제",
+          "en": "Economy",
+          "ja": "経済",
+          "zh-CN": "经济"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "society",
+        "names": {
+          "ko": "사회",
+          "en": "Society",
+          "ja": "社会",
+          "zh-CN": "社会"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "politics",
+        "names": {
+          "ko": "정치",
+          "en": "Politics",
+          "ja": "政治",
+          "zh-CN": "政治"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "education",
+        "names": {
+          "ko": "교육",
+          "en": "Education",
+          "ja": "教育",
+          "zh-CN": "教育"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "health-medicine",
+        "names": {
+          "ko": "건강·의학",
+          "en": "Health & Medicine",
+          "ja": "健康・医学",
+          "zh-CN": "健康·医学"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "history",
+        "names": {
+          "ko": "역사",
+          "en": "History",
+          "ja": "歴史",
+          "zh-CN": "历史"
+        },
+        "pinnedOnTab": false
+      },
+      {
+        "slug": "foreign-languages",
+        "names": {
+          "ko": "외국어",
+          "en": "Foreign Languages",
+          "ja": "外国語",
+          "zh-CN": "外语"
+        },
+        "pinnedOnTab": false
+      }
+    ]
+  }
+]
