@@ -19,13 +19,16 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
+import net.java21.blog.backend.comment.dto.CommentAuthor;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.manage.dto.BulkAction;
 import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
+import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
+import net.java21.blog.backend.manage.service.ManageCommentService;
 import net.java21.blog.backend.manage.service.ManageDashboardService;
 import net.java21.blog.backend.manage.service.ManagePostService;
 import net.java21.blog.backend.post.domain.PostStatus;
@@ -65,10 +68,44 @@ class ManageControllerTest {
     private ManageDashboardService dashboardService;
     @MockitoBean
     private ManagePostService postService;
+    @MockitoBean
+    private ManageCommentService commentService;
+
+    private static final ManageCommentResponse COMMENT = new ManageCommentResponse(7L, "좋은 글",
+            new CommentAuthor(2L, "작성자", null), false, NOW, NOW, 6L, "글");
+
+    @Test
+    void comments() throws Exception {
+        when(commentService.comments(eq(1L), eq("marco"), any()))
+                .thenReturn(new PageImpl<>(List.of(COMMENT), PageRequest.of(1, 20), 21));
+
+        mvc.perform(get("/api/v1/blogs/marco/manage/comments?page=1").cookie(authCookies.user(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(21))
+                .andExpect(jsonPath("$.result[0].id").value(7))
+                .andExpect(jsonPath("$.result[0].author.nickname").value("작성자"))
+                .andExpect(jsonPath("$.result[0].deleted").value(false))
+                .andExpect(jsonPath("$.result[0].postId").value(6))
+                .andExpect(jsonPath("$.result[0].postTitle").value("글"));
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(commentService).comments(eq(1L), eq("marco"), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
+    }
+
+    @Test
+    void commentsNeedLoginAndOwnership() throws Exception {
+        mvc.perform(get("/api/v1/blogs/marco/manage/comments")).andExpect(status().isUnauthorized());
+        when(commentService.comments(eq(2L), eq("marco"), any()))
+                .thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "not owner"));
+        mvc.perform(get("/api/v1/blogs/marco/manage/comments").cookie(authCookies.user(2L)))
+                .andExpect(status().isForbidden());
+    }
 
     @Test
     void dashboard() throws Exception {
-        when(dashboardService.dashboard(1L, "marco")).thenReturn(new DashboardResponse(2, List.of(LIVE), 0, List.of()));
+        when(dashboardService.dashboard(1L, "marco")).thenReturn(new DashboardResponse(2, List.of(LIVE), 3,
+                List.of(COMMENT)));
 
         mvc.perform(get("/api/v1/blogs/marco/manage/dashboard").cookie(authCookies.user(1L)))
                 .andExpect(status().isOk())
@@ -76,8 +113,9 @@ class ManageControllerTest {
                 .andExpect(jsonPath("$.result.draftCount").value(2))
                 .andExpect(jsonPath("$.result.recentPosts[0].hasDraft").value(true))
                 .andExpect(jsonPath("$.result.recentPosts[0].deletedAt").doesNotExist())
-                .andExpect(jsonPath("$.result.newComments7d").value(0))
-                .andExpect(jsonPath("$.result.recentComments", hasSize(0)));
+                .andExpect(jsonPath("$.result.newComments7d").value(3))
+                .andExpect(jsonPath("$.result.recentComments", hasSize(1)))
+                .andExpect(jsonPath("$.result.recentComments[0].postTitle").value("글"));
     }
 
     @Test

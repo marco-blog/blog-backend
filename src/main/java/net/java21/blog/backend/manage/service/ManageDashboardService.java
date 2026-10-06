@@ -14,8 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 블로그 관리 대시보드(T158, 006 FR-100의 001 범위): 임시저장 글 수와 최근 글 5편. 댓글 수치(최근 7일 새 댓글 수, 최근 댓글 5건)는
- * US3가, 방문자 수·방명록은 004가 채운다. 주인만 볼 수 있다.
+ * 블로그 관리 대시보드(T158·T196, 006 FR-100의 001 범위): 임시저장 글 수, 최근 글 5편, 최근 7일 새 댓글 수와 최근 댓글 5건.
+ * 방문자 수·방명록은 004가 채운다. 주인만 볼 수 있다.
  */
 @Service
 public class ManageDashboardService {
@@ -27,16 +27,19 @@ public class ManageDashboardService {
     private final ManagePostQueryRepository repository;
     private final TagQueryRepository tagQueryRepository;
     private final JobsProperties jobsProperties;
+    private final ManageCommentService commentService;
 
     public ManageDashboardService(BlogAccess blogAccess, ManagePostQueryRepository repository,
-            TagQueryRepository tagQueryRepository, JobsProperties jobsProperties) {
+            TagQueryRepository tagQueryRepository, JobsProperties jobsProperties,
+            ManageCommentService commentService) {
         this.blogAccess = blogAccess;
         this.repository = repository;
         this.tagQueryRepository = tagQueryRepository;
         this.jobsProperties = jobsProperties;
+        this.commentService = commentService;
     }
 
-    /** 쿼리 4회(블로그, 임시저장 수, 최근 글, 태그 일괄 조회). */
+    /** 쿼리 6회(블로그, 임시저장 수, 최근 글, 태그 일괄 조회, 새 댓글 수, 최근 댓글). */
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(long userId, String handle) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
@@ -46,6 +49,7 @@ public class ManageDashboardService {
         var recentPosts = rows.stream()
                 .map(row -> row.toResponse(jobsProperties.trashRetention(), tags.get(row.id())))
                 .toList();
-        return new DashboardResponse(draftCount, recentPosts, 0, List.of());
+        ManageCommentService.CommentStats comments = commentService.stats(blog.getId(), RECENT_SIZE);
+        return new DashboardResponse(draftCount, recentPosts, comments.newComments7d(), comments.recentComments());
     }
 }

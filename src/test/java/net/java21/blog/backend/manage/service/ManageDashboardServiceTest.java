@@ -29,7 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** 블로그 관리 대시보드(T150, 006 FR-100): 임시저장 수, 최근 글 5편. 댓글 수치는 US3에서 채운다. */
+/** 블로그 관리 대시보드(T150, 006 FR-100): 임시저장 수, 최근 글 5편, 댓글 수치(ManageCommentService). */
 @ExtendWith(MockitoExtension.class)
 class ManageDashboardServiceTest {
 
@@ -41,6 +41,8 @@ class ManageDashboardServiceTest {
     private ManagePostQueryRepository repository;
     @Mock
     private TagQueryRepository tagQueryRepository;
+    @Mock
+    private ManageCommentService commentService;
 
     @Test
     void draftCountAndFiveRecentPosts() {
@@ -50,6 +52,7 @@ class ManageDashboardServiceTest {
         when(repository.findRecentPosts(10L, ManageDashboardService.RECENT_SIZE)).thenReturn(List.of(
                 new ManagePostRow(3L, "최근 글", "요약", null, 7L, "Spring", 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW,
                         NOW, false, null)));
+        when(commentService.stats(10L, 5)).thenReturn(new ManageCommentService.CommentStats(1, List.of()));
 
         when(tagQueryRepository.findTagNames(List.of(3L))).thenReturn(Map.of(3L, List.of("spring")));
 
@@ -62,7 +65,7 @@ class ManageDashboardServiceTest {
                 .satisfies(p -> assertThat(p.purgeAt()).isNull())
                 .satisfies(p -> assertThat(p.tags()).containsExactly("spring"))
                 .satisfies(p -> assertThat(p.category().name()).isEqualTo("Spring"));
-        assertThat(dashboard.newComments7d()).isZero();
+        assertThat(dashboard.newComments7d()).isEqualTo(1);
         assertThat(dashboard.recentComments()).isEmpty();
     }
 
@@ -77,6 +80,6 @@ class ManageDashboardServiceTest {
 
     private ManageDashboardService service() {
         return new ManageDashboardService(blogAccess, repository, tagQueryRepository,
-                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500));
+                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), commentService);
     }
 }

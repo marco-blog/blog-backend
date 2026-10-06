@@ -11,6 +11,7 @@ import jakarta.persistence.EntityManager;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.domain.BlogStatus;
 import net.java21.blog.backend.category.domain.Category;
+import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
@@ -87,6 +88,18 @@ class TrashPurgeJobTest {
 
     @BeforeEach
     void setUp() {
+        // 트랙백(005)·포털(003) 엔티티는 아직 없다. 영구 삭제가 이 테이블들의 posts FK(ON DELETE CASCADE 없음)를 먼저 정리하는지
+        // 확인하려고 실제 스키마와 같은 FK만 가진 모양으로 만든다.
+        jdbc.execute("CREATE TABLE IF NOT EXISTS trackbacks (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                + " post_id BIGINT NOT NULL, source_post_id BIGINT, source_url VARCHAR(1000) NOT NULL,"
+                + " CONSTRAINT fk_test_trackbacks_post FOREIGN KEY (post_id) REFERENCES posts (id),"
+                + " CONSTRAINT fk_test_trackbacks_source FOREIGN KEY (source_post_id) REFERENCES posts (id))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_curations (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                + " post_id BIGINT NOT NULL,"
+                + " CONSTRAINT fk_test_portal_curations_post FOREIGN KEY (post_id) REFERENCES posts (id))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS portal_exclusions (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                + " post_id BIGINT,"
+                + " CONSTRAINT fk_test_portal_exclusions_post FOREIGN KEY (post_id) REFERENCES posts (id))");
         owner = new User("marco@example.com", "a".repeat(64), "$2a$hash", "marco", null, null, "2026-10-06", NOW);
         em.persist(owner);
         blog = new Blog(owner, "marco", "마르코의 블로그");
@@ -155,6 +168,44 @@ class TrashPurgeJobTest {
         assertThat(em.find(Blog.class, recentlyDeleted.getId()).getTitle()).isEqualTo("최근 삭제");
 
         assertThat(job.purge()).isEqualTo(new TrashPurgeJob.Result(0, 0));
+    }
+
+    /** T189: 영구 삭제되는 글의 댓글(답글 먼저)과 트랙백·포털 행을 먼저 지운다(이 FK들은 ON DELETE CASCADE가 없다). */
+    @Test
+    void purgeRemovesCommentsRepliesFirstAndOtherRowsReferencingThePost() {
+        Post old = trashed(NOW.minus(Duration.ofDays(31)));
+        Post live = published();
+        User reader = new User("reader@example.com", "b".repeat(64), "$2a$hash", "reader", null, null, "2026-10-06",
+                NOW);
+        em.persist(reader);
+        Comment top = new Comment(old, reader, null, "댓글");
+        em.persist(top);
+        em.persist(new Comment(old, owner, top, "답글"));
+        Comment placeholder = new Comment(old, reader, null, "지운 댓글");
+        placeholder.markDeleted();
+        em.persist(placeholder);
+        em.persist(new Comment(old, owner, placeholder, "남은 답글"));
+        Comment kept = new Comment(live, reader, null, "남는 댓글");
+        em.persist(kept);
+        em.flush();
+        jdbc.update("INSERT INTO trackbacks (post_id, source_url) VALUES (?, 'https://x.test/1')", old.getId());
+        jdbc.update("INSERT INTO trackbacks (post_id, source_post_id, source_url) VALUES (?, ?, 'https://x.test/2')",
+                live.getId(), old.getId());
+        jdbc.update("INSERT INTO portal_curations (post_id) VALUES (?)", old.getId());
+        jdbc.update("INSERT INTO portal_exclusions (post_id) VALUES (?)", old.getId());
+        em.clear();
+
+        TrashPurgeJob.Result result = job.purge();
+
+        assertThat(result.posts()).isEqualTo(1);
+        assertThat(postRepository.findById(old.getId())).isEmpty();
+        assertThat(jdbc.queryForList("SELECT id FROM comments", Long.class)).containsExactly(kept.getId());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM trackbacks WHERE post_id = ?", Integer.class,
+                old.getId())).isZero();
+        assertThat(jdbc.queryForList("SELECT source_post_id FROM trackbacks WHERE post_id = ?", Long.class,
+                live.getId())).containsExactly((Long) null);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM portal_curations", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM portal_exclusions", Integer.class)).isZero();
     }
 
     @Test
