@@ -25,6 +25,8 @@ import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
+import net.java21.blog.backend.topic.domain.Topic;
+import net.java21.blog.backend.topic.service.TopicService;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -50,13 +52,14 @@ public class BlogService {
     private final CategoryQueryRepository categoryQueryRepository;
     private final MediaReferenceService mediaReferences;
     private final BlogSubscriptionRepository subscriptionRepository;
+    private final TopicService topicService;
     private final Clock clock;
 
     public BlogService(BlogRepository blogRepository, BlogQueryRepository blogQueryRepository,
             UserRepository userRepository, BlogAccess blogAccess, HandlePolicy handlePolicy,
             PasswordEncoder passwordEncoder, BlogsProperties blogsProperties,
             CategoryQueryRepository categoryQueryRepository, MediaReferenceService mediaReferences,
-            BlogSubscriptionRepository subscriptionRepository, Clock clock) {
+            BlogSubscriptionRepository subscriptionRepository, TopicService topicService, Clock clock) {
         this.blogRepository = blogRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.userRepository = userRepository;
@@ -67,6 +70,7 @@ public class BlogService {
         this.categoryQueryRepository = categoryQueryRepository;
         this.mediaReferences = mediaReferences;
         this.subscriptionRepository = subscriptionRepository;
+        this.topicService = topicService;
         this.clock = clock;
     }
 
@@ -164,7 +168,29 @@ public class BlogService {
         if (request.hasFeedItemCount() || request.hasFeedContentMode()) {
             changeFeedSettings(blog, request);
         }
+        if (request.hasPortalEnabled() || request.hasDefaultTopicId()) {
+            changePortalSettings(blog, request);
+        }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
+    }
+
+    /**
+     * 포털 설정(003 FR-077·089, contracts/api.md): {@code portalEnabled}는 지울 수 없고, {@code defaultTopicId}는 null이면 지우며
+     * 값이면 소분류·운영자 숨김 아님이어야 한다(지금 값과 같으면 검사하지 않음).
+     */
+    private void changePortalSettings(Blog blog, UpdateBlogRequest request) {
+        boolean portalEnabled = blog.isPortalEnabled();
+        if (request.hasPortalEnabled()) {
+            if (request.getPortalEnabled() == null) {
+                throw required("portalEnabled");
+            }
+            portalEnabled = request.getPortalEnabled();
+        }
+        Topic defaultTopic = blog.getDefaultTopic();
+        if (request.hasDefaultTopicId()) {
+            defaultTopic = topicService.requireSelectable(request.getDefaultTopicId(), blog.getDefaultTopicId());
+        }
+        blog.changePortalSettings(portalEnabled, defaultTopic);
     }
 
     /** 피드 설정(002 FR-046, contracts/api.md): 보낸 값만 바꾸며 지울 수 없고, 허용 값이 아니면 {@code INVALID}(params.allowed). */

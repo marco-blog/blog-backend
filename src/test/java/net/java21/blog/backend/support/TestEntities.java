@@ -6,6 +6,8 @@ import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.crypto.CryptoProperties;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
 import net.java21.blog.backend.post.domain.Post;
+import net.java21.blog.backend.topic.domain.Topic;
+import net.java21.blog.backend.topic.domain.TopicNames;
 import net.java21.blog.backend.user.domain.User;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -42,6 +44,14 @@ public final class TestEntities {
         Post post = new Post(blog, title);
         ReflectionTestUtils.setField(post, "id", id);
         return post;
+    }
+
+    /** 주제(대분류면 {@code parent} null). 이름은 slug로 4개 언어를 채운다. */
+    public static Topic topic(long id, Topic parent, String slug) {
+        Topic topic = new Topic(parent, slug, new TopicNames(slug + "-ko", slug + "-en", slug + "-ja", slug + "-zh"),
+                0, null, false);
+        ReflectionTestUtils.setField(topic, "id", id);
+        return topic;
     }
 
     public static <T> T with(T entity, String field, Object value) {

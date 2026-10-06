@@ -13,6 +13,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * 주인에게는 작성 화면이 그대로 다시 저장하는 글별 설정 값이다(댓글 API는 두 설정을 모두 검사한다).
  * 카테고리는 미분류면 null, 태그는 이름순. 작성자 프로필 이미지는 {@code /media/{key}} 또는 null.
  * 002: {@code likeCount}(좋아요 수), {@code likedByMe}(로그인 회원이 눌렀으면 true, 아니면 false, 비로그인이면 null).
+ * 003: {@code topicId}(글의 주제 소분류, 없으면 null). 주제 이름은 front가 {@code GET /topics} 트리로 찾는다.
  */
 public record PostDetailResponse(
         Long id,
@@ -35,7 +36,8 @@ public record PostDetailResponse(
         Instant publishedAt,
         Instant updatedAt,
         int likeCount,
-        Boolean likedByMe) {
+        Boolean likedByMe,
+        Long topicId) {
 
     public record Author(String nickname, String profileImageUrl) {
     }
@@ -50,6 +52,6 @@ public record PostDetailResponse(
                 post.getVisibility(), post.getStatus(), post.getViewCount(), post.getCommentCount(),
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
                 new Author(user.getNickname(), user.profileImageUrl()), prev, next,
-                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe);
+                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe, post.getTopicId());
     }
 }

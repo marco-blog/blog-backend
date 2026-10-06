@@ -112,7 +112,8 @@ class PostCategoryTagServiceTest {
                 org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock);
         publishService = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
-                categoryAccess, tagService, mediaReferences, clock);
+                categoryAccess, tagService, mediaReferences,
+                org.mockito.Mockito.mock(net.java21.blog.backend.topic.service.TopicService.class), clock);
         draftService = new PostDraftService(blogAccess, access, postRepository, postDraftRepository,
                 postQueryRepository, tagQueryRepository, mediaReferences, clock);
         managePostService = new ManagePostService(blogAccess, managePostQueryRepository, categoryAccess,
@@ -132,7 +133,7 @@ class PostCategoryTagServiceTest {
     void draftSaveKeepsCategoryAndRawTagsWithoutValidation() {
         when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
 
-        draftService.save(1L, 100L, new DraftWriteRequest("제목", "본문", 99L, List.of(" Spring ", "")));
+        draftService.save(1L, 100L, new DraftWriteRequest("제목", "본문", 99L, List.of(" Spring ", ""), null));
 
         ArgumentCaptor<PostDraft> saved = ArgumentCaptor.forClass(PostDraft.class);
         verify(postDraftRepository).save(saved.capture());
@@ -288,7 +289,7 @@ class PostCategoryTagServiceTest {
     }
 
     private static PublishSettingsRequest settings(Long categoryId, List<String> tags) {
-        return new PublishSettingsRequest(PostVisibility.PUBLIC, null, null, categoryId, tags);
+        return new PublishSettingsRequest(PostVisibility.PUBLIC, null, null, categoryId, tags, null);
     }
 
     private static void assertCode(ThrowingCallable call, ErrorCode code) {

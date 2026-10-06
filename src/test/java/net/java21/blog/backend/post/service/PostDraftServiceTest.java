@@ -86,7 +86,7 @@ class PostDraftServiceTest {
         });
 
         SavedDraftResponse saved = service.create(1L, "marco",
-                new DraftWriteRequest("제목", "본문", 3L, List.of("spring")));
+                new DraftWriteRequest("제목", "본문", 3L, List.of("spring"), null));
 
         assertThat(saved).isEqualTo(new SavedDraftResponse(100L, NOW));
         ArgumentCaptor<Post> post = ArgumentCaptor.forClass(Post.class);
@@ -108,7 +108,7 @@ class PostDraftServiceTest {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
         when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service.create(1L, "marco", new DraftWriteRequest(null, null, null, null));
+        service.create(1L, "marco", new DraftWriteRequest(null, null, null, null, null));
 
         ArgumentCaptor<Post> post = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(post.capture());
@@ -119,7 +119,7 @@ class PostDraftServiceTest {
     void createInSomeoneElsesBlogIsForbidden() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
 
-        assertCode(() -> service.create(2L, "marco", new DraftWriteRequest("t", "b", null, null)), ErrorCode.FORBIDDEN);
+        assertCode(() -> service.create(2L, "marco", new DraftWriteRequest("t", "b", null, null, null)), ErrorCode.FORBIDDEN);
         verify(postRepository, never()).save(any());
     }
 
@@ -128,7 +128,7 @@ class PostDraftServiceTest {
         blog.delete(NOW);
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
 
-        assertCode(() -> service.create(1L, "marco", new DraftWriteRequest("t", "b", null, null)),
+        assertCode(() -> service.create(1L, "marco", new DraftWriteRequest("t", "b", null, null, null)),
                 ErrorCode.BLOG_NOT_FOUND);
     }
 
@@ -140,7 +140,7 @@ class PostDraftServiceTest {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
         when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
 
-        SavedDraftResponse saved = service.save(1L, 100L, new DraftWriteRequest("고친 제목", "고친 본문", null, List.of()));
+        SavedDraftResponse saved = service.save(1L, 100L, new DraftWriteRequest("고친 제목", "고친 본문", null, List.of(), null));
 
         assertThat(saved).isEqualTo(new SavedDraftResponse(100L, NOW));
         assertThat(post.getTitle()).isEqualTo("발행 제목");
@@ -159,7 +159,7 @@ class PostDraftServiceTest {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
         when(postDraftRepository.findById(100L)).thenReturn(Optional.of(existing));
 
-        service.save(1L, 100L, new DraftWriteRequest("새 제목", "새 본문", null, null));
+        service.save(1L, 100L, new DraftWriteRequest("새 제목", "새 본문", null, null, null));
 
         assertThat(existing.getTitle()).isEqualTo("새 제목");
         assertThat(existing.getSavedAt()).isEqualTo(NOW);
@@ -171,7 +171,7 @@ class PostDraftServiceTest {
     void saveOfOthersPostIsForbidden() {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(published(100L)));
 
-        assertCode(() -> service.save(2L, 100L, new DraftWriteRequest("t", "b", null, null)), ErrorCode.FORBIDDEN);
+        assertCode(() -> service.save(2L, 100L, new DraftWriteRequest("t", "b", null, null, null)), ErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -181,8 +181,8 @@ class PostDraftServiceTest {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(trashed));
         when(postRepository.findWithBlogAndOwner(101L)).thenReturn(Optional.empty());
 
-        assertCode(() -> service.save(1L, 100L, new DraftWriteRequest("t", "b", null, null)), ErrorCode.POST_NOT_FOUND);
-        assertCode(() -> service.save(1L, 101L, new DraftWriteRequest("t", "b", null, null)), ErrorCode.POST_NOT_FOUND);
+        assertCode(() -> service.save(1L, 100L, new DraftWriteRequest("t", "b", null, null, null)), ErrorCode.POST_NOT_FOUND);
+        assertCode(() -> service.save(1L, 101L, new DraftWriteRequest("t", "b", null, null, null)), ErrorCode.POST_NOT_FOUND);
     }
 
     @Test
@@ -204,7 +204,9 @@ class PostDraftServiceTest {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
         when(postDraftRepository.findById(100L)).thenReturn(Optional.of(draft));
 
-        assertThat(service.get(1L, 100L)).isEqualTo(new DraftResponse("사본 제목", "사본 본문", 3L, List.of("jpa"), NOW));
+        draft.changeTopic(31L);
+        assertThat(service.get(1L, 100L))
+                .isEqualTo(new DraftResponse("사본 제목", "사본 본문", 3L, List.of("jpa"), 31L, NOW));
     }
 
     @Test
@@ -214,7 +216,54 @@ class PostDraftServiceTest {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
         when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
 
-        assertThat(service.get(1L, 100L)).isEqualTo(new DraftResponse("발행 제목", "발행 본문", null, List.of(), NOW));
+        assertThat(service.get(1L, 100L)).isEqualTo(new DraftResponse("발행 제목", "발행 본문", null, List.of(), null, NOW));
+    }
+
+    // ---- 주제(003 T068, research P9) ----
+
+    @Test
+    void draftKeepsTopicIdAsSentWithoutValidation() {
+        Post post = published(100L);
+        when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
+        when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
+
+        // 대분류·숨김·없는 id여도 저장 때는 검사하지 않는다(발행 때 검증).
+        service.save(1L, 100L, new DraftWriteRequest("제목", "본문", null, null, 999L));
+
+        ArgumentCaptor<PostDraft> draft = ArgumentCaptor.forClass(PostDraft.class);
+        verify(postDraftRepository).save(draft.capture());
+        assertThat(draft.getValue().getTopicId()).isEqualTo(999L);
+    }
+
+    @Test
+    void createKeepsTopicIdAndNullMeansNoTopic() {
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.create(1L, "marco", new DraftWriteRequest("제목", "본문", null, null, 31L));
+
+        ArgumentCaptor<PostDraft> draft = ArgumentCaptor.forClass(PostDraft.class);
+        verify(postDraftRepository).save(draft.capture());
+        assertThat(draft.getValue().getTopicId()).isEqualTo(31L);
+
+        Post post = TestEntities.post(101L, blog, "t");
+        PostDraft existing = new PostDraft(post);
+        existing.changeTopic(31L);
+        when(postRepository.findWithBlogAndOwner(101L)).thenReturn(Optional.of(post));
+        when(postDraftRepository.findById(101L)).thenReturn(Optional.of(existing));
+        service.save(1L, 101L, new DraftWriteRequest("t", "b", null, null, null));
+        assertThat(existing.getTopicId()).isNull();
+    }
+
+    @Test
+    void getFallsBackToPublishedTopic() {
+        Post post = published(100L);
+        post.assignTopic(TestEntities.topic(31L, TestEntities.topic(3L, null, "knowledge"), "it-internet"));
+        TestEntities.with(post, "updatedAt", NOW);
+        when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
+        when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
+
+        assertThat(service.get(1L, 100L).topicId()).isEqualTo(31L);
     }
 
     // ---- 사본 폐기 ----
