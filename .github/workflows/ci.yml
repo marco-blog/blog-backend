@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # @MySqlRepositoryTest(FULLTEXT ngram 등)용 일회용 MySQL. 컨테이너는 작업이 끝나면 사라지므로 비밀번호는 CI 전용 고정값이다.
+      MYSQL_ROOT_PASSWORD: ci-only-root-pw
+      BLOG_TEST_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/blog_test?connectionTimeZone=UTC&characterEncoding=UTF-8
+      BLOG_TEST_DATASOURCE_USERNAME: root
+      BLOG_TEST_DATASOURCE_PASSWORD: ci-only-root-pw
+      BLOG_TEST_ALLOW_CLEAN: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # services: 는 컨테이너 실행 인자를 줄 수 없어서(--ngram-token-size=2) docker run으로 띄운다.
+      - name: Start MySQL 8.4
+        run: |
+          docker run -d --name blog-mysql -p 3306:3306 \
+            -e MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
+            -e MYSQL_DATABASE=blog_test \
+            mysql:8.4 --ngram-token-size=2
+          # 초기화용 임시 서버는 TCP를 열지 않으므로 TCP 접속이 되면 실제 서버가 뜬 것이다.
+          for i in $(seq 1 60); do
+            if docker exec blog-mysql mysql -h127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL is ready"; exit 0
+            fi
+            sleep 2
+          done
+          docker logs blog-mysql
+          exit 1
+
+      - name: Verify (tests + JaCoCo check)
+        run: ./mvnw -B verify
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          if-no-files-found: ignore
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore

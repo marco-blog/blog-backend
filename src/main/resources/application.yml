@@ -1,7 +1,8 @@
 # 공통 설정. 환경별 값은 프로필 파일에 둔다.
 #   local: application-local.yml (커밋하지 않음, 예시는 application-local.yml.example)
 #   prod : application-prod.yml  (접속 정보는 환경 변수로만)
-#   test : src/test/resources/application-test.yml (테스트 DB cf_u2_d3)
+#   test : src/test/resources/application-test.yml
+#          Repository 테스트(@JpaRepositoryTest)는 H2(MySQL 모드), MySQL 전용 쿼리(@MySqlRepositoryTest)만 테스트 DB cf_u2_d3
 # 프로필을 지정하지 않으면 local로 실행한다. 운영은 SPRING_PROFILES_ACTIVE=prod.
 spring:
   application:
@@ -26,6 +27,8 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        # N+1 완화: LAZY 연관을 IN 절로 100개씩 묶어 읽는다(원칙 v2.5.0). 목록은 fetch join 또는 DTO projection이 우선.
+        default_batch_fetch_size: 100
 
 management:
   endpoints:

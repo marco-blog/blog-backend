@@ -21,6 +21,9 @@
         <java.version>21</java.version>
         <springdoc.version>3.1.1</springdoc.version>
         <jacoco.version>0.8.15</jacoco.version>
+        <!-- QueryDSL OpenFeign 포크(원래 com.querydsl은 Hibernate 7 미지원). 7.x는 jakarta 기준이라 querydsl-jpa에 분류자가 없다.
+             속성 이름을 querydsl.version으로 하면 Boot BOM의 com.querydsl:querydsl-bom 버전을 덮어써 빌드가 깨진다. -->
+        <openfeign-querydsl.version>7.7</openfeign-querydsl.version>
         <jacoco.line.minimum>0.80</jacoco.line.minimum>
     </properties>
 
@@ -51,6 +54,11 @@
             <version>${springdoc.version}</version>
         </dependency>
         <dependency>
+            <groupId>io.github.openfeign.querydsl</groupId>
+            <artifactId>querydsl-jpa</artifactId>
+            <version>${openfeign-querydsl.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
@@ -61,7 +69,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- 테스트: DB 테스트는 전용 테스트 MySQL 스키마(환경 변수)로 실행한다. Testcontainers는 쓰지 않는다. -->
+        <!-- 테스트: Repository 테스트는 H2, MySQL 전용 동작만 테스트 MySQL 스키마(환경 변수)로 실행한다. Testcontainers는 쓰지 않는다. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -70,6 +78,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Repository 테스트(@JpaRepositoryTest): H2 MySQL 모드, 스키마는 엔티티로 생성 -->
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -96,6 +110,18 @@
                             <groupId>org.springframework.boot</groupId>
                             <artifactId>spring-boot-configuration-processor</artifactId>
                         </path>
+                        <!-- QueryDSL Q-클래스 생성(target/generated-sources/annotations) -->
+                        <path>
+                            <groupId>io.github.openfeign.querydsl</groupId>
+                            <artifactId>querydsl-apt</artifactId>
+                            <version>${openfeign-querydsl.version}</version>
+                            <classifier>jpa</classifier>
+                        </path>
+                        <path>
+                            <groupId>jakarta.persistence</groupId>
+                            <artifactId>jakarta.persistence-api</artifactId>
+                            <version>${jakarta-persistence.version}</version>
+                        </path>
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
@@ -113,6 +139,8 @@
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
+            <!-- QueryDSL Q-클래스는 @com.querydsl.core.annotations.Generated(CLASS 보존)가 붙어 있어 JaCoCo가 스스로 뺀다.
+                 Q*.class 이름 패턴으로 빼면 QuerydslConfig 같은 일반 클래스까지 빠지므로 쓰지 않는다. -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>

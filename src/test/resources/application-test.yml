@@ -1,4 +1,7 @@
-# 테스트 프로필: 전용 테스트 MySQL 스키마(Crowfoot cf_u2_d3)를 쓴다. 개발 DB(cf_u2_d2)는 절대 쓰지 않는다.
+# 테스트 프로필(surefire가 모든 테스트에 켠다). 개발 DB(cf_u2_d2)는 절대 쓰지 않는다.
+# - Repository 테스트(@JpaRepositoryTest): H2 메모리 DB(MySQL 모드). 접속 정보는 애너테이션의 @TestPropertySource가 정하고
+#   아래 datasource 값과 환경 변수는 쓰지 않는다.
+# - MySQL 전용 쿼리 테스트(@MySqlRepositoryTest): 전용 테스트 MySQL 스키마(Crowfoot cf_u2_d3, CI는 mysql:8.4 컨테이너의 blog_test).
 #   BLOG_TEST_DATASOURCE_URL       예) jdbc:mysql://s4.java21.net:13306/cf_u2_d3?connectionTimeZone=UTC&characterEncoding=UTF-8
 #   BLOG_TEST_DATASOURCE_USERNAME
 #   BLOG_TEST_DATASOURCE_PASSWORD
