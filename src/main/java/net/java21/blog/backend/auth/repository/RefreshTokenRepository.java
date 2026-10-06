@@ -35,4 +35,14 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update RefreshToken t set t.revokedAt = :now where t.user.id = :userId and t.revokedAt is null")
     int revokeAllByUserId(@Param("userId") Long userId, @Param("now") Instant now);
+
+    /**
+     * 비밀번호 변경: 현재 기기의 계열({@code familyId}, 접근 토큰의 {@code fid})만 남기고 회원의 나머지 계열을 폐기한다
+     * (FR-082, tasks.md "구현 전 결정 사항" 2번). UPDATE 1회.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update RefreshToken t set t.revokedAt = :now where t.user.id = :userId and t.familyId <> :familyId"
+            + " and t.revokedAt is null")
+    int revokeAllByUserIdExceptFamily(@Param("userId") Long userId, @Param("familyId") String familyId,
+            @Param("now") Instant now);
 }

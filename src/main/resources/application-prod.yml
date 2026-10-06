@@ -9,6 +9,10 @@
 #                                   front가 다른 호스트·컨테이너면 그 주소로 바꾼다. 틀리면 방문자 IP 대신 front 주소가 기록된다.
 #   BLOG_AUTH_JWT_SECRET            접근 토큰(JWT HS256) 서명 키(UTF-8 32바이트 이상, openssl rand -base64 48).
 #                                   바꾸면 발급된 접근 토큰이 모두 무효가 된다(리프레시로 다시 받는다).
+#   BLOG_MAIL_HOST / BLOG_MAIL_PORT  SMTP 서버(비밀번호 재설정 메일, FR-133)
+#   BLOG_MAIL_USERNAME / BLOG_MAIL_PASSWORD  SMTP 인증(비밀 값)
+#   BLOG_MAIL_FROM                  보내는 사람 주소
+#   BLOG_MAIL_STARTTLS              STARTTLS 사용(기본 true)
 # 키 교체: 새 버전 키를 BLOG_CRYPTO_KEYS_2 처럼 추가 → BLOG_CRYPTO_ACTIVE_KEY_VERSION=2 → 재암호화 후 이전 키 제거.
 spring:
   datasource:
@@ -28,6 +32,13 @@ logging:
     root: INFO
 
 blog:
+  mail:
+    host: ${BLOG_MAIL_HOST}
+    port: ${BLOG_MAIL_PORT}
+    username: ${BLOG_MAIL_USERNAME:}
+    password: ${BLOG_MAIL_PASSWORD:}
+    from: ${BLOG_MAIL_FROM}
+    starttls: ${BLOG_MAIL_STARTTLS:true}
   crypto:
     keys:
       "[1]": ${BLOG_CRYPTO_KEY_V1}

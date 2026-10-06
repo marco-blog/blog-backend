@@ -35,7 +35,10 @@ public enum ErrorCode {
     POST_NOT_IN_TRASH(HttpStatus.UNPROCESSABLE_CONTENT),
     BLOG_NOT_FOUND(HttpStatus.NOT_FOUND),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND),
-    DRAFT_NOT_FOUND(HttpStatus.NOT_FOUND);
+    DRAFT_NOT_FOUND(HttpStatus.NOT_FOUND),
+
+    // 001 계정 설정 (Phase 4)
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST);
 
     private final HttpStatus status;
 

@@ -19,12 +19,14 @@ import net.java21.blog.backend.blog.dto.BlogLink;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.security.AuthProperties;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import net.java21.blog.backend.user.repository.UserRepository;
+import net.java21.blog.backend.user.service.LoginHistoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,7 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-/** 로그인과 잠금(T051, FR-004, FR-007, FR-009, R12). */
+/** 로그인과 잠금(T051, FR-004, FR-007, FR-009, R12), 로그인 기록(T139, FR-139: 성공·실패마다, 없는 이메일은 회원 없이). */
 @ExtendWith(MockitoExtension.class)
 class LoginServiceTest {
 
@@ -50,6 +52,10 @@ class LoginServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private RefreshTokenService refreshTokenService;
+    @Mock
+    private LoginHistoryService loginHistoryService;
+
+    private static final ClientInfo CLIENT = new ClientInfo("211.234.56.78", "Mozilla/5.0");
 
     private final MutableClock clock = new MutableClock(Instant.parse("2026-10-06T04:00:00Z"));
     private LoginService service;
@@ -58,7 +64,7 @@ class LoginServiceTest {
     @BeforeEach
     void setUp() {
         service = new LoginService(userRepository, blogQueryRepository, TestEntities.HASHER, passwordEncoder,
-                refreshTokenService, PROPS, clock);
+                refreshTokenService, loginHistoryService, PROPS, clock);
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -77,7 +83,7 @@ class LoginServiceTest {
         List<BlogLink> blogs = List.of(new BlogLink("marco", "첫 블로그"), new BlogLink("marco-dev", "둘째"));
         when(blogQueryRepository.findActiveBlogLinks(7L)).thenReturn(blogs);
 
-        LoginService.Result result = service.login(new LoginRequest(" MARCO@example.com ", "password1"));
+        LoginService.Result result = service.login(CLIENT, new LoginRequest(" MARCO@example.com ", "password1"));
 
         assertThat(result.response().userId()).isEqualTo(7L);
         assertThat(result.response().nickname()).isEqualTo("마르코");
@@ -118,7 +124,7 @@ class LoginServiceTest {
         // 10분이 지나면 다시 로그인할 수 있다.
         clock.advance(Duration.ofMinutes(1));
         when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
-        service.login(new LoginRequest("marco@example.com", "password1"));
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
         assertThat(user.getLockedUntil()).isNull();
         assertThat(user.getFailedLoginCount()).isZero();
     }
@@ -131,7 +137,7 @@ class LoginServiceTest {
         for (int i = 0; i < 4; i++) {
             expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
         }
-        service.login(new LoginRequest("marco@example.com", "password1"));
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
         expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
         assertThat(user.getFailedLoginCount()).isEqualTo(1);
     }
@@ -145,8 +151,38 @@ class LoginServiceTest {
         verify(refreshTokenService, never()).startSession(any());
     }
 
+    @Test
+    void recordsSuccessAndFailuresInLoginHistory() {
+        when(userRepository.findByEmailHash(anyString())).thenReturn(Optional.empty());
+        expect(new LoginRequest("nobody@example.com", "password1"), ErrorCode.INVALID_CREDENTIALS);
+        verify(loginHistoryService).record(null, false, CLIENT);
+
+        userExists();
+        when(passwordEncoder.matches("wrong1234", "$2a$hash")).thenReturn(false);
+        when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
+        expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+        verify(loginHistoryService).record(user, false, CLIENT);
+
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
+        verify(loginHistoryService).record(user, true, CLIENT);
+    }
+
+    @Test
+    void lockedAndInactiveAttemptsAreRecordedAsFailures() {
+        userExists();
+        TestEntities.with(user, "lockedUntil", clock.instant().plusSeconds(60));
+        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.ACCOUNT_LOCKED);
+
+        TestEntities.with(user, "lockedUntil", null);
+        TestEntities.with(user, "status", UserStatus.WITHDRAWN);
+        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.INVALID_CREDENTIALS);
+
+        verify(loginHistoryService, org.mockito.Mockito.times(2)).record(user, false, CLIENT);
+        verify(loginHistoryService, never()).record(any(), eq(true), any());
+    }
+
     private void expect(LoginRequest request, ErrorCode code) {
-        assertThatThrownBy(() -> service.login(request))
+        assertThatThrownBy(() -> service.login(CLIENT, request))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(code));
     }
 }
