@@ -185,7 +185,8 @@ class SitemapControllerTest {
                             "Disallow: /write$\n", "Disallow: /manage$\n", "Disallow: /*/write$\n",
                             "Disallow: /*/write/\n", "Disallow: /*/manage$\n", "Disallow: /*/manage/\n",
                             "Disallow: /feed$\n", "Disallow: /feed?\n", "Disallow: /notifications$\n",
-                            "Disallow: /search$\n", "Disallow: /search?\n");
+                            "Disallow: /search$\n", "Disallow: /search?\n", "Disallow: /admin$\n",
+                            "Disallow: /admin?\n", "Disallow: /admin/\n");
                     assertThat(body).endsWith("Sitemap: https://blog.example.com/sitemap.xml\n");
                     // 블로그 주소가 예약어로 시작해도(예: /feedback) 막지 않는다
                     assertThat(body).doesNotContain("Disallow: /feed\n", "Disallow: /search\n");
