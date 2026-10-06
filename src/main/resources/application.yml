@@ -1,0 +1,29 @@
+# 공통 설정. 환경별 값은 프로필 파일에 둔다.
+#   local: application-local.yml (커밋하지 않음, 예시는 application-local.yml.example)
+#   prod : application-prod.yml  (접속 정보는 환경 변수로만)
+#   test : src/test/resources/application-test.yml (테스트 DB cf_u2_d3)
+# 프로필을 지정하지 않으면 local로 실행한다. 운영은 SPRING_PROFILES_ACTIVE=prod.
+spring:
+  application:
+    name: blog-backend
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 Crowfoot ERD 문서가 관리한다(blog-docs/db/README.md).
+      # Hibernate는 엔티티와 스키마가 맞는지 확인만 한다.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

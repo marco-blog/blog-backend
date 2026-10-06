@@ -1,6 +1,8 @@
 target/
 *.class
 .env
+.env.*
+application-local.yml
 .idea/
 .vscode/
 .DS_Store
