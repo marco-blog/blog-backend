@@ -208,6 +208,38 @@ class TrashPurgeJobTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM portal_exclusions", Integer.class)).isZero();
     }
 
+    /**
+     * 002 T024: 보관 기간이 지난 삭제 블로그의 구독 행(외래 키에 CASCADE 없음)을 지우고, 영구 삭제되는 글의 좋아요는
+     * 외래 키 {@code ON DELETE CASCADE}(H2는 {@code @OnDelete})로 함께 지워진다. 남는 블로그·글의 행은 그대로다.
+     */
+    @Test
+    void purgeRemovesSubscriptionsOfPurgedBlogsAndLikesOfPurgedPosts() {
+        User reader = new User("reader2@example.com", "c".repeat(64), "$2a$hash", "reader", null, null, "2026-10-06",
+                NOW);
+        em.persist(reader);
+        Blog old = new Blog(owner, "marco-old", "옛 블로그");
+        em.persist(old);
+        old.delete(NOW.minus(Duration.ofDays(31)));
+        Post oldPost = trashed(NOW.minus(Duration.ofDays(31)));
+        Post live = published();
+        em.flush();
+        jdbc.update("INSERT INTO blog_subscriptions (user_id, blog_id, created_at) VALUES (?, ?, ?)", reader.getId(),
+                old.getId(), java.sql.Timestamp.from(NOW));
+        jdbc.update("INSERT INTO blog_subscriptions (user_id, blog_id, created_at) VALUES (?, ?, ?)", reader.getId(),
+                blog.getId(), java.sql.Timestamp.from(NOW));
+        jdbc.update("INSERT INTO post_likes (user_id, post_id, created_at) VALUES (?, ?, ?)", reader.getId(),
+                oldPost.getId(), java.sql.Timestamp.from(NOW));
+        jdbc.update("INSERT INTO post_likes (user_id, post_id, created_at) VALUES (?, ?, ?)", reader.getId(),
+                live.getId(), java.sql.Timestamp.from(NOW));
+        em.clear();
+
+        assertThat(job.purge()).isEqualTo(new TrashPurgeJob.Result(1, 1));
+
+        assertThat(jdbc.queryForList("SELECT blog_id FROM blog_subscriptions", Long.class))
+                .containsExactly(blog.getId());
+        assertThat(jdbc.queryForList("SELECT post_id FROM post_likes", Long.class)).containsExactly(live.getId());
+    }
+
     @Test
     void scheduledRunPurges() {
         Post old = trashed(NOW.minus(Duration.ofDays(31)));

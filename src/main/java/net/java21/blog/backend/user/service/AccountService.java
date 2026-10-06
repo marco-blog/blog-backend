@@ -15,6 +15,7 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
 import net.java21.blog.backend.user.repository.UserRepository;
@@ -35,16 +36,18 @@ public class AccountService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final MediaReferenceService mediaReferences;
+    private final BlogSubscriptionRepository subscriptionRepository;
     private final Clock clock;
 
     public AccountService(UserRepository userRepository, WithdrawalRepository withdrawalRepository,
             RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder,
-            MediaReferenceService mediaReferences, Clock clock) {
+            MediaReferenceService mediaReferences, BlogSubscriptionRepository subscriptionRepository, Clock clock) {
         this.userRepository = userRepository;
         this.withdrawalRepository = withdrawalRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.mediaReferences = mediaReferences;
+        this.subscriptionRepository = subscriptionRepository;
         this.clock = clock;
     }
 
@@ -128,6 +131,8 @@ public class AccountService {
     /**
      * 탈퇴(FR-009): 비밀번호 확인 → {@code status=WITHDRAWN}·{@code withdrawn_at}, 모든 블로그의 모든 글 비공개
      * (이전 값은 보관하지 않음), 모든 로그인 계열 폐기. 회원 행을 잠가 블로그 만들기·삭제와 줄 세운다.
+     * 002(결정 3): 같은 트랜잭션에서 이 회원의 구독 행을 지우고 구독했던 블로그들의 구독자 수를 줄인다(쿼리 2회, 블로그 수와 무관).
+     * 좋아요 행과 좋아요 수는 그대로 둔다.
      */
     @Transactional
     public void withdraw(long userId, String password) {
@@ -139,6 +144,8 @@ public class AccountService {
         user.withdraw(now);
         userRepository.flush();
         withdrawalRepository.makeAllPostsPrivate(userId);
+        subscriptionRepository.decrementSubscriberCountsOf(userId);
+        subscriptionRepository.deleteAllByUser(userId);
         refreshTokenRepository.revokeAllByUserId(userId, now);
     }
 

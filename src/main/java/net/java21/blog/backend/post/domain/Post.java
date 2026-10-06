@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -24,7 +25,8 @@ import org.hibernate.type.SqlTypes;
  * 글(posts, T096). 상태 전이(data-model "상태 전이"): DRAFT → PUBLISHED(발행), PUBLISHED → DRAFT 불가,
  * DRAFT/PUBLISHED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
  * 작성 중 내용은 {@link PostDraft}에 두고 발행 때 이 행에 반영한다(FR-108).
- * 카테고리는 LAZY 연관이며 목록 조회는 DTO projection으로 읽는다(N+1 없음). 002~005가 더한 컬럼(like_count 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * 카테고리는 LAZY 연관이며 목록 조회는 DTO projection으로 읽는다(N+1 없음). 002의 좋아요 수({@code like_count})는 읽기 전용으로 매핑하고
+ * (좋아요·취소의 원자적 UPDATE로만 바뀐다), 003~005가 더한 컬럼(topic_id 등)은 DB 기본값이 있으므로 매핑하지 않는다.
  * 노출 판단은 {@code PostExposure} 한 곳에서 한다.
  */
 @Entity
@@ -85,6 +87,11 @@ public class Post extends BaseTimeEntity {
 
     @Column(name = "comment_count", nullable = false)
     private int commentCount;
+
+    /** 좋아요 수(FR-030). 엔티티 저장으로 바꾸지 않는다(좋아요·취소의 원자적 UPDATE만, 002 research D1). */
+    @ColumnDefault("0")
+    @Column(name = "like_count", nullable = false, insertable = false, updatable = false)
+    private int likeCount;
 
     @Column(name = "published_at")
     private Instant publishedAt;
@@ -228,6 +235,10 @@ public class Post extends BaseTimeEntity {
 
     public int getCommentCount() {
         return commentCount;
+    }
+
+    public int getLikeCount() {
+        return likeCount;
     }
 
     public Instant getPublishedAt() {

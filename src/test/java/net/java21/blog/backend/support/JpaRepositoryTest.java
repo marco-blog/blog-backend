@@ -20,7 +20,8 @@ import org.springframework.test.context.TestPropertySource;
  * Repository 슬라이스 테스트용 합성 애너테이션(H2, 원칙 v2.5.0 / research R13).
  *
  * <ul>
- *   <li>{@code @DataJpaTest} + H2 메모리 DB(MySQL 모드). 스키마는 엔티티로 만든다({@code ddl-auto=create-drop}).</li>
+ *   <li>{@code @DataJpaTest} + H2 메모리 DB(MySQL 모드). 스키마는 엔티티로 만든다({@code ddl-auto=create}). 같은 메모리 DB를 여러 컨텍스트가 함께 쓰므로
+ *       컨텍스트 캐시에서 밀려난 컨텍스트가 닫히며 표를 지우지 않도록 {@code create-drop}을 쓰지 않는다.</li>
  *   <li>접속 정보를 {@code @TestPropertySource}로 지정해 {@code BLOG_TEST_DATASOURCE_*}·{@code SPRING_DATASOURCE_*}
  *       환경 변수가 있어도 MySQL에 붙지 않는다(환경 변수보다 우선순위가 높다). {@link TestSchemaInitializer}도 쓰지 않는다.</li>
  *   <li>Hibernate 통계를 켜서 {@link QueryCounter}로 실행된 쿼리 수(N+1 없음)를 확인한다.</li>
@@ -42,7 +43,7 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.jpa.hibernate.ddl-auto=create",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
 @Import({QuerydslConfig.class, JpaAuditingConfig.class, TimeConfig.class, QueryCounter.class, CryptoConfig.class})

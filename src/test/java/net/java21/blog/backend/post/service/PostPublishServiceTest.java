@@ -79,7 +79,8 @@ class PostPublishServiceTest {
         PostAccess access = new PostAccess(postRepository);
         CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         PostService postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access,
-                new BlogAccess(blogRepository), categoryAccess, tagQueryRepository, clock);
+                new BlogAccess(blogRepository), categoryAccess, tagQueryRepository,
+                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock);
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences, clock);

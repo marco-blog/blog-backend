@@ -68,13 +68,13 @@ class MeControllerTest {
 
     private static MeResponse marco(String nickname) {
         return new MeResponse(7L, "marco@example.com", nickname, "소개", null, "USER", "ja", "Asia/Tokyo",
-                List.of(new BlogLink("marco", "마르코의 블로그")), null);
+                List.of(new BlogLink("marco", "마르코의 블로그")), null, 0L);
     }
 
     @Test
     void returnsMemberWithBlogs() throws Exception {
         when(meQueryService.me(7L)).thenReturn(new MeResponse(7L, "marco@example.com", "마르코", null, null, "USER",
-                "ko", "Asia/Seoul", List.of(new BlogLink("marco", "마르코의 블로그")), null));
+                "ko", "Asia/Seoul", List.of(new BlogLink("marco", "마르코의 블로그")), null, 12L));
 
         mvc.perform(get("/api/v1/me").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
@@ -89,6 +89,7 @@ class MeControllerTest {
                 .andExpect(jsonPath("$.result.blogs[0].handle").value("marco"))
                 .andExpect(jsonPath("$.result.blogs[0].title").value("마르코의 블로그"))
                 .andExpect(jsonPath("$.result.unseenReleaseNote").value(nullValue()))
+                .andExpect(jsonPath("$.result.unreadNotificationCount").value(12))
                 .andExpect(jsonPath("$.result.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.result.emailHash").doesNotExist());
     }

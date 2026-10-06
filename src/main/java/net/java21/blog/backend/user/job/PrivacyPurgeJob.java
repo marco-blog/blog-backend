@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.user.PrivacyProperties;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.LoginHistoryQueryRepository;
@@ -26,7 +27,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <ol>
  *   <li>{@code withdrawn_at < 지금 - blog.privacy.withdrawn-retention(30일)}인 탈퇴 회원의 개인정보를 파기한다:
  *       이메일 자리에 {@code withdrawn:{id}}(암호화)와 그 HMAC(NOT NULL·UNIQUE 유지, tasks.md "구현 전 결정 사항" 10번),
- *       닉네임 익명화, 소개·프로필 이미지 NULL(이전 프로필 이미지는 정리 대상 판단, FR-073).</li>
+ *       닉네임 익명화, 소개·프로필 이미지 NULL(이전 프로필 이미지는 정리 대상 판단, FR-073). 그 회원이 받은 알림도 지운다
+ *       (002 data-model notifications).</li>
  *   <li>{@code blog.privacy.login-history-retention(90일)}이 지난 로그인 기록을 지운다.</li>
  *   <li>만료된 비밀번호 재설정 토큰과 절대 만료가 지난 리프레시 토큰을 지운다.</li>
  * </ol>
@@ -48,17 +50,26 @@ public class PrivacyPurgeJob {
     private final Clock clock;
     /** 이미지 참조 정리. 없으면(이미지를 다루지 않는 슬라이스 테스트) 건너뛴다. */
     private final MediaReferenceService mediaReferences;
+    /** 받은 알림 삭제. 없으면(알림을 다루지 않는 슬라이스 테스트) 건너뛴다. */
+    private final NotificationQueryRepository notifications;
 
     public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
             PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
             JobsProperties jobs, Clock clock) {
-        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, null);
+        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, null, null);
+    }
+
+    public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
+            PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
+            JobsProperties jobs, Clock clock, MediaReferenceService mediaReferences) {
+        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, mediaReferences, null);
     }
 
     @Autowired
     public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
             PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
-            JobsProperties jobs, Clock clock, MediaReferenceService mediaReferences) {
+            JobsProperties jobs, Clock clock, MediaReferenceService mediaReferences,
+            NotificationQueryRepository notifications) {
         this.repository = repository;
         this.loginHistory = loginHistory;
         this.hasher = hasher;
@@ -67,6 +78,7 @@ public class PrivacyPurgeJob {
         this.jobs = jobs;
         this.clock = clock;
         this.mediaReferences = mediaReferences;
+        this.notifications = notifications;
     }
 
     /** 처리 결과(파기한 회원 수, 지운 로그인 기록·재설정 토큰·리프레시 토큰 수). */
@@ -108,6 +120,9 @@ public class PrivacyPurgeJob {
         }
         if (mediaReferences != null) {
             mediaReferences.reevaluate(profileMediaIds);
+        }
+        if (notifications != null) {
+            notifications.deleteByUserIds(ids);
         }
         return users.size();
     }

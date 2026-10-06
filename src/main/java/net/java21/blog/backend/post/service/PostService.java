@@ -9,6 +9,7 @@ import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.like.repository.PostLikeRepository;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.dto.CategoryRef;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
@@ -41,11 +42,13 @@ public class PostService {
     private final BlogAccess blogAccess;
     private final CategoryAccess categoryAccess;
     private final TagQueryRepository tagQueryRepository;
+    private final PostLikeRepository postLikeRepository;
     private final Clock clock;
 
     public PostService(PostRepository postRepository, PostDraftRepository postDraftRepository,
             PostQueryRepository postQueryRepository, PostAccess postAccess, BlogAccess blogAccess,
-            CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository, Clock clock) {
+            CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository,
+            PostLikeRepository postLikeRepository, Clock clock) {
         this.postRepository = postRepository;
         this.postDraftRepository = postDraftRepository;
         this.postQueryRepository = postQueryRepository;
@@ -53,6 +56,7 @@ public class PostService {
         this.blogAccess = blogAccess;
         this.categoryAccess = categoryAccess;
         this.tagQueryRepository = tagQueryRepository;
+        this.postLikeRepository = postLikeRepository;
         this.clock = clock;
     }
 
@@ -77,18 +81,22 @@ public class PostService {
 
     /**
      * 글 상세. 주인 외에게는 본문 노출 가능 글만, 주인에게는 DRAFT·PRIVATE도 보인다(DELETED는 상세에서 404).
-     * 쿼리: 글(블로그·주인·카테고리 fetch join) 1회 + 태그 1회 + 발행된 글이면 이전·다음 2회.
+     * 쿼리: 글(블로그·주인·카테고리 fetch join) 1회 + 태그 1회 + 발행된 글이면 이전·다음 2회 + 로그인했으면 좋아요 여부 1회(002).
      */
     @Transactional(readOnly = true)
     public PostDetailResponse detail(Long postId, Long viewerId) {
         Post post = postRepository.findWithBlogAndOwner(postId)
                 .filter(p -> PostExposure.isDetailVisibleTo(p, viewerId))
                 .orElseThrow(() -> PostAccess.notFound(postId));
-        return detailOf(post, post.isOwnedBy(viewerId));
+        return detailOf(post, viewerId);
     }
 
-    /** 이미 읽은 글(블로그·주인 포함)의 상세 응답. {@code contentMarkdown}은 주인에게만. */
-    PostDetailResponse detailOf(Post post, boolean owner) {
+    /**
+     * 이미 읽은 글(블로그·주인 포함)을 이 사람({@code viewerId}, 비로그인 null)에게 보여줄 상세 응답. {@code contentMarkdown}은 주인에게만,
+     * {@code likedByMe}는 비로그인이면 null.
+     */
+    PostDetailResponse detailOf(Post post, Long viewerId) {
+        boolean owner = post.isOwnedBy(viewerId);
         PostLink prev = null;
         PostLink next = null;
         if (post.getPublishedAt() != null && post.isPublished()) {
@@ -96,7 +104,9 @@ public class PostService {
             prev = postQueryRepository.findPrevious(blogId, post.getId(), post.getPublishedAt()).orElse(null);
             next = postQueryRepository.findNext(blogId, post.getId(), post.getPublishedAt()).orElse(null);
         }
-        return PostDetailResponse.of(post, owner, prev, next, tagNames(post.getId()));
+        Boolean likedByMe = viewerId == null ? null
+                : postLikeRepository.existsByUserIdAndPostId(viewerId, post.getId());
+        return PostDetailResponse.of(post, owner, prev, next, tagNames(post.getId()), likedByMe);
     }
 
     /** 휴지통으로(FR-084). 이미 휴지통이면 404(상세와 같다). 남의 글 403. */

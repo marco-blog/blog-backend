@@ -20,6 +20,7 @@ import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.category.repository.CategoryRepository;
 import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.like.repository.PostLikeRepository;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
@@ -65,6 +66,8 @@ class PostServiceTest {
     private CategoryRepository categoryRepository;
     @Mock
     private TagQueryRepository tagQueryRepository;
+    @Mock
+    private PostLikeRepository postLikeRepository;
 
     private PostService service;
     private User owner;
@@ -75,7 +78,7 @@ class PostServiceTest {
     void setUp() {
         service = new PostService(postRepository, postDraftRepository, postQueryRepository,
                 new PostAccess(postRepository), new BlogAccess(blogRepository), new CategoryAccess(categoryRepository),
-                tagQueryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                tagQueryRepository, postLikeRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(OWNER);
         blog = TestEntities.blog(10L, owner, "marco");
         post = TestEntities.post(100L, blog, "제목");
@@ -123,6 +126,25 @@ class PostServiceTest {
         assertThat(service.detail(100L, null).commentEnabled()).isFalse();
         assertThat(service.detail(100L, STRANGER).commentEnabled()).isFalse();
         assertThat(service.detail(100L, OWNER).commentEnabled()).isTrue();
+    }
+
+    /** 002 T023: 좋아요 수와 내가 눌렀는지(비로그인 null, 누름 true, 안 누름 false). 좋아요 여부는 로그인했을 때만 1회 조회. */
+    @Test
+    void detailCarriesLikeCountAndLikedByMe() {
+        publish(PostVisibility.PUBLIC);
+        stubFound();
+        when(postQueryRepository.findPrevious(10L, 100L, NOW)).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(10L, 100L, NOW)).thenReturn(Optional.empty());
+        TestEntities.with(post, "likeCount", 4);
+        when(postLikeRepository.existsByUserIdAndPostId(STRANGER, 100L)).thenReturn(true);
+        when(postLikeRepository.existsByUserIdAndPostId(OWNER, 100L)).thenReturn(false);
+
+        PostDetailResponse anonymous = service.detail(100L, null);
+        assertThat(anonymous.likeCount()).isEqualTo(4);
+        assertThat(anonymous.likedByMe()).isNull();
+        assertThat(service.detail(100L, STRANGER).likedByMe()).isTrue();
+        assertThat(service.detail(100L, OWNER).likedByMe()).isFalse();
+        verify(postLikeRepository, never()).existsByUserIdAndPostId(org.mockito.ArgumentMatchers.isNull(), anyLong());
     }
 
     @Test

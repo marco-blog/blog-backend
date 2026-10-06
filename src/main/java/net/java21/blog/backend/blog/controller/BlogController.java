@@ -11,8 +11,10 @@ import net.java21.blog.backend.blog.dto.MyBlogsResponse;
 import net.java21.blog.backend.blog.dto.UpdateBlogRequest;
 import net.java21.blog.backend.blog.service.BlogService;
 import net.java21.blog.backend.common.api.ApiResponse;
+import net.java21.blog.backend.common.web.CacheHeaders;
 import net.java21.blog.backend.security.AuthUser;
 import net.java21.blog.backend.security.CurrentUser;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,9 +46,13 @@ public class BlogController {
         return ResponseEntity.created(URI.create("/api/v1/blogs/" + blog.handle())).body(ApiResponse.ok(blog));
     }
 
+    /** 요청한 사람에 따라 {@code subscribedByMe}가 다르므로 공개 GET이지만 {@code Cache-Control: private, no-cache}(002 contracts/api.md). */
     @GetMapping("/api/v1/blogs/{handle}")
-    ApiResponse<BlogResponse> get(@PathVariable String handle) {
-        return ApiResponse.ok(blogService.get(handle));
+    ResponseEntity<ApiResponse<BlogResponse>> get(@CurrentUser(required = false) AuthUser viewer,
+            @PathVariable String handle) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, CacheHeaders.PRIVATE_NO_CACHE)
+                .body(ApiResponse.ok(blogService.get(handle, viewer == null ? null : viewer.userId())));
     }
 
     @PatchMapping("/api/v1/blogs/{handle}")

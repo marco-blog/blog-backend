@@ -11,6 +11,7 @@ import net.java21.blog.backend.blog.dto.BlogLink;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
@@ -30,6 +31,8 @@ class MeQueryServiceTest {
     private UserRepository userRepository;
     @Mock
     private BlogQueryRepository blogQueryRepository;
+    @Mock
+    private NotificationQueryRepository notificationQueryRepository;
     @InjectMocks
     private MeQueryService service;
 
@@ -39,11 +42,12 @@ class MeQueryServiceTest {
         when(userRepository.findById(7L)).thenReturn(Optional.of(user));
         List<BlogLink> blogs = List.of(new BlogLink("marco", "첫째"));
         when(blogQueryRepository.findActiveBlogLinks(7L)).thenReturn(blogs);
+        when(notificationQueryRepository.countUnread(7L)).thenReturn(3L);
 
         MeResponse me = service.me(7L);
 
         assertThat(me).isEqualTo(new MeResponse(7L, "marco@example.com", "마르코", null, null, "USER", "ko",
-                "Asia/Seoul", blogs, null));
+                "Asia/Seoul", blogs, null, 3L));
     }
 
     @Test

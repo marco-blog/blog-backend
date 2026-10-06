@@ -99,6 +99,13 @@ blog:
     trash-purge-cron: "0 30 3 * * *"
     trash-retention: 30d
     purge-batch-size: 500
+    # 오래된 알림 정리(002 research D3): blog.notifications.retention이 지난 알림을 지운다.
+    notification-purge-cron: "0 15 4 * * *"
+  # 알림(002 FR-033, contracts/api.md "프로퍼티").
+  notifications:
+    retention: 90d
+    # 같은 구독자·블로그의 NEW_SUBSCRIBER 알림을 다시 만들지 않는 기간(구독·취소 반복 방지).
+    subscriber-dedup-window: 24h
   # 이미지(US4, research R11). upload-dir·temp-dir·thumbnail-dir는 필수이며 프로필 파일이 정한다(local은 임시 디렉터리 기본값,
   # prod는 환경 변수). 기동 때 세 디렉터리를 만들고 쓸 수 없으면 기동을 멈춘다. 아래는 기본값(MediaProperties와 같다).
   media:

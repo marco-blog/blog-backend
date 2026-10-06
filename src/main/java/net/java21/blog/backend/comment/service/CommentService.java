@@ -12,6 +12,7 @@ import net.java21.blog.backend.comment.dto.CommentAuthor;
 import net.java21.blog.backend.comment.dto.CommentResponse;
 import net.java21.blog.backend.comment.dto.CreateCommentRequest;
 import net.java21.blog.backend.comment.dto.UpdateCommentRequest;
+import net.java21.blog.backend.comment.event.CommentCreatedEvent;
 import net.java21.blog.backend.comment.repository.CommentQueryRepository;
 import net.java21.blog.backend.comment.repository.CommentRepository;
 import net.java21.blog.backend.comment.repository.CommentRow;
@@ -23,6 +24,7 @@ import net.java21.blog.backend.post.repository.PostExposure;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       없으면 행을 지운다. 마지막 답글이 지워지면 자리만 남은 부모도 지운다.</li>
  *   <li>{@code posts.comment_count}는 표시되는 댓글(답글 포함) 수이며 쓰기·삭제와 같은 트랜잭션에서 바꾼다("구현 전 결정 사항" 5번).</li>
  *   <li>내용은 HTML을 받지 않는 일반 텍스트다. 제어 문자만 지우고 그대로 저장하며 front가 출력할 때 이스케이프한다(research R8).</li>
+ *   <li>댓글·답글을 저장하면 {@link CommentCreatedEvent}를 발행한다. 커밋 뒤 블로그 주인에게 알림을 만든다(002 research D3).</li>
  * </ul>
  */
 @Service
@@ -46,13 +49,16 @@ public class CommentService {
     private final UserRepository userRepository;
     private final CommentRepository commentRepository;
     private final CommentQueryRepository queryRepository;
+    private final ApplicationEventPublisher events;
 
     public CommentService(PostRepository postRepository, UserRepository userRepository,
-            CommentRepository commentRepository, CommentQueryRepository queryRepository) {
+            CommentRepository commentRepository, CommentQueryRepository queryRepository,
+            ApplicationEventPublisher events) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.commentRepository = commentRepository;
         this.queryRepository = queryRepository;
+        this.events = events;
     }
 
     /** 글의 댓글 트리(작성순, 답글은 {@code replies}). 쿼리 2회(글, 댓글·작성자) — 댓글 수와 관계없다. */
@@ -77,6 +83,8 @@ public class CommentService {
         CommentResponse response = new CommentResponse(comment.getId(), comment.getContent(), authorOf(author),
                 false, comment.getCreatedAt(), comment.getUpdatedAt(), List.of());
         commentRepository.changeCommentCount(post.getId(), 1);
+        events.publishEvent(new CommentCreatedEvent(comment.getId(), post.getId(), post.getTitle(),
+                post.getBlog().getId(), post.getBlog().getUser().getId(), author.getId()));
         return response;
     }
 

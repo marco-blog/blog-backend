@@ -48,7 +48,8 @@ import org.springframework.test.web.servlet.ResultActions;
 class BlogControllerTest {
 
     private static final BlogResponse MARCO = new BlogResponse("marco", "마르코의 블로그", null, null, true,
-            new BlogResponse.Owner("마르코", null, "자바 개발자"), List.of());
+            new BlogResponse.Owner("마르코", null, "자바 개발자"), List.of(), 3, null, 20,
+            net.java21.blog.backend.blog.domain.FeedContentMode.FULL);
 
     @Autowired
     private MockMvc mvc;
@@ -121,7 +122,7 @@ class BlogControllerTest {
 
     @Test
     void getIsPublicWithOwnerAndEmptyCategories() throws Exception {
-        when(blogService.get("marco")).thenReturn(MARCO);
+        when(blogService.get("marco", null)).thenReturn(MARCO);
 
         mvc.perform(get("/api/v1/blogs/marco"))
                 .andExpect(status().isOk())
@@ -134,12 +135,30 @@ class BlogControllerTest {
                 .andExpect(jsonPath("$.result.owner.profileImageUrl").value(nullValue()))
                 .andExpect(jsonPath("$.result.owner.bio").value("자바 개발자"))
                 .andExpect(jsonPath("$.result.categories").isArray())
-                .andExpect(jsonPath("$.result.categories.length()").value(0));
+                .andExpect(jsonPath("$.result.categories.length()").value(0))
+                .andExpect(jsonPath("$.result.subscriberCount").value(3))
+                .andExpect(jsonPath("$.result.subscribedByMe").value(nullValue()))
+                .andExpect(jsonPath("$.result.feedItemCount").value(20))
+                .andExpect(jsonPath("$.result.feedContentMode").value("FULL"))
+                .andExpect(header().string("Cache-Control", "private, no-cache"));
+    }
+
+    /** 002 T023: 로그인했으면 그 회원으로 구독 여부를 묻는다. 보는 사람마다 다르므로 private, no-cache. */
+    @Test
+    void getPassesViewerForSubscribedByMe() throws Exception {
+        when(blogService.get("marco", 7L)).thenReturn(new BlogResponse("marco", "마르코의 블로그", null, null, true,
+                new BlogResponse.Owner("마르코", null, null), List.of(), 3, true, 20,
+                net.java21.blog.backend.blog.domain.FeedContentMode.FULL));
+
+        mvc.perform(get("/api/v1/blogs/marco").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.subscribedByMe").value(true))
+                .andExpect(header().string("Cache-Control", "private, no-cache"));
     }
 
     @Test
     void getUnknownBlogIs404() throws Exception {
-        when(blogService.get("gone")).thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "x"));
+        when(blogService.get("gone", null)).thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "x"));
         expectError(mvc.perform(get("/api/v1/blogs/gone")), 404, "BLOG_NOT_FOUND");
     }
 

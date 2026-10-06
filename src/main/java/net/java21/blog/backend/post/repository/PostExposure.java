@@ -54,6 +54,14 @@ public final class PostExposure {
                 && p.getBlog().getUser().isActive();
     }
 
+    /**
+     * {@link #listable()}로 이미 거른 목록 행이 본문 노출 가능인지(공개 범위만 보면 된다). 아니면(004 보호 글) 목록에 제목만 준다
+     * ({@code summary}·{@code thumbnailUrl} null, 002 구독 피드·검색).
+     */
+    public static boolean isBodyVisibleListed(PostVisibility visibility) {
+        return visibility == PostVisibility.PUBLIC;
+    }
+
     /** 이미 읽은 글(블로그·작성자 포함)을 주인 외에게 보여도 되는지(상세, 조회수). */
     public static boolean isBodyVisible(Post p) {
         return isListable(p) && p.getVisibility() == PostVisibility.PUBLIC;

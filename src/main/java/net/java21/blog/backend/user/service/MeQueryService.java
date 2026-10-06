@@ -3,6 +3,7 @@ package net.java21.blog.backend.user.service;
 import net.java21.blog.backend.blog.repository.BlogQueryRepository;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.dto.MeResponse;
 import net.java21.blog.backend.user.repository.UserRepository;
@@ -15,10 +16,13 @@ public class MeQueryService {
 
     private final UserRepository userRepository;
     private final BlogQueryRepository blogQueryRepository;
+    private final NotificationQueryRepository notificationQueryRepository;
 
-    public MeQueryService(UserRepository userRepository, BlogQueryRepository blogQueryRepository) {
+    public MeQueryService(UserRepository userRepository, BlogQueryRepository blogQueryRepository,
+            NotificationQueryRepository notificationQueryRepository) {
         this.userRepository = userRepository;
         this.blogQueryRepository = blogQueryRepository;
+        this.notificationQueryRepository = notificationQueryRepository;
     }
 
     /** 회원이 없거나 정지·탈퇴했으면 401 {@code UNAUTHENTICATED}(front는 로그아웃 상태로 본다). */
@@ -29,6 +33,7 @@ public class MeQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED, "Member is not active"));
         return new MeResponse(user.getId(), user.getEmail(), user.getNickname(), user.getBio(), user.profileImageUrl(),
                 user.getRole().name(), user.getLocale(), user.getTimeZone(),
-                blogQueryRepository.findActiveBlogLinks(user.getId()), null);
+                blogQueryRepository.findActiveBlogLinks(user.getId()), null,
+                notificationQueryRepository.countUnread(user.getId()));
     }
 }
