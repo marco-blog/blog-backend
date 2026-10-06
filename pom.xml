@@ -69,7 +69,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- 테스트: DB 테스트는 전용 테스트 MySQL 스키마(환경 변수)로 실행한다. Testcontainers는 쓰지 않는다. -->
+        <!-- 테스트: Repository 테스트는 H2, MySQL 전용 동작만 테스트 MySQL 스키마(환경 변수)로 실행한다. Testcontainers는 쓰지 않는다. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
