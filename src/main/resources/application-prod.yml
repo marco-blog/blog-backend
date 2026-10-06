@@ -1,0 +1,21 @@
+# 운영 프로필. 접속 정보는 환경 변수로만 받는다. 기본값이 없어서 빠지면 기동에 실패한다.
+#   SPRING_DATASOURCE_URL       예) jdbc:mysql://<host>:<port>/<schema>?connectionTimeZone=UTC&characterEncoding=UTF-8
+#   SPRING_DATASOURCE_USERNAME
+#   SPRING_DATASOURCE_PASSWORD
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    show-sql: false
+
+server:
+  forward-headers-strategy: framework
+  error:
+    include-stacktrace: never
+    include-message: never
+
+logging:
+  level:
+    root: INFO

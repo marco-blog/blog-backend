@@ -1,0 +1,17 @@
+# 로컬 개발 프로필(개발 DB cf_u2_d2). 프로필을 지정하지 않으면 local로 실행한다.
+# 실행: ./mvnw spring-boot:run
+# 비밀 값(DB 비밀번호 등)은 이 파일에 쓰지 않고 저장소 루트의 .env 에서 읽는다(커밋 금지, 예시는 .env.example).
+# 환경 변수로 같은 이름(DB_PASSWORD)을 주면 .env 보다 우선한다.
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:mysql://s4.java21.net:13306/cf_u2_d2?connectionTimeZone=UTC&characterEncoding=UTF-8
+    username: cf_u2_d2
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    net.java21.blog: DEBUG

@@ -1,0 +1,12 @@
+# 테스트 프로필: 전용 테스트 MySQL 스키마(Crowfoot cf_u2_d3)를 쓴다. 개발 DB(cf_u2_d2)는 절대 쓰지 않는다.
+#   BLOG_TEST_DATASOURCE_URL       예) jdbc:mysql://s4.java21.net:13306/cf_u2_d3?connectionTimeZone=UTC&characterEncoding=UTF-8
+#   BLOG_TEST_DATASOURCE_USERNAME
+#   BLOG_TEST_DATASOURCE_PASSWORD
+#   BLOG_TEST_ALLOW_CLEAN=true     테스트 시작 때 스키마를 다시 만드는 것을 허용
+# 위 변수가 없으면 DB 테스트는 건너뛴다(@MySqlRepositoryTest).
+# 스키마는 TestSchemaInitializer가 db/schema-mysql.sql 스냅숏으로 JVM당 한 번 다시 만든다.
+spring:
+  datasource:
+    url: ${BLOG_TEST_DATASOURCE_URL:}
+    username: ${BLOG_TEST_DATASOURCE_USERNAME:}
+    password: ${BLOG_TEST_DATASOURCE_PASSWORD:}
