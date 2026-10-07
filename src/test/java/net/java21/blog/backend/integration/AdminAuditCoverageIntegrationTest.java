@@ -22,10 +22,7 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
 
     /** 상태를 바꾸지 않아 기록하지 않는 매핑과 그 이유. */
     private static final Map<String, String> NO_AUDIT = Map.of(
-            "POST /api/v1/admin/release-notes/preview", "Markdown 변환 결과만 돌려준다(저장 없음)",
-            "PATCH /api/v1/admin/reports/{id}/target",
-            "권리 침해 신고에 대상 콘텐츠를 연결만 한다. 처리 결정은 resolve가 REPORT_ACTION·REPORT_DISMISS로 남긴다"
-                    + "(005 data-model에 이 작업의 action 코드가 없음 — marco 확인 대기)");
+            "POST /api/v1/admin/release-notes/preview", "Markdown 변환 결과만 돌려준다(저장 없음)");
 
     /** 한 행의 실제 요청(경로 변수 채움, 본문). */
     private record Call(String path, String body) {
@@ -164,6 +161,16 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                 }),
                 new Row("POST", "/api/v1/admin/users/{id}/unsuspend", AuditActions.USER_UNSUSPEND, () -> new Call(
                         "/api/v1/admin/users/" + suspendTarget.id() + "/unsuspend", "{}")),
+                new Row("PATCH", "/api/v1/admin/reports/{id}/target", AuditActions.REPORT_TARGET_ASSIGN, () -> {
+                    Reply rights = send(HttpMethod.POST, "/api/v1/rights-requests", "{\"targetUrl\":"
+                            + "\"https://elsewhere.example/copied\",\"reason\":\"COPYRIGHT\",\"rightsBasis\":"
+                            + "\"무단 전재\",\"contactEmail\":\"owner@example.com\",\"captchaToken\":\"x\"}", null);
+                    assertThat(rights.status()).as(rights.body()).isEqualTo(202);
+                    long reportId = jdbc.queryForObject("SELECT MAX(id) FROM reports WHERE target_id IS NULL",
+                            Long.class);
+                    return new Call("/api/v1/admin/reports/" + reportId + "/target",
+                            "{\"targetType\":\"POST\",\"targetId\":%d}".formatted(post));
+                }),
                 new Row("POST", "/api/v1/admin/reports/{id}/resolve", AuditActions.REPORT_DISMISS, () -> {
                     reporter = signup("acrep");
                     Reply report = send(HttpMethod.POST, "/api/v1/reports",

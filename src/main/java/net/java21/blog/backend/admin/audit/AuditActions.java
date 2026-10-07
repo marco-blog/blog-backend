@@ -55,6 +55,8 @@ public final class AuditActions {
     public static final String USER_UNSUSPEND = "USER_UNSUSPEND";
     public static final String REPORT_ACTION = "REPORT_ACTION";
     public static final String REPORT_DISMISS = "REPORT_DISMISS";
+    /** 대상 미정 권리 침해 신고에 대상 콘텐츠를 연결(PATCH /admin/reports/{id}/target). target REPORT */
+    public static final String REPORT_TARGET_ASSIGN = "REPORT_TARGET_ASSIGN";
     public static final String CONTENT_HIDE = "CONTENT_HIDE";
     public static final String CONTENT_UNHIDE = "CONTENT_UNHIDE";
     public static final String BANNED_WORD_CREATE = "BANNED_WORD_CREATE";
@@ -88,7 +90,8 @@ public final class AuditActions {
             SETTING_CHANGE,
             RELEASE_NOTE_CREATE, RELEASE_NOTE_UPDATE, RELEASE_NOTE_PUBLISH, RELEASE_NOTE_UNPUBLISH,
             RELEASE_NOTE_DELETE,
-            USER_SUSPEND, USER_UNSUSPEND, REPORT_ACTION, REPORT_DISMISS, CONTENT_HIDE, CONTENT_UNHIDE,
+            USER_SUSPEND, USER_UNSUSPEND, REPORT_ACTION, REPORT_DISMISS, REPORT_TARGET_ASSIGN,
+            CONTENT_HIDE, CONTENT_UNHIDE,
             BANNED_WORD_CREATE, BANNED_WORD_UPDATE, BANNED_WORD_DELETE,
             USER_BLOG_LIMIT_CHANGE, ROLE_GRANT, ROLE_REVOKE,
             EXTERNAL_BLOG_CREATE, EXTERNAL_BLOG_APPROVE, EXTERNAL_BLOG_REJECT, EXTERNAL_BLOG_UPDATE,

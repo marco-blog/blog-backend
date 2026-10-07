@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
 /**
- * 006 US2(T024·T041) 통합: 대시보드(TTL 0이라 바로 반영), 예약어·서비스 설정(비밀 값 없음), 콘텐츠 검색, 작업 기록 목록·상세(요청 IP는
+ * 006 US2(T024·T041·T039) 통합: 대시보드(TTL 0이라 바로 반영, 처리 대기 신고 수는 005 신고 묶음 수), 예약어·서비스 설정(비밀 값 없음), 콘텐츠 검색, 작업 기록 목록·상세(요청 IP는
  * 최고 관리자만)·작업 목록을 실제 컨텍스트에서 확인한다.
  */
 class AdminConsoleReadIntegrationTest extends AdminConsoleIntegrationSupport {
@@ -25,7 +25,21 @@ class AdminConsoleReadIntegrationTest extends AdminConsoleIntegrationSupport {
         assertThat(after.<Integer>read("$.result.today.signups")).isEqualTo(signups + 1);
         assertThat(after.<List<Object>>read("$.result.trend")).hasSize(7);
         assertThat(after.<String>read("$.result.timeZone")).isNotBlank();
-        assertThat(after.body()).contains("\"pendingReports\":null");
+        // 006 T039: 대기 신고 수는 005 신고 묶음 수(캐시 없음) — 신고 1건 뒤 1 늘어난다
+        int pending = after.read("$.result.pendingReports");
+        Member writer = signup("crrep");
+        Member reporter = signup("crrpt");
+        Reply draft = send(HttpMethod.POST, "/api/v1/blogs/" + writer.handle() + "/posts/drafts",
+                "{\"title\":\"신고될 글\",\"contentMarkdown\":\"본문\",\"tags\":[]}", writer.cookie());
+        long postId = ((Number) draft.read("$.result.id")).longValue();
+        assertThat(send(HttpMethod.POST, "/api/v1/posts/" + postId + "/publish", "{\"visibility\":\"PUBLIC\"}",
+                writer.cookie()).status()).isEqualTo(200);
+        Reply report = send(HttpMethod.POST, "/api/v1/reports",
+                "{\"targetType\":\"POST\",\"targetId\":%d,\"reason\":\"SPAM\"}".formatted(postId),
+                reporter.cookie());
+        assertThat(report.status()).as(report.body()).isEqualTo(201);
+        assertThat(send(HttpMethod.GET, "/api/v1/admin/dashboard", null, admin.cookie())
+                .<Integer>read("$.result.pendingReports")).isEqualTo(pending + 1);
 
         Reply handles = send(HttpMethod.GET, "/api/v1/admin/reserved-handles", null, admin.cookie());
         assertThat(handles.<List<String>>read("$.result")).hasSize(ReservedHandles.NAMES.size()).isSorted()
