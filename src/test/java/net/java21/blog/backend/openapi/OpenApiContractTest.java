@@ -211,7 +211,12 @@ class OpenApiContractTest {
             "GET /api/v1/admin/users",
             "GET /api/v1/admin/users/{id}",
             "POST /api/v1/admin/users/{id}/suspend",
-            "POST /api/v1/admin/users/{id}/unsuspend");
+            "POST /api/v1/admin/users/{id}/unsuspend",
+            // 005 금칙어(US2)
+            "GET /api/v1/admin/banned-words",
+            "POST /api/v1/admin/banned-words",
+            "PATCH /api/v1/admin/banned-words/{id}",
+            "DELETE /api/v1/admin/banned-words/{id}");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
