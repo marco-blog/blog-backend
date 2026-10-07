@@ -47,7 +47,10 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "blog.admin.dashboard-cache-ttl=0s",
-        "blog.portal.cache-ttl=0s"
+        "blog.portal.cache-ttl=0s",
+        // 005 가입·발행 한도(IP당 1시간 5회 등)보다 많은 회원·글을 같은 IP에서 만든다.
+        "blog.ratelimit.signup-per-ip-per-hour=100000",
+        "blog.ratelimit.post-publish-per-hour=100000"
 })
 abstract class AdminConsoleIntegrationSupport {
 

@@ -15,6 +15,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * {@code notice}(004 FR-059)는 true면 공지, false면 해제, null이면 지금 값 유지(새 글은 false).
  * {@code password}(004 FR-062)는 PROTECTED일 때 보호 글 비밀번호(4~64자, 이미 보호 글이면 생략 가능),
  * {@code scheduledAt}(004 FR-064)이 미래면 예약 발행, 없거나 지금 이하면 즉시 발행. 검증은 {@code PostPublishService}가 한다.
+ * {@code trackbackUrls}(005 FR-052)는 보낼 트랙백 주소(최대 10개, PUBLIC 글만).
  */
 public record PublishSettingsRequest(
         @NotNull PostVisibility visibility,
@@ -25,7 +26,15 @@ public record PublishSettingsRequest(
         Long topicId,
         Boolean notice,
         String password,
-        Instant scheduledAt) {
+        Instant scheduledAt,
+        List<String> trackbackUrls) {
+
+    /** 004 호출부용(트랙백 보내기 없음). */
+    public PublishSettingsRequest(PostVisibility visibility, String thumbnailMediaKey, Boolean commentEnabled,
+            Long categoryId, List<String> tags, Long topicId, Boolean notice, String password, Instant scheduledAt) {
+        this(visibility, thumbnailMediaKey, commentEnabled, categoryId, tags, topicId, notice, password, scheduledAt,
+                null);
+    }
 
     /** 001~003 호출부용(공지는 그대로). */
     public PublishSettingsRequest(PostVisibility visibility, String thumbnailMediaKey, Boolean commentEnabled,
@@ -44,6 +53,6 @@ public record PublishSettingsRequest(
     public String toString() {
         return "PublishSettingsRequest[visibility=" + visibility + ", categoryId=" + categoryId + ", topicId="
                 + topicId + ", notice=" + notice + ", password=" + (password == null ? null : "****")
-                + ", scheduledAt=" + scheduledAt + "]";
+                + ", scheduledAt=" + scheduledAt + ", trackbackUrls=" + trackbackUrls + "]";
     }
 }

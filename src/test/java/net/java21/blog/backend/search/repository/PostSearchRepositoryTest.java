@@ -39,7 +39,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 서비스 전체 검색(T060, FR-035, AS1·2, SC-004, research D4). FULLTEXT ngram은 H2에 없으므로 테스트 MySQL에서만 돈다.
- * 제목·본문·태그 각각의 일치, 두 낱말 AND, 노출 매트릭스 001 행 전부(PRIVATE·DRAFT·DELETED·작성자 SUSPENDED·WITHDRAWN·삭제된 블로그) 제외,
+ * 제목·본문·태그 각각의 일치, 두 낱말 AND, 노출 매트릭스 001 행 전부(PRIVATE·DRAFT·DELETED·작성자 SUSPENDED·WITHDRAWN·삭제된 블로그)와 005 HIDDEN 제외,
  * 발행 최신순, 페이지·전체 수, 블로그 handle·title, 행마다 본문 노출 여부, 쿼리 수 고정(목록 1 + 수 1).
  * InnoDB FULLTEXT는 커밋된 행만 찾으므로 테스트 트랜잭션 없이 저장·커밋하고 끝에 지운다. 다른 테스트의 데이터와 섞이지 않게
  * 실행마다 새로 만든 낱말로 검색한다(영어 불용어 a·i가 들어간 2-gram은 색인되지 않으므로 그 두 글자는 쓰지 않는다).
@@ -141,6 +141,8 @@ class PostSearchRepositoryTest {
             postIds.add(draft.getId());
             Post trashed = post(blog, "휴지통 " + word, "본문", PostVisibility.PUBLIC, 3);
             trashed.moveToTrash(T0.plusSeconds(600));
+            // 005 관리자 숨김(HIDDEN)
+            post(blog, "숨긴 글 " + word, "본문", PostVisibility.PUBLIC, 7).hide();
             post(blog(user(UserStatus.SUSPENDED), "정지"), "정지 회원 " + word, "본문", PostVisibility.PUBLIC, 4);
             post(blog(user(UserStatus.WITHDRAWN), "탈퇴"), "탈퇴 회원 " + word, "본문", PostVisibility.PUBLIC, 5);
             Blog deleted = blog(user(UserStatus.ACTIVE), "삭제된 블로그");

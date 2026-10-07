@@ -17,6 +17,10 @@ import net.java21.blog.backend.post.repository.ScheduledPublishRepository;
 import net.java21.blog.backend.support.JpaFixtures;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
+import net.java21.blog.backend.trackback.TrackbackProperties;
+import net.java21.blog.backend.trackback.domain.TrackbackPingLog;
+import net.java21.blog.backend.trackback.service.TrackbackSendRequested;
+import net.java21.blog.backend.trackback.service.TrackbackSendService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +31,8 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -37,13 +43,19 @@ import org.springframework.transaction.support.TransactionTemplate;
 @JpaRepositoryTest
 @ExtendWith(OutputCaptureExtension.class)
 @Import(ScheduledPublishJobTest.Config.class)
+@RecordApplicationEvents
 class ScheduledPublishJobTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T03:30:00Z");
 
     @TestConfiguration(proxyBeanMethods = false)
-    @Import(ScheduledPublishRepository.class)
+    @Import({ScheduledPublishRepository.class, TrackbackSendService.class})
     static class Config {
+
+        @Bean
+        TrackbackProperties trackbackProperties() {
+            return TrackbackProperties.defaults();
+        }
 
         @Bean
         @Primary
@@ -58,9 +70,9 @@ class ScheduledPublishJobTest {
 
         @Bean
         ScheduledPublishJob scheduledPublishJob(ScheduledPublishRepository repository,
-                TransactionTemplate transactionTemplate, MutableClock clock) {
+                TransactionTemplate transactionTemplate, TrackbackSendService trackbacks, MutableClock clock) {
             return new ScheduledPublishJob(repository, transactionTemplate,
-                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock);
+                    new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), trackbacks, clock);
         }
     }
 
@@ -70,6 +82,8 @@ class ScheduledPublishJobTest {
     private EntityManager em;
     @Autowired
     private MutableClock clock;
+    @Autowired
+    private ApplicationEvents events;
 
     private JpaFixtures fx;
     private Blog blog;
@@ -127,5 +141,25 @@ class ScheduledPublishJobTest {
         Post published = em.find(Post.class, post.getId());
         assertThat(published.getStatus()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(Duration.between(NOW.plusSeconds(20), published.getPublishedAt())).isLessThan(Duration.ofMinutes(1));
+    }
+
+    @Test
+    void publishedPostsSendTheirPendingTrackbacksAfterCommitButFuturePostsKeepThem() {
+        Post due = fx.scheduled(blog, "보낼 글", PostVisibility.PUBLIC, NOW.minusSeconds(10));
+        Post future = fx.scheduled(blog, "나중 글", PostVisibility.PUBLIC, NOW.plusSeconds(600));
+        TrackbackPingLog dueLog = new TrackbackPingLog(due, "https://other.example/tb/1");
+        TrackbackPingLog futureLog = new TrackbackPingLog(future, "https://other.example/tb/2");
+        em.persist(dueLog);
+        em.persist(futureLog);
+        fx.flushAndClear();
+
+        assertThat(job.publishDue()).isEqualTo(1);
+
+        assertThat(events.stream(TrackbackSendRequested.class))
+                .singleElement()
+                .satisfies(e -> {
+                    assertThat(e.postId()).isEqualTo(due.getId());
+                    assertThat(e.logIds()).containsExactly(dueLog.getId());
+                });
     }
 }

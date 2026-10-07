@@ -21,6 +21,10 @@ import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.security.AuthProperties;
+import net.java21.blog.backend.spam.RateLimiter;
+import net.java21.blog.backend.spam.captcha.CaptchaProperties;
+import net.java21.blog.backend.spam.captcha.LoginCaptchaPolicy;
+import net.java21.blog.backend.spam.captcha.TestCaptchaVerifier;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
@@ -39,6 +43,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 /** 로그인과 잠금(T051, FR-004, FR-007, FR-009, R12), 로그인 기록(T139, FR-139: 성공·실패마다, 없는 이메일은 회원 없이). */
 @ExtendWith(MockitoExtension.class)
 class LoginServiceTest {
+
+    /** 반복 실패 시험은 CAPTCHA(test 토큰)를 함께 보낸다. 필요하지 않을 때 온 토큰은 검사하지 않는다. */
+    private static final String TOKEN = "e2e-pass";
+
+    private final LoginCaptchaPolicy captchaPolicy = new LoginCaptchaPolicy(new RateLimiter(),
+            new TestCaptchaVerifier("e2e-pass"), CaptchaProperties.of(CaptchaProperties.Provider.TEST));
 
     private static final AuthProperties PROPS = new AuthProperties(Duration.ofMinutes(30), Duration.ofHours(4),
             Duration.ofDays(7), Duration.ofSeconds(10), "test-only-jwt-secret-not-for-production-0000", 5,
@@ -64,7 +74,7 @@ class LoginServiceTest {
     @BeforeEach
     void setUp() {
         service = new LoginService(userRepository, blogQueryRepository, TestEntities.HASHER, passwordEncoder,
-                refreshTokenService, loginHistoryService, PROPS, clock);
+                refreshTokenService, loginHistoryService, PROPS, captchaPolicy, clock);
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -101,7 +111,7 @@ class LoginServiceTest {
 
         userExists();
         when(passwordEncoder.matches("wrong1234", "$2a$hash")).thenReturn(false);
-        expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+        expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         assertThat(user.getFailedLoginCount()).isEqualTo(1);
         verify(refreshTokenService, never()).startSession(any());
     }
@@ -111,20 +121,20 @@ class LoginServiceTest {
         userExists();
         when(passwordEncoder.matches(eq("wrong1234"), anyString())).thenReturn(false);
         for (int i = 1; i <= 4; i++) {
-            expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+            expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         }
-        expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.ACCOUNT_LOCKED);
+        expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.ACCOUNT_LOCKED);
         assertThat(user.getLockedUntil()).isEqualTo(clock.instant().plus(Duration.ofMinutes(10)));
 
         // 잠금 중에는 맞는 비밀번호도 거부한다.
         clock.advance(Duration.ofMinutes(9));
-        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.ACCOUNT_LOCKED);
+        expect(new LoginRequest("marco@example.com", "password1", TOKEN), ErrorCode.ACCOUNT_LOCKED);
         verify(passwordEncoder, never()).matches(eq("password1"), anyString());
 
         // 10분이 지나면 다시 로그인할 수 있다.
         clock.advance(Duration.ofMinutes(1));
         when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
-        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1", TOKEN));
         assertThat(user.getLockedUntil()).isNull();
         assertThat(user.getFailedLoginCount()).isZero();
     }
@@ -135,10 +145,10 @@ class LoginServiceTest {
         when(passwordEncoder.matches("wrong1234", "$2a$hash")).thenReturn(false);
         when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
         for (int i = 0; i < 4; i++) {
-            expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+            expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         }
-        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
-        expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1", TOKEN));
+        expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         assertThat(user.getFailedLoginCount()).isEqualTo(1);
     }
 
@@ -147,7 +157,7 @@ class LoginServiceTest {
     void suspendedAndWithdrawnMembersCannotLogIn(UserStatus status) {
         userExists();
         TestEntities.with(user, "status", status);
-        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.INVALID_CREDENTIALS);
+        expect(new LoginRequest("marco@example.com", "password1", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         verify(refreshTokenService, never()).startSession(any());
     }
 
@@ -160,10 +170,10 @@ class LoginServiceTest {
         userExists();
         when(passwordEncoder.matches("wrong1234", "$2a$hash")).thenReturn(false);
         when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
-        expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+        expect(new LoginRequest("marco@example.com", "wrong1234", TOKEN), ErrorCode.INVALID_CREDENTIALS);
         verify(loginHistoryService).record(user, false, CLIENT);
 
-        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1", TOKEN));
         verify(loginHistoryService).record(user, true, CLIENT);
     }
 
@@ -171,14 +181,49 @@ class LoginServiceTest {
     void lockedAndInactiveAttemptsAreRecordedAsFailures() {
         userExists();
         TestEntities.with(user, "lockedUntil", clock.instant().plusSeconds(60));
-        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.ACCOUNT_LOCKED);
+        expect(new LoginRequest("marco@example.com", "password1", TOKEN), ErrorCode.ACCOUNT_LOCKED);
 
         TestEntities.with(user, "lockedUntil", null);
         TestEntities.with(user, "status", UserStatus.WITHDRAWN);
-        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.INVALID_CREDENTIALS);
+        expect(new LoginRequest("marco@example.com", "password1", TOKEN), ErrorCode.INVALID_CREDENTIALS);
 
         verify(loginHistoryService, org.mockito.Mockito.times(2)).record(user, false, CLIENT);
         verify(loginHistoryService, never()).record(any(), eq(true), any());
+    }
+
+    @Test
+    void threeFailuresByEmailRequireCaptchaBeforePasswordCheck() {
+        userExists();
+        when(passwordEncoder.matches("wrong1234", "$2a$hash")).thenReturn(false);
+        for (int i = 0; i < 3; i++) {
+            expect(new LoginRequest("marco@example.com", "wrong1234"), ErrorCode.INVALID_CREDENTIALS);
+        }
+        expect(new LoginRequest("marco@example.com", "password1"), ErrorCode.CAPTCHA_REQUIRED);
+        expect(new LoginRequest("marco@example.com", "password1", "wrong-token"), ErrorCode.CAPTCHA_FAILED);
+        // CAPTCHA 거부는 비밀번호 확인 전이라 잠금 수를 늘리지 않는다.
+        assertThat(user.getFailedLoginCount()).isEqualTo(3);
+        verify(passwordEncoder, never()).matches(eq("password1"), anyString());
+
+        when(passwordEncoder.matches("password1", "$2a$hash")).thenReturn(true);
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1", TOKEN));
+        // 성공하면 두 카운터가 초기화되어 다음 로그인에는 CAPTCHA가 필요 없다.
+        service.login(CLIENT, new LoginRequest("marco@example.com", "password1"));
+    }
+
+    @Test
+    void unknownEmailsCountByIpSoExistenceIsNotRevealed() {
+        when(userRepository.findByEmailHash(anyString())).thenReturn(Optional.empty());
+        for (int i = 0; i < 3; i++) {
+            expect(new LoginRequest("nobody" + i + "@example.com", "password1"), ErrorCode.INVALID_CREDENTIALS);
+        }
+        // 같은 IP의 다른 이메일도 CAPTCHA가 필요하다.
+        expect(new LoginRequest("someone@example.com", "password1"), ErrorCode.CAPTCHA_REQUIRED);
+        LoginService other = new LoginService(userRepository, blogQueryRepository, TestEntities.HASHER,
+                passwordEncoder, refreshTokenService, loginHistoryService, PROPS, captchaPolicy, clock);
+        assertThatThrownBy(() -> other.login(new ClientInfo("198.51.100.1", "UA"),
+                new LoginRequest("someone@example.com", "password1")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
     }
 
     private void expect(LoginRequest request, ErrorCode code) {

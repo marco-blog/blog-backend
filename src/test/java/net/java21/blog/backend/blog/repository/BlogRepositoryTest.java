@@ -67,6 +67,8 @@ class BlogRepositoryTest {
     private MediaReferenceService mediaReferences;
     @MockitoBean
     private TopicService topicService;
+    @MockitoBean
+    private net.java21.blog.backend.spam.BannedWordMatcher bannedWords;
 
     private User marco;
     private User other;

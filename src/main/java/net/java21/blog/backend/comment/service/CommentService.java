@@ -24,13 +24,13 @@ import net.java21.blog.backend.common.security.AttemptTarget;
 import net.java21.blog.backend.common.text.PlainTextNormalizer;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.dto.GuestCredentials;
-import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import net.java21.blog.backend.guest.service.GuestAuthorService;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.repository.PostExposure;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.post.service.PostUnlockCheck;
+import net.java21.blog.backend.spam.WriteGuard;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -54,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>내용은 HTML을 받지 않는 일반 텍스트다. 제어 문자만 지우고 그대로 저장하며 front가 출력할 때 이스케이프한다(research R8).</li>
  *   <li>005: 관리자가 숨긴 댓글(HIDDEN)은 작성 회원에게만 내용과 {@code hidden: true}로, 다른 사람에게는 보이는 답글이 있을 때만
  *       빈 자리로 보인다. 숨긴 댓글은 고치거나 지우거나 답글을 달 수 없다(없는 댓글과 같은 404).</li>
+ *   <li>005: 새 댓글은 {@link WriteGuard}(비회원 CAPTCHA·속도·금칙어·반복 내용), 수정은 금칙어만 검사한다(FR-141~144).</li>
  *   <li>댓글·답글을 저장하면 {@link CommentCreatedEvent}를 발행한다. 커밋 뒤 블로그 주인에게 알림을 만든다(002 research D3).</li>
  * </ul>
  */
@@ -67,10 +68,12 @@ public class CommentService {
     private final ApplicationEventPublisher events;
     private final GuestAuthorService guestAuthors;
     private final BlogBlockPolicy blockPolicy;
+    private final WriteGuard writeGuard;
 
     public CommentService(PostRepository postRepository, UserRepository userRepository,
             CommentRepository commentRepository, CommentQueryRepository queryRepository,
-            ApplicationEventPublisher events, GuestAuthorService guestAuthors, BlogBlockPolicy blockPolicy) {
+            ApplicationEventPublisher events, GuestAuthorService guestAuthors, BlogBlockPolicy blockPolicy,
+            WriteGuard writeGuard) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.commentRepository = commentRepository;
@@ -78,6 +81,7 @@ public class CommentService {
         this.events = events;
         this.guestAuthors = guestAuthors;
         this.blockPolicy = blockPolicy;
+        this.writeGuard = writeGuard;
     }
 
     /** 글의 댓글 트리(작성순, 답글은 {@code replies}). 쿼리 2회(글, 댓글·작성자) — 댓글 수와 관계없다. */
@@ -106,10 +110,12 @@ public class CommentService {
                 parent == null ? null : parent.isSecret());
         Comment comment;
         AuthorResponse author;
+        String ip = client == null ? null : client.ip();
         if (userId == null) {
             guestAuthors.requireGuestAllowed(post.getBlog());
-            GuestCredentials guest = guestAuthors.newGuest(request.guestName(), request.guestPassword(), client,
-                    GuestWriteKind.COMMENT);
+            content = writeGuard.guardNew(WriteGuard.Kind.COMMENT, WriteGuard.Writer.guest(ip), content,
+                    request.captchaToken(), request.guestName());
+            GuestCredentials guest = guestAuthors.newGuest(request.guestName(), request.guestPassword(), client);
             comment = commentRepository.save(Comment.byGuest(post, parent, guest.name(), guest.passwordHash(),
                     guest.ip(), content, secret));
             author = AuthorResponse.guest(guest.name());
@@ -118,6 +124,8 @@ public class CommentService {
                     .filter(User::isActive)
                     .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED, "Inactive member: " + userId));
             blockPolicy.requireNotBlocked(post.getBlog().getId(), userId);
+            content = writeGuard.guardNew(WriteGuard.Kind.COMMENT, WriteGuard.Writer.member(member, ip), content,
+                    null, null);
             Comment created = new Comment(post, member, parent, content);
             created.changeSecret(secret);
             comment = commentRepository.save(created);
@@ -149,7 +157,7 @@ public class CommentService {
         } else {
             requireAuthor(comment, userId);
         }
-        comment.edit(normalize(request.content()));
+        comment.edit(writeGuard.guardEdit(normalize(request.content())));
         if (request.secret() != null) {
             comment.changeSecret(request.secret());
         }

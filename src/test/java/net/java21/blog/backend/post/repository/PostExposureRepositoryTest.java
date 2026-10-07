@@ -2,6 +2,11 @@ package net.java21.blog.backend.post.repository;
 
 import net.java21.blog.backend.stats.BlogCalendar;
 import net.java21.blog.backend.stats.StatsProperties;
+import net.java21.blog.backend.config.SiteProperties;
+import net.java21.blog.backend.trackback.TrackbackProperties;
+import net.java21.blog.backend.trackback.TrackbackUrls;
+import net.java21.blog.backend.trackback.repository.TrackbackQueryRepository;
+import net.java21.blog.backend.trackback.service.TrackbackSendService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
 import static net.java21.blog.backend.post.domain.QPost.post;
@@ -54,9 +59,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 class PostExposureRepositoryTest {
 
     @TestConfiguration(proxyBeanMethods = false)
-    @EnableConfigurationProperties(StatsProperties.class)
+    @EnableConfigurationProperties({StatsProperties.class, SiteProperties.class, TrackbackProperties.class})
     @Import({PostQueryRepository.class, PostService.class, PostAccess.class, BlogAccess.class, CategoryAccess.class,
-            TagQueryRepository.class, BlogCalendar.class})
+            TagQueryRepository.class, BlogCalendar.class, TrackbackQueryRepository.class, TrackbackUrls.class,
+            TrackbackSendService.class})
     static class Services {
     }
 
@@ -262,8 +268,8 @@ class PostExposureRepositoryTest {
         em.clear();
         queryCounter.reset();
         PostDetailResponse detail = postService.detail(target.getId(), null);
-        // 글(블로그·주인·카테고리 fetch join), 태그, 이전, 다음
-        assertThat(queryCounter.count()).isEqualTo(4);
+        // 글(블로그·주인·카테고리 fetch join), 태그, 이전, 다음, 트랙백 수(005)
+        assertThat(queryCounter.count()).isEqualTo(5);
         assertThat(detail.author().nickname()).isEqualTo("marco");
         assertThat(detail.blogHandle()).isEqualTo("marco");
         assertThat(detail.prev()).isNotNull();

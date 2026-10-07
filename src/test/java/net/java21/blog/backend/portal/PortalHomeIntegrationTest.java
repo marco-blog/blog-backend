@@ -49,7 +49,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
         "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "blog.portal.cache-ttl=0s"
+        "blog.portal.cache-ttl=0s",
+        // 005 발행·가입 한도보다 많은 글·회원을 같은 IP에서 만든다.
+        "blog.ratelimit.post-publish-per-hour=1000",
+        "blog.ratelimit.signup-per-ip-per-hour=1000"
 })
 class PortalHomeIntegrationTest {
 

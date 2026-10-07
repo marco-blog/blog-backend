@@ -70,6 +70,10 @@ class PostServiceTest {
     private TagQueryRepository tagQueryRepository;
     @Mock
     private PostLikeRepository postLikeRepository;
+    @Mock
+    private net.java21.blog.backend.trackback.repository.TrackbackQueryRepository trackbackQueryRepository;
+    @Mock
+    private net.java21.blog.backend.trackback.service.TrackbackSendService trackbackSendService;
 
     private PostService service;
     private User owner;
@@ -80,7 +84,10 @@ class PostServiceTest {
     void setUp() {
         service = new PostService(postRepository, postDraftRepository, postQueryRepository,
                 new PostAccess(postRepository), new BlogAccess(blogRepository), new CategoryAccess(categoryRepository),
-                tagQueryRepository, postLikeRepository, Clock.fixed(NOW, ZoneOffset.UTC),
+                tagQueryRepository, postLikeRepository, trackbackQueryRepository,
+                new net.java21.blog.backend.trackback.TrackbackUrls(
+                        new net.java21.blog.backend.config.SiteProperties("https://blog.java21.net")),
+                trackbackSendService, Clock.fixed(NOW, ZoneOffset.UTC),
                 new BlogCalendar(StatsProperties.defaults(), Clock.fixed(NOW, ZoneOffset.UTC)));
         owner = TestEntities.user(OWNER);
         blog = TestEntities.blog(10L, owner, "marco");
@@ -262,6 +269,7 @@ class PostServiceTest {
         assertThat(post.getStatusBeforeDelete()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(post.getDeletedAt()).isEqualTo(NOW);
         assertThat(post.getVisibility()).isEqualTo(PostVisibility.PRIVATE);
+        verify(trackbackSendService).discardPending(java.util.List.of(100L));
     }
 
     @Test
@@ -334,6 +342,7 @@ class PostServiceTest {
         assertThat(post.getScheduledAt()).isNull();
         assertThat(summary.status()).isEqualTo(PostStatus.DRAFT);
         assertThat(summary.scheduledAt()).isNull();
+        verify(trackbackSendService).discardPending(java.util.List.of(100L));
     }
 
     @Test
@@ -405,5 +414,37 @@ class PostServiceTest {
 
     private void stubFound() {
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
+    }
+
+    // ---- 005 US3 T088: 트랙백 주소·수 ----
+
+    @Test
+    void trackbackUrlOnlyWhenBodyVisibleAndBlogAcceptsAndCountForPublishedPosts() {
+        publish(PostVisibility.PUBLIC);
+        stubFound();
+        when(trackbackQueryRepository.countVisible(100L)).thenReturn(2L);
+
+        var detail = service.detail(100L, null);
+        assertThat(detail.trackbackUrl()).isEqualTo("https://blog.java21.net/marco/100/trackback");
+        assertThat(detail.trackbackCount()).isEqualTo(2L);
+
+        blog.changeTrackbackEnabled(false);
+        var off = service.detail(100L, null);
+        assertThat(off.trackbackUrl()).as("받기를 꺼도 받은 것은 센다").isNull();
+        assertThat(off.trackbackCount()).isEqualTo(2L);
+    }
+
+    @Test
+    void privateAndDraftPostsHaveNoTrackbackUrlAndDraftsAreNotCounted() {
+        publish(PostVisibility.PRIVATE);
+        stubFound();
+        assertThat(service.detail(100L, OWNER).trackbackUrl()).isNull();
+
+        Post draft = TestEntities.post(101L, blog, "임시");
+        when(postRepository.findWithBlogAndOwner(101L)).thenReturn(Optional.of(draft));
+        var detail = service.detail(101L, OWNER);
+        assertThat(detail.trackbackUrl()).isNull();
+        assertThat(detail.trackbackCount()).isZero();
+        verify(trackbackQueryRepository, org.mockito.Mockito.never()).countVisible(101L);
     }
 }
