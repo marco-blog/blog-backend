@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Instant;
 import java.util.List;
 
-import net.java21.blog.backend.comment.dto.CommentAuthor;
+import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.comment.dto.CommentResponse;
 import net.java21.blog.backend.comment.dto.CreateCommentRequest;
 import net.java21.blog.backend.comment.dto.UpdateCommentRequest;
@@ -41,12 +41,12 @@ import org.springframework.test.web.servlet.MockMvc;
 class CommentControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
-    private static final CommentResponse REPLY = new CommentResponse(2L, "답글", new CommentAuthor(1L, "주인", null),
+    private static final CommentResponse REPLY = new CommentResponse(2L, "답글", AuthorResponse.member(1L, "주인", null),
             false, NOW, NOW, List.of());
     private static final CommentResponse PLACEHOLDER = new CommentResponse(1L, null, null, true, NOW, NOW,
             List.of(REPLY));
     private static final CommentResponse CREATED = new CommentResponse(3L, "<b>안녕</b>",
-            new CommentAuthor(2L, "작성자", null), false, NOW, NOW, List.of());
+            AuthorResponse.member(2L, "작성자", null), false, NOW, NOW, List.of());
 
     @Autowired
     private MockMvc mvc;

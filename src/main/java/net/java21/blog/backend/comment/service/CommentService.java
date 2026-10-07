@@ -8,7 +8,7 @@ import java.util.Map;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.comment.domain.CommentStatus;
-import net.java21.blog.backend.comment.dto.CommentAuthor;
+import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.comment.dto.CommentResponse;
 import net.java21.blog.backend.comment.dto.CreateCommentRequest;
 import net.java21.blog.backend.comment.dto.UpdateCommentRequest;
@@ -167,8 +167,8 @@ public class CommentService {
         return new BusinessException(ErrorCode.COMMENT_NOT_FOUND, "Comment not found: " + commentId);
     }
 
-    private static CommentAuthor authorOf(User user) {
-        return user == null ? null : new CommentAuthor(user.getId(), user.getNickname(), user.profileImageUrl());
+    private static AuthorResponse authorOf(User user) {
+        return user == null ? null : AuthorResponse.member(user.getId(), user.getNickname(), user.profileImageUrl());
     }
 
     /** 작성순 행 → 1단계 트리. 답글이 하나도 남지 않은 삭제 자리는 뺀다. */
@@ -196,7 +196,7 @@ public class CommentService {
         if (row.status() != CommentStatus.ACTIVE) {
             return new CommentResponse(row.id(), null, null, true, row.createdAt(), row.updatedAt(), replies);
         }
-        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(),
+        AuthorResponse author = row.userId() == null ? null : AuthorResponse.member(row.userId(), row.nickname(),
                 Media.urlOf(row.profileMediaKey()));
         return new CommentResponse(row.id(), row.content(), author, false, row.createdAt(), row.updatedAt(),
                 replies);

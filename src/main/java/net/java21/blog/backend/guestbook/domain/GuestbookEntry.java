@@ -116,7 +116,9 @@ public class GuestbookEntry extends BaseTimeEntity {
 
     /** 내용·비밀 여부를 고친다. {@code secret}이 null이면 그대로 둔다. */
     public void edit(String content, Boolean secret) {
-        this.content = content;
+        if (content != null) {
+            this.content = content;
+        }
         if (secret != null) {
             this.secret = secret;
         }

@@ -19,12 +19,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
-import net.java21.blog.backend.comment.dto.CommentAuthor;
+import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.manage.dto.BulkAction;
 import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
+import net.java21.blog.backend.guestbook.dto.GuestbookEntryResponse;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
 import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
@@ -72,7 +73,7 @@ class ManageControllerTest {
     private ManageCommentService commentService;
 
     private static final ManageCommentResponse COMMENT = new ManageCommentResponse(7L, "좋은 글",
-            new CommentAuthor(2L, "작성자", null), false, NOW, NOW, 6L, "글");
+            AuthorResponse.member(2L, "작성자", null), false, NOW, NOW, 6L, "글");
 
     @Test
     void comments() throws Exception {
@@ -105,7 +106,8 @@ class ManageControllerTest {
     @Test
     void dashboard() throws Exception {
         when(dashboardService.dashboard(1L, "marco")).thenReturn(new DashboardResponse(2, List.of(LIVE), 3,
-                List.of(COMMENT)));
+                List.of(COMMENT), 1, List.of(new GuestbookEntryResponse(9L, "비밀 인사", true, false,
+                        AuthorResponse.guest("손님"), NOW, NOW, List.of()))));
 
         mvc.perform(get("/api/v1/blogs/marco/manage/dashboard").cookie(authCookies.user(1L)))
                 .andExpect(status().isOk())
@@ -115,7 +117,11 @@ class ManageControllerTest {
                 .andExpect(jsonPath("$.result.recentPosts[0].deletedAt").doesNotExist())
                 .andExpect(jsonPath("$.result.newComments7d").value(3))
                 .andExpect(jsonPath("$.result.recentComments", hasSize(1)))
-                .andExpect(jsonPath("$.result.recentComments[0].postTitle").value("글"));
+                .andExpect(jsonPath("$.result.recentComments[0].postTitle").value("글"))
+                .andExpect(jsonPath("$.result.newGuestbook7d").value(1))
+                .andExpect(jsonPath("$.result.recentGuestbook[0].content").value("비밀 인사"))
+                .andExpect(jsonPath("$.result.recentGuestbook[0].author.guest").value(true))
+                .andExpect(jsonPath("$.result.recentGuestbook[0].author.userId").doesNotExist());
     }
 
     @Test
