@@ -9,6 +9,7 @@ import java.util.Optional;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.comment.event.CommentCreatedEvent;
+import net.java21.blog.backend.export.event.BlogExportReadyEvent;
 import net.java21.blog.backend.notification.NotificationsProperties;
 import net.java21.blog.backend.notification.domain.Notification;
 import net.java21.blog.backend.notification.domain.NotificationTargetType;
@@ -119,5 +120,27 @@ public class NotificationEventListener {
         notificationRepository.saveAndFlush(new Notification(userRepository.getReferenceById(ownerId),
                 userRepository.getReferenceById(event.subscriberId()), blog, NotificationType.NEW_SUBSCRIBER,
                 NotificationTargetType.BLOG, blog.getId(), params));
+    }
+
+    /**
+     * 백업 준비(004 FR-145) → 요청한 주인에게 BACKUP_READY(target BLOG_EXPORT, params {@code { blogTitle, handle, expiresAt }}).
+     * 행위자는 없다(시스템).
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onBlogExportReady(BlogExportReadyEvent event) {
+        try {
+            requiresNew.executeWithoutResult(status -> {
+                Map<String, Object> params = new LinkedHashMap<>();
+                params.put("blogTitle", event.blogTitle());
+                params.put("handle", event.handle());
+                params.put("expiresAt", event.expiresAt() == null ? null : event.expiresAt().toString());
+                notificationRepository.saveAndFlush(new Notification(
+                        userRepository.getReferenceById(event.requestedBy()), null,
+                        blogRepository.getReferenceById(event.blogId()), NotificationType.BACKUP_READY,
+                        NotificationTargetType.BLOG_EXPORT, event.exportId(), params));
+            });
+        } catch (RuntimeException e) {
+            log.warn("BACKUP_READY notification failed: exportId={}, error={}", event.exportId(), e.toString());
+        }
     }
 }

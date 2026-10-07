@@ -18,6 +18,7 @@ import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.comment.event.CommentCreatedEvent;
 import net.java21.blog.backend.notification.NotificationsProperties;
+import net.java21.blog.backend.export.event.BlogExportReadyEvent;
 import net.java21.blog.backend.notification.domain.Notification;
 import net.java21.blog.backend.notification.domain.NotificationTargetType;
 import net.java21.blog.backend.notification.domain.NotificationType;
@@ -115,6 +116,30 @@ class NotificationEventListenerTest {
         assertThat(n.getType()).isEqualTo(NotificationType.NEW_COMMENT);
         assertThat(n.getTargetId()).isEqualTo(3003L);
         assertThat(n.getParams()).isEqualTo(Map.of("postId", 123L, "postTitle", "첫 글", "guestName", "손님"));
+    }
+
+    /** 004 백업 준비(T104): 요청한 주인에게 BACKUP_READY, target BLOG_EXPORT, 행위자 없음. */
+    @Test
+    void exportReadyNotifiesTheRequester() {
+        Instant expires = NOW.plus(Duration.ofDays(7));
+        listener.onBlogExportReady(new BlogExportReadyEvent(3L, OWNER, 10L, "마르코의 블로그", "marco", expires));
+
+        Notification n = saved();
+        assertThat(n.getUser()).isSameAs(owner);
+        assertThat(n.getActor()).isNull();
+        assertThat(n.getBlog()).isSameAs(blog);
+        assertThat(n.getType()).isEqualTo(NotificationType.BACKUP_READY);
+        assertThat(n.getTargetType()).isEqualTo(NotificationTargetType.BLOG_EXPORT);
+        assertThat(n.getTargetId()).isEqualTo(3L);
+        assertThat(n.getParams()).isEqualTo(Map.of("blogTitle", "마르코의 블로그", "handle", "marco", "expiresAt",
+                expires.toString()));
+    }
+
+    @Test
+    void exportReadyFailureIsLoggedNotThrown() {
+        when(notificationRepository.saveAndFlush(any())).thenThrow(new IllegalStateException("db down"));
+        assertThatCode(() -> listener.onBlogExportReady(new BlogExportReadyEvent(3L, OWNER, 10L, "t", "marco", null)))
+                .doesNotThrowAnyException();
     }
 
     @Test
