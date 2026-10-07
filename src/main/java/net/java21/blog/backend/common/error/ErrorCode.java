@@ -92,7 +92,12 @@ public enum ErrorCode {
     EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND),
     CANNOT_BLOCK_SELF(HttpStatus.UNPROCESSABLE_CONTENT),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND),
-    BLOCK_NOT_FOUND(HttpStatus.NOT_FOUND);
+    BLOCK_NOT_FOUND(HttpStatus.NOT_FOUND),
+
+    // 006 관리 화면 (006 contracts/api.md 오류 코드 표). USER_NOT_ACTIVE·LAST_SUPER_ADMIN은 005와 함께 쓴다(먼저 머지하는 쪽이 더한다).
+    USER_NOT_ACTIVE(HttpStatus.CONFLICT),
+    LAST_SUPER_ADMIN(HttpStatus.CONFLICT),
+    CANNOT_CHANGE_OWN_ROLE(HttpStatus.UNPROCESSABLE_CONTENT);
 
     private final HttpStatus status;
 

@@ -129,6 +129,8 @@ blog:
     scheduled-publish-delay: 30s
     export-poll-delay: 30s
     export-cleanup-cron: "0 10 * * * *"
+    # 006 관리자 작업 기록 정리(FR-106): blog.admin.audit-retention이 지난 기록을 purge-batch-size건씩 지운다.
+    audit-purge-cron: "0 15 5 * * *"
   # 알림(002 FR-033, contracts/api.md "프로퍼티").
   notifications:
     retention: 90d
@@ -180,3 +182,7 @@ blog:
   # 값은 환경 변수(또는 .env)로만 주고 저장소에 커밋하지 않는다. 비우면 아무것도 하지 않는다.
   admin:
     bootstrap-super-admin-email: ${BLOG_ADMIN_BOOTSTRAP_SUPER_ADMIN_EMAIL:}
+    # 006 콘솔 대시보드 캐시(FR-103 "최대 5분 지연"). 0s면 캐시하지 않는다(E2E는 BLOG_ADMIN_DASHBOARD_CACHE_TTL=0s).
+    dashboard-cache-ttl: 5m
+    # 006 작업 기록 보관 기간(FR-106 "1년간 보관"). 30일 미만이면 기동 실패. 정리는 blog.jobs.audit-purge-cron.
+    audit-retention: 365d
