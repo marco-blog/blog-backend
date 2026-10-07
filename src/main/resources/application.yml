@@ -87,6 +87,26 @@ blog:
     visitor-cookie-max-age: 365d
     # 글 일별 통계(post_daily_stats, 003 FR-086) 보관 기간. 인기 점수는 최근 7일만 쓴다.
     stats-retention: 90d
+    # 004 보호 글(FR-062·063): 열람 쿠키 수명, 비밀번호 연속 실패 허용 수와 막는 시간(비회원 글 비밀번호도 같음), 예약 발행 최대 앞날(FR-064).
+    unlock-ttl: 30m
+    password-max-failures: 5
+    password-lock-duration: 10m
+    schedule-max-ahead: 365d
+  # 004 방문자 수·월별 보관함(FR-061·067): 날짜 기준 시간대, 방문 중복 제거 캐시 크기, 세지 않는 User-Agent(빈 값도 세지 않음).
+  stats:
+    time-zone: Asia/Seoul
+    visit-dedup-max-size: 200000
+    bot-user-agent-pattern: "(?i)(bot|crawler|spider|slurp|facebookexternalhit|preview)"
+  # 004 비회원 댓글·방명록(FR-066): IP당 1분 한도와 작성 IP 보관 기간. 로컬 수동 검증·E2E는 BLOG_GUEST_*_PER_MINUTE=1000으로 띄운다.
+  guest:
+    comment-per-minute: 5
+    guestbook-per-minute: 3
+    ip-retention: 90d
+  # 004 블로그 백업(FR-145): 디렉터리(dir)는 프로필 파일이 정한다(local ./data/exports, prod 환경 변수 BLOG_EXPORT_DIR 필수).
+  export:
+    retention: 7d
+    min-interval: 24h
+    stale-running: 1h
   # 정기 작업(research R26). 휴지통 비우기(FR-084, FR-159): 보관 기간이 지난 휴지통 글과 삭제된 블로그를 건수 단위로 정리한다.
   # 메일(FR-133, research R23). host·port·from은 프로필 파일이, username·password는 환경 변수가 준다.
   mail:
@@ -105,6 +125,10 @@ blog:
     notification-purge-cron: "0 15 4 * * *"
     # 글 일별 통계 정리(003 research P4): blog.posts.stats-retention이 지난 post_daily_stats 행을 지운다.
     post-stats-purge-cron: "0 45 4 * * *"
+    # 004 예약 발행(SC-010)·백업 생성 주기와 만료 백업 정리(매시 10분). 주기 두 값은 @Scheduled 자리표시자 기본값도 같다.
+    scheduled-publish-delay: 30s
+    export-poll-delay: 30s
+    export-cleanup-cron: "0 10 * * * *"
   # 알림(002 FR-033, contracts/api.md "프로퍼티").
   notifications:
     retention: 90d
