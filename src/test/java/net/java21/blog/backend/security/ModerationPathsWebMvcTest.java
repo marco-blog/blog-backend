@@ -1,6 +1,7 @@
 package net.java21.blog.backend.security;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -15,6 +16,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -27,6 +29,8 @@ class ModerationPathsWebMvcTest {
     private MockMvc mvc;
     @Autowired
     private AuthCookies authCookies;
+    @MockitoBean
+    private SuspendedUserRegistry suspendedUsers;
 
     @ParameterizedTest
     @ValueSource(strings = {"/api/v1/captcha/config", "/api/v1/posts/12/trackbacks?page=0"})
@@ -55,6 +59,13 @@ class ModerationPathsWebMvcTest {
         expect(mvc.perform(get("/api/v1/posts/3/trackback-pings")), 401, "UNAUTHENTICATED");
         expect(mvc.perform(get("/api/v1/blogs/marco/manage/trackbacks")), 401, "UNAUTHENTICATED");
         mvc.perform(post("/api/v1/reports").cookie(authCookies.user(7L))).andExpect(status().isOk());
+    }
+
+    @Test
+    void accessTokenOfASuspendedMemberIsNotAuthenticated() throws Exception {
+        when(suspendedUsers.contains(7L)).thenReturn(true);
+        expect(mvc.perform(post("/api/v1/reports").cookie(authCookies.user(7L))), 401, "UNAUTHENTICATED");
+        mvc.perform(post("/api/v1/reports").cookie(authCookies.user(8L))).andExpect(status().isOk());
     }
 
     @ParameterizedTest

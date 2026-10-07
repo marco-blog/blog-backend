@@ -132,6 +132,25 @@ class ManagePostServiceTest {
                 new BulkPostRequest(List.of(1L, 2L, 3L, 2L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE, null));
 
         assertThat(result.updated()).isEqualTo(3);
+        assertThat(result.skipped()).isZero();
+    }
+
+    /** 005 T033: 숨긴 글은 바뀌지 않고 {@code skipped}로 센다. */
+    @Test
+    void hiddenPostsAreReportedAsSkipped() {
+        when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
+        when(repository.countOwned(10L, List.of(1L, 2L))).thenReturn(2L);
+        when(repository.countHidden(10L, List.of(1L, 2L))).thenReturn(1L);
+        when(repository.changeVisibility(10L, List.of(1L, 2L), PostVisibility.PRIVATE, NOW)).thenReturn(1L);
+        when(repository.changeNotice(10L, List.of(1L, 2L), true)).thenReturn(1L);
+
+        var visibility = service.bulk(OWNER, "marco",
+                new BulkPostRequest(List.of(1L, 2L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE, null));
+        assertThat(visibility.updated()).isEqualTo(1);
+        assertThat(visibility.skipped()).isEqualTo(1);
+        var notice = service.bulk(OWNER, "marco", new BulkPostRequest(List.of(1L, 2L), BulkAction.NOTICE, null,
+                null));
+        assertThat(notice.skipped()).isEqualTo(1);
     }
 
     /** 004 결정 26: 일괄 작업으로 PROTECTED는 지정할 수 없다(비밀번호가 없음). */

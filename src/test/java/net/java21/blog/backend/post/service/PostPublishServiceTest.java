@@ -158,6 +158,17 @@ class PostPublishServiceTest {
         verify(postDraftRepository, never()).delete(any());
     }
 
+    /** 005 T033: 관리자가 숨긴 글은 다시 발행할 수 없다(409 POST_HIDDEN, 상태 그대로). */
+    @Test
+    void hiddenPostCannotBeRepublished() {
+        post.publish("제목", "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PUBLIC, true, NOW);
+        post.hide();
+
+        assertCode(() -> service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null)), ErrorCode.POST_HIDDEN);
+        assertThat(post.isHidden()).isTrue();
+        verify(postDraftRepository, never()).findById(any());
+    }
+
     /** 003 T039: 블로그의 첫 발행이 {@code first_published_at}을 채운다(비공개 발행 포함). */
     @Test
     void firstPublishOfTheBlogSetsFirstPublishedAtEvenWhenPrivate() {

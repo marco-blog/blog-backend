@@ -119,6 +119,44 @@ class GuestbookServiceTest {
         assertThat(service.list("marco", 1L, PAGE).getTotalElements()).isEqualTo(3);
     }
 
+    /** 005 숨김(T034): 작성 회원 본인에게만 내용과 hidden, 다른 사람에게는 보이는 답글이 있을 때만 빈 자리. */
+    @Test
+    void hiddenEntriesShowOnlyToTheirAuthor() {
+        stubPage(List.of(hiddenRow(5L, null, 2L), hiddenRow(6L, null, 2L), row(7L, null, "공개", false, 3L, null)),
+                List.of(row(8L, 5L, "주인 답글", false, 1L, null), hiddenRow(9L, 7L, 2L)));
+
+        List<GuestbookEntryResponse> others = service.list("marco", 3L, PAGE).getContent();
+        assertThat(others).extracting(GuestbookEntryResponse::id).containsExactly(5L, 7L);
+        assertThat(others.getFirst().hidden()).isTrue();
+        assertThat(others.getFirst().deleted()).isFalse();
+        assertThat(others.getFirst().content()).isNull();
+        assertThat(others.getFirst().author()).isNull();
+        assertThat(others.getFirst().replies()).extracting(GuestbookEntryResponse::content).containsExactly("주인 답글");
+        assertThat(others.get(1).replies()).isEmpty();
+        assertThat(others.get(1).hidden()).isFalse();
+
+        List<GuestbookEntryResponse> author = service.list("marco", 2L, PAGE).getContent();
+        assertThat(author).extracting(GuestbookEntryResponse::id).containsExactly(5L, 6L, 7L);
+        assertThat(author.get(1).content()).isEqualTo("숨긴 글");
+        assertThat(author.get(1).hidden()).isTrue();
+        assertThat(author.get(1).author().userId()).isEqualTo(2L);
+        assertThat(author.get(2).replies()).singleElement()
+                .satisfies(r -> assertThat(r.hidden()).isTrue());
+    }
+
+    @Test
+    void hiddenEntriesCannotBeEditedDeletedOrRepliedTo() {
+        GuestbookEntry entry = stored(new GuestbookEntry(blog, writer, null, "숨김", false), 5L);
+        entry.hide();
+        when(entryRepository.findById(5L)).thenReturn(Optional.of(entry));
+
+        assertCode(() -> service.update(5L, 2L, new GuestbookUpdateRequest("고침", null, null), "u:2", null),
+                ErrorCode.GUESTBOOK_ENTRY_NOT_FOUND);
+        assertCode(() -> service.delete(5L, 2L, null, "u:2", null), ErrorCode.GUESTBOOK_ENTRY_NOT_FOUND);
+        assertCode(() -> service.create("marco", 1L, new GuestbookWriteRequest("답글", false, 5L, null, null),
+                CLIENT), ErrorCode.GUESTBOOK_ENTRY_NOT_FOUND);
+    }
+
     @Test
     void disabledGuestbookIsNotFoundExceptForOwner() {
         blog.changeGuestSettings(false, false);
@@ -425,6 +463,11 @@ class GuestbookServiceTest {
             String guestName) {
         return new GuestbookRow(id, parentId, content, secret, GuestbookStatus.ACTIVE, userId,
                 userId == null ? null : "닉네임" + userId, null, guestName, NOW, NOW);
+    }
+
+    private static GuestbookRow hiddenRow(long id, Long parentId, Long userId) {
+        return new GuestbookRow(id, parentId, "숨긴 글", false, GuestbookStatus.HIDDEN, userId, "닉네임" + userId, null,
+                null, NOW, NOW);
     }
 
     private static GuestbookRow deletedRow(long id) {

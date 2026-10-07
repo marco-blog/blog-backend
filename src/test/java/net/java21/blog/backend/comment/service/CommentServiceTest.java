@@ -160,6 +160,54 @@ class CommentServiceTest {
         assertThat(placeholder.replies()).extracting(CommentResponse::content).containsExactly("남은 답글");
     }
 
+    /** 005 숨김(T034): 작성 회원 본인에게만 내용과 hidden, 다른 사람에게는 보이는 답글이 있을 때만 빈 자리. */
+    @Test
+    void hiddenCommentsShowOnlyToTheirAuthor() {
+        when(queryRepository.findPostComments(100L)).thenReturn(List.of(
+                row(1L, null, "숨긴 댓글", CommentStatus.HIDDEN, WRITER, "작성자"),
+                row(2L, 1L, "주인 답글", CommentStatus.ACTIVE, OWNER, "주인"),
+                row(3L, null, "답글 없는 숨긴 댓글", CommentStatus.HIDDEN, WRITER, "작성자"),
+                row(4L, null, "보이는 댓글", CommentStatus.ACTIVE, STRANGER, "손님"),
+                row(5L, 4L, "숨긴 답글", CommentStatus.HIDDEN, WRITER, "작성자")));
+
+        List<CommentResponse> forStranger = service.list(100L, STRANGER);
+        assertThat(forStranger).extracting(CommentResponse::id).containsExactly(1L, 4L);
+        CommentResponse placeholder = forStranger.getFirst();
+        assertThat(placeholder.hidden()).isTrue();
+        assertThat(placeholder.deleted()).isFalse();
+        assertThat(placeholder.content()).isNull();
+        assertThat(placeholder.author()).isNull();
+        assertThat(placeholder.replies()).extracting(CommentResponse::id).containsExactly(2L);
+        assertThat(forStranger.get(1).replies()).isEmpty();
+        assertThat(forStranger.get(1).hidden()).isFalse();
+
+        List<CommentResponse> forAuthor = service.list(100L, WRITER);
+        assertThat(forAuthor).extracting(CommentResponse::id).containsExactly(1L, 3L, 4L);
+        assertThat(forAuthor.getFirst().content()).isEqualTo("숨긴 댓글");
+        assertThat(forAuthor.getFirst().hidden()).isTrue();
+        assertThat(forAuthor.getFirst().author().userId()).isEqualTo(WRITER);
+        assertThat(forAuthor.get(2).replies()).singleElement().satisfies(reply -> {
+            assertThat(reply.content()).isEqualTo("숨긴 답글");
+            assertThat(reply.hidden()).isTrue();
+        });
+
+        assertThat(service.list(100L, null)).extracting(CommentResponse::id).containsExactly(1L, 4L);
+    }
+
+    @Test
+    void hiddenCommentsCannotBeEditedDeletedOrRepliedTo() {
+        Comment hidden = comment(1L, post, writer, null);
+        hidden.hide();
+        when(commentRepository.findWithPostAndOwner(1L)).thenReturn(Optional.of(hidden));
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(hidden));
+
+        assertCode(() -> service.update(WRITER, 1L, new UpdateCommentRequest("x")), ErrorCode.COMMENT_NOT_FOUND);
+        assertCode(() -> service.delete(WRITER, 1L), ErrorCode.COMMENT_NOT_FOUND);
+        assertCode(() -> service.create(OWNER, 100L, new CreateCommentRequest("답글", 1L)),
+                ErrorCode.COMMENT_NOT_FOUND);
+        verify(commentRepository, never()).changeCommentCount(anyLong(), anyInt());
+    }
+
     @Test
     void listOnlyForPostsTheViewerCanSee() {
         Post privatePost = published(101L, PostVisibility.PRIVATE);
