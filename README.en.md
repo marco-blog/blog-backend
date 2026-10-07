@@ -89,7 +89,7 @@ curl http://localhost:8080/actuator/health
 
 - Links in mail (`blog.base-url`) point to `http://localhost:5173` (the front dev server). Change it with `BLOG_BASE_URL`.
 - State-changing requests are accepted only from the allowed origins (`http://localhost:5173`, `http://localhost:3000`). Run blog-front to use the UI.
-- Without image directory settings, the app uses `blog-media/upload|temp|thumb` under the system temp directory.
+- File storage is set by one variable, `BLOG_DATA_DIR`. Without it, the app uses `./data` (`media/upload|temp|thumbnail`, `exports`).
 - OpenAPI document: `http://localhost:8080/v3/api-docs`
 - Running the jar: `./mvnw -B -DskipTests package` → `java -jar target/blog-backend-*.jar`
 

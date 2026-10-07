@@ -89,7 +89,7 @@ curl http://localhost:8080/actuator/health
 
 - 메일 링크 주소(`blog.base-url`)는 `http://localhost:5173`(front 개발 서버)이다. 바꾸려면 `BLOG_BASE_URL`.
 - 상태 변경 요청은 허용 Origin(`http://localhost:5173`, `http://localhost:3000`)에서만 받는다. 화면은 blog-front를 띄워 확인한다.
-- 이미지 디렉터리를 정하지 않으면 시스템 임시 디렉터리 아래(`blog-media/upload|temp|thumb`)를 쓴다.
+- 파일 보관 루트는 `BLOG_DATA_DIR` 하나로 정한다. 정하지 않으면 `./data` 아래(`media/upload|temp|thumbnail`, `exports`)를 쓴다.
 - OpenAPI 문서: `http://localhost:8080/v3/api-docs`
 - jar로 실행: `./mvnw -B -DskipTests package` → `java -jar target/blog-backend-*.jar`
 
