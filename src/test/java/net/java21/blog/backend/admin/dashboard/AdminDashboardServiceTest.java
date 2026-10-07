@@ -18,12 +18,21 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import net.java21.blog.backend.admin.AdminProperties;
 import net.java21.blog.backend.admin.dashboard.dto.AdminDashboardResponse;
+import net.java21.blog.backend.admin.report.ReportPendingCounter;
+import net.java21.blog.backend.admin.report.ReportQueryRepository;
 import net.java21.blog.backend.admin.user.AdminUserRepository;
 import net.java21.blog.backend.support.MutableClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FilterType;
 
-/** 006 T021(FR-103, research A3): 시간대별 캐시, TTL 만료, TTL 0이면 캐시 끔, 처리 대기 신고 수는 캐시하지 않음. */
+/**
+ * 006 T021(FR-103, research A3): 시간대별 캐시, TTL 만료, TTL 0이면 캐시 끔, 처리 대기 신고 수는 캐시하지 않음.
+ * T039: 대기 신고 수 빈은 005 {@link ReportPendingCounter}.
+ */
 class AdminDashboardServiceTest {
 
     private static final Instant T = Instant.parse("2026-10-07T03:00:00Z");
@@ -95,9 +104,26 @@ class AdminDashboardServiceTest {
         assertThat(service.dashboard(4L).timeZone()).isEqualTo("Asia/Seoul");
     }
 
+    /** 006 T039: 관리자 패키지를 훑으면 대기 신고 수 구현은 005 신고 묶음 수를 쓰는 {@link ReportPendingCounter} 하나뿐이다. */
     @Test
-    void defaultPendingCounterReportsNothing() {
-        assertThat(new NoPendingReportCounter().countPending()).isNull();
-        assertThat(new AdminDashboardConfig().noPendingReportCounter()).isInstanceOf(NoPendingReportCounter.class);
+    void reportPendingCounterIsTheRegisteredBean() {
+        ReportQueryRepository reports = mock(ReportQueryRepository.class);
+        when(reports.countPendingGroups()).thenReturn(6L);
+        new ApplicationContextRunner()
+                .withBean(ReportQueryRepository.class, () -> reports)
+                .withUserConfiguration(PendingCounterScan.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(PendingReportCounter.class);
+                    assertThat(context.getBean(PendingReportCounter.class)).isInstanceOf(ReportPendingCounter.class);
+                    assertThat(context.getBean(PendingReportCounter.class).countPending()).isEqualTo(6L);
+                });
+        verify(reports).countPendingGroups();
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ComponentScan(basePackageClasses = AdminProperties.class, useDefaultFilters = false,
+            includeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
+                    classes = PendingReportCounter.class))
+    static class PendingCounterScan {
     }
 }

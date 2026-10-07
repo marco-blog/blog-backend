@@ -210,21 +210,31 @@ class AdminReportServiceTest {
         fx.flushAndClear();
 
         assertThatThrownBy(() -> service.assignTarget(admin.getId(), untargeted.getId(),
-                new AssignTargetRequest("POST", null))).isInstanceOfSatisfying(BusinessException.class,
+                new AssignTargetRequest("POST", null), IP)).isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.fieldErrors()).singleElement()
                                 .satisfies(f -> assertThat(f.field()).isEqualTo("targetId")));
         assertError(() -> service.assignTarget(admin.getId(), untargeted.getId(),
-                new AssignTargetRequest("POST", 999_999L)), ErrorCode.CONTENT_NOT_FOUND);
+                new AssignTargetRequest("POST", 999_999L), IP), ErrorCode.CONTENT_NOT_FOUND);
+        assertThat(auditLogRepository.findByTargetTypeAndTargetIdOrderByIdDesc("REPORT", untargeted.getId()))
+                .as("실패한 지정은 기록하지 않음").isEmpty();
         ReportDetailResponse assigned = service.assignTarget(admin.getId(), untargeted.getId(),
-                new AssignTargetRequest("POST", post.getId()));
+                new AssignTargetRequest("POST", post.getId()), IP);
         assertThat(assigned.target().id()).isEqualTo(post.getId());
         assertThat(assigned.targetUserReportCount()).isEqualTo(2);
         assertThat(assigned.reports()).hasSize(2);
         fx.flushAndClear();
         Report reloaded = em.find(Report.class, untargeted.getId());
         assertThat(reloaded.getTargetBlog().getId()).isEqualTo(blog.getId());
+        AdminAuditLog log = auditLogRepository.findByTargetTypeAndTargetIdOrderByIdDesc("REPORT", untargeted.getId())
+                .getFirst();
+        assertThat(log.getAction()).isEqualTo("REPORT_TARGET_ASSIGN");
+        assertThat(log.getAdmin().getId()).isEqualTo(admin.getId());
+        assertThat(log.getBefore()).containsEntry("targetType", null).containsEntry("targetId", null);
+        assertThat(log.getAfter()).containsEntry("targetType", "POST")
+                .hasEntrySatisfying("targetId", v -> assertThat(((Number) v).longValue()).isEqualTo(post.getId()));
+        assertThat(log.getRequestIp()).isEqualTo(IP);
         assertError(() -> service.assignTarget(admin.getId(), targeted.getId(),
-                new AssignTargetRequest("POST", post.getId())), ErrorCode.REPORT_ALREADY_TARGETED);
+                new AssignTargetRequest("POST", post.getId()), IP), ErrorCode.REPORT_ALREADY_TARGETED);
     }
 
     @Test

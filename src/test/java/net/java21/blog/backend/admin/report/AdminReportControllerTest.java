@@ -99,7 +99,7 @@ class AdminReportControllerTest {
                 .andExpect(jsonPath("$.result.contactEmail").value("me@example.com"))
                 .andExpect(jsonPath("$.result.reports[0].reason").value("COPYRIGHT"));
 
-        when(service.assignTarget(ADMIN, 3L, new AssignTargetRequest("POST", 9L))).thenReturn(detail);
+        when(service.assignTarget(ADMIN, 3L, new AssignTargetRequest("POST", 9L), "127.0.0.1")).thenReturn(detail);
         mvc.perform(patch("/api/v1/admin/reports/3/target").cookie(authCookies.user(ADMIN))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"targetType\":\"POST\",\"targetId\":9}"))
                 .andExpect(status().isOk())

@@ -52,7 +52,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       {@code SUSPEND_USER}는 {@link SuspensionService}를 같은 트랜잭션에서 부른다. 작업 기록 {@code REPORT_ACTION}·
  *       {@code REPORT_DISMISS}(target REPORT/대표 id, after에 닫은 id 목록·조치). 커밋 뒤 {@link ReportResolvedEvent}로 회원 신고자
  *       알림과 권리 침해 결과 메일을 보낸다.</li>
- *   <li>대상 지정: 대상이 없는 권리 침해 신고만(아니면 409 {@code REPORT_ALREADY_TARGETED}).</li>
+ *   <li>대상 지정: 대상이 없는 권리 침해 신고만(아니면 409 {@code REPORT_ALREADY_TARGETED}). 작업 기록
+ *       {@code REPORT_TARGET_ASSIGN}(target REPORT/id, before·after {@code targetType}·{@code targetId}).</li>
  * </ul>
  */
 @Service
@@ -135,9 +136,12 @@ public class AdminReportService {
                 targetUserReportCount);
     }
 
-    /** 대상 미정 권리 침해 신고에 대상을 정한다. 이미 대상이 있으면 409, 없는 대상 404 {@code CONTENT_NOT_FOUND}. */
+    /**
+     * 대상 미정 권리 침해 신고에 대상을 정한다. 이미 대상이 있으면 409, 없는 대상 404 {@code CONTENT_NOT_FOUND}. 작업 기록
+     * {@code REPORT_TARGET_ASSIGN}(006 FR-106).
+     */
     @Transactional
-    public ReportDetailResponse assignTarget(long adminId, long id, AssignTargetRequest request) {
+    public ReportDetailResponse assignTarget(long adminId, long id, AssignTargetRequest request, String requestIp) {
         Report report = requireReport(id);
         if (report.hasTarget()) {
             throw new BusinessException(ErrorCode.REPORT_ALREADY_TARGETED, "Report already has a target: " + id);
@@ -149,6 +153,14 @@ public class AdminReportService {
         ReportTarget target = handlers.require(request.targetType(), "targetType").resolveForAdmin(request.targetId());
         report.assignTarget(target.type(), target.id(), target.targetUser(), target.targetBlog());
         reportRepository.flush();
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("targetType", null);
+        before.put("targetId", null);
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("targetType", target.type().name());
+        after.put("targetId", target.id());
+        auditService.record(adminId, AuditActions.REPORT_TARGET_ASSIGN, AuditActions.TARGET_REPORT, id, before, after,
+                requestIp);
         return detail(id);
     }
 
