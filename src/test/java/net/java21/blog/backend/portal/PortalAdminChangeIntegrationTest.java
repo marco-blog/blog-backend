@@ -16,6 +16,7 @@ import jakarta.servlet.http.Cookie;
 
 import com.jayway.jsonpath.JsonPath;
 
+import net.java21.blog.backend.portal.service.PortalCache;
 import net.java21.blog.backend.security.JwtAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,8 @@ class PortalAdminChangeIntegrationTest {
     private MockMvc mvc;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private PortalCache portalCache;
 
     @Test
     void adminChangesShowOnTheNextPortalRequest() throws Exception {
@@ -67,7 +70,8 @@ class PortalAdminChangeIntegrationTest {
         json(post("/api/v1/posts/" + id + "/publish"), "{\"visibility\":\"PUBLIC\",\"topicId\":" + travel + "}",
                 owner).andExpect(status().isOk());
 
-        // 캐시를 채운다
+        // 캐시를 채운다(기동 때 PortalCacheWarmer가 발행 전 상태로 채워 두었으므로 먼저 비운다. 발행은 TTL 안에 반영되는 변경이다)
+        portalCache.invalidateAll();
         assertThat(latestIds()).contains(id);
         assertThat(topicPostIds("domestic-travel")).containsExactly(id);
 
