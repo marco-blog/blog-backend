@@ -195,7 +195,9 @@ class OpenApiContractTest {
             "GET /api/v1/blogs/{handle}/exports/{id}/file",
             "GET /api/v1/blogs/{handle}/blocks",
             "PUT /api/v1/blogs/{handle}/blocks/{userId}",
-            "DELETE /api/v1/blogs/{handle}/blocks/{userId}");
+            "DELETE /api/v1/blogs/{handle}/blocks/{userId}",
+            // 005 (005 contracts/api.md) — CAPTCHA·신고·관리자 신고·숨김·회원
+            "GET /api/v1/captcha/config");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",

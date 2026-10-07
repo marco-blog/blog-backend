@@ -10,6 +10,13 @@ public final class AuditActions {
     public static final String TARGET_POST = "POST";
     public static final String TARGET_SETTING = "SETTING";
     public static final String TARGET_RELEASE_NOTE = "RELEASE_NOTE";
+    /** 005·006 회원(정지·해제·블로그 한도). */
+    public static final String TARGET_USER = "USER";
+    public static final String TARGET_REPORT = "REPORT";
+    public static final String TARGET_COMMENT = "COMMENT";
+    public static final String TARGET_GUESTBOOK = "GUESTBOOK";
+    public static final String TARGET_TRACKBACK = "TRACKBACK";
+    public static final String TARGET_BANNED_WORD = "BANNED_WORD";
 
     public static final String TOPIC_CREATE = "TOPIC_CREATE";
     public static final String TOPIC_UPDATE = "TOPIC_UPDATE";
@@ -33,6 +40,17 @@ public final class AuditActions {
     public static final String RELEASE_NOTE_PUBLISH = "RELEASE_NOTE_PUBLISH";
     public static final String RELEASE_NOTE_UNPUBLISH = "RELEASE_NOTE_UNPUBLISH";
     public static final String RELEASE_NOTE_DELETE = "RELEASE_NOTE_DELETE";
+
+    // 005 신고·숨김·정지·금칙어(005 contracts/api.md, 006 FR-106)
+    public static final String USER_SUSPEND = "USER_SUSPEND";
+    public static final String USER_UNSUSPEND = "USER_UNSUSPEND";
+    public static final String REPORT_ACTION = "REPORT_ACTION";
+    public static final String REPORT_DISMISS = "REPORT_DISMISS";
+    public static final String CONTENT_HIDE = "CONTENT_HIDE";
+    public static final String CONTENT_UNHIDE = "CONTENT_UNHIDE";
+    public static final String BANNED_WORD_CREATE = "BANNED_WORD_CREATE";
+    public static final String BANNED_WORD_UPDATE = "BANNED_WORD_UPDATE";
+    public static final String BANNED_WORD_DELETE = "BANNED_WORD_DELETE";
 
     private AuditActions() {
     }

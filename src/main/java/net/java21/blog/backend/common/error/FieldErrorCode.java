@@ -15,5 +15,8 @@ import java.lang.annotation.Target;
 @Documented
 public @interface FieldErrorCode {
 
+    /** 005: 이름류·본문류에 거부 금칙어가 있음(FR-143). 어느 단어인지는 {@code params}에 넣지 않는다. */
+    String BANNED_WORD = "BANNED_WORD";
+
     String value();
 }

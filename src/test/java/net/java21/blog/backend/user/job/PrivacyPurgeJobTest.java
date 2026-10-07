@@ -30,6 +30,9 @@ import net.java21.blog.backend.notification.domain.NotificationTargetType;
 import net.java21.blog.backend.notification.domain.NotificationType;
 import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.post.domain.Post;
+import net.java21.blog.backend.report.domain.Report;
+import net.java21.blog.backend.report.domain.ReportReason;
+import net.java21.blog.backend.trackback.domain.Trackback;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
@@ -103,7 +106,7 @@ class PrivacyPurgeJobTest {
             return new PrivacyPurgeJob(repository, loginHistory, hasher, transactionTemplate,
                     new PrivacyProperties(Duration.ofDays(30), Duration.ofDays(90)),
                     new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock, mediaReferences,
-                    notifications, new GuestProperties(5, 3, Duration.ofDays(90)));
+                    notifications, new GuestProperties(Duration.ofDays(90)));
         }
     }
 
@@ -288,6 +291,41 @@ class PrivacyPurgeJobTest {
         assertThat(em.find(Comment.class, member.getId()).getContent()).isEqualTo("회원 댓글");
         assertThat(output).contains("guestIps=4");
         assertThat(job.purge().guestIps()).isZero();
+    }
+
+    @Test
+    void clearsRightsRequestContactsAndTrackbackIpsAfterRetention(CapturedOutput output) {
+        Blog blog = new Blog(active, "rights", "블로그");
+        em.persist(blog);
+        Post post = new Post(blog, "글");
+        post.publish("글", "본문", "<p>본문</p>", "본문", "요약", null, PostVisibility.PUBLIC, true, NOW);
+        em.persist(post);
+        Report oldRights = Report.rightsRequest("https://x/1", ReportReason.COPYRIGHT, "근거", "a@example.com");
+        Report recentRights = Report.rightsRequest("https://x/2", ReportReason.COPYRIGHT, "근거", "b@example.com");
+        em.persist(oldRights);
+        em.persist(recentRights);
+        Trackback oldTrackback = new Trackback(post, null, "https://ext/1", "1".repeat(64), "t", null, null,
+                "203.0.113.7");
+        em.persist(oldTrackback);
+        em.flush();
+        jdbc.update("UPDATE reports SET status = 'ACTIONED', handled_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minus(Duration.ofDays(366))), oldRights.getId());
+        jdbc.update("UPDATE reports SET status = 'ACTIONED', handled_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minus(Duration.ofDays(10))), recentRights.getId());
+        jdbc.update("UPDATE trackbacks SET created_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minus(Duration.ofDays(91))), oldTrackback.getId());
+        em.clear();
+
+        PrivacyPurgeJob.Result result = job.purge();
+
+        assertThat(result.rightsContacts()).isEqualTo(1);
+        assertThat(result.trackbackIps()).isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT id FROM reports WHERE contact_email_enc IS NOT NULL", Long.class))
+                .containsExactly(recentRights.getId());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM trackbacks WHERE sender_ip_enc IS NOT NULL", Long.class))
+                .isZero();
+        assertThat(output).contains("rightsContacts=1").contains("trackbackIps=1").doesNotContain("a@example.com")
+                .doesNotContain("203.0.113.7");
     }
 
     private Comment guestComment(Post post, String n) {

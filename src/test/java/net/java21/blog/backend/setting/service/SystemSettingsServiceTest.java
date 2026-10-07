@@ -52,7 +52,7 @@ class SystemSettingsServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SystemSettingsService(repository, PortalProperties.defaults(), events);
+        service = new SystemSettingsService(repository, net.java21.blog.backend.setting.SettingDefaults.of(PortalProperties.defaults()), events);
         admin = TestEntities.user(9L);
         org.mockito.Mockito.lenient().when(repository.findAll()).thenAnswer(i -> List.copyOf(rows));
     }

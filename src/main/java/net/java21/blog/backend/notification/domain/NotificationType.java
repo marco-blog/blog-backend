@@ -10,5 +10,10 @@ public enum NotificationType {
     /** 내 블로그의 새 구독자. target BLOG, params {@code { blogTitle }}. */
     NEW_SUBSCRIBER,
     /** 004 블로그 백업 준비됨(요청한 주인에게, 행위자 없음). target BLOG_EXPORT, params {@code { blogTitle, handle, expiresAt }}. */
-    BACKUP_READY
+    BACKUP_READY,
+    /**
+     * 005 내 신고 처리 결과(회원 신고자에게, 행위자 없음, 링크 없음). target REPORT, params {@code { targetType, decision }}
+     * ({@code decision}: ACTIONED·DISMISSED, 대상 제목·내용 없음).
+     */
+    REPORT_RESOLVED
 }

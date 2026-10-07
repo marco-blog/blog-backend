@@ -12,7 +12,6 @@ import java.util.Optional;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
-import net.java21.blog.backend.portal.PortalProperties;
 import net.java21.blog.backend.portal.service.ScoreWeights;
 
 /**
@@ -24,8 +23,8 @@ public enum SettingKey {
     /** 인기 점수 가중치 객체. 가중치 4개 0~1000, {@code halfLifeHours} 1~720, {@code reportPenalty} 0~1, 모두 필수. */
     PORTAL_SCORE_WEIGHTS("portal.score-weights") {
         @Override
-        public Object defaultValue(PortalProperties properties) {
-            return properties.scoreWeights().toJson();
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.portal().scoreWeights().toJson();
         }
 
         @Override
@@ -61,8 +60,8 @@ public enum SettingKey {
     /** 가입 후 포털 노출까지 대기. ISO-8601 기간 문자열 {@code PT0S}~{@code P30D}. */
     PORTAL_NEW_MEMBER_DELAY("portal.new-member-delay") {
         @Override
-        public Object defaultValue(PortalProperties properties) {
-            return properties.newMemberDelay().toString();
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.portal().newMemberDelay().toString();
         }
 
         @Override
@@ -87,8 +86,8 @@ public enum SettingKey {
     /** 포털 노출 최소 본문 길이(문자 수). 정수 0~10000. */
     PORTAL_MIN_CONTENT_LENGTH("portal.min-content-length") {
         @Override
-        public Object defaultValue(PortalProperties properties) {
-            return properties.minContentLength();
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.portal().minContentLength();
         }
 
         @Override
@@ -100,13 +99,115 @@ public enum SettingKey {
     /** 주제 자동 숨김 기준(최근 30일 글 수). 정수 0~1000. */
     PORTAL_TOPIC_AUTO_HIDE_THRESHOLD("portal.topic-auto-hide-threshold") {
         @Override
-        public Object defaultValue(PortalProperties properties) {
-            return properties.topicAutoHideThreshold();
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.portal().topicAutoHideThreshold();
         }
 
         @Override
         public Object normalize(Object raw) {
             return integer(raw, 0, 1000);
+        }
+    },
+
+    /** 회원의 처음 발행·예약 1시간 한도(005 FR-142). 정수 1~10000. */
+    RATELIMIT_POST_PUBLISH_PER_HOUR("ratelimit.post-publish-per-hour") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.rateLimit().postPublishPerHour();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return integer(raw, 1, 10_000);
+        }
+    },
+
+    /** 회원 ID 또는 비회원 IP의 댓글 1분 한도. 정수 1~10000. */
+    RATELIMIT_COMMENT_PER_MINUTE("ratelimit.comment-per-minute") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.rateLimit().commentPerMinute();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return integer(raw, 1, 10_000);
+        }
+    },
+
+    /** 회원 ID 또는 비회원 IP의 방명록 1분 한도. 정수 1~10000. */
+    RATELIMIT_GUESTBOOK_PER_MINUTE("ratelimit.guestbook-per-minute") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.rateLimit().guestbookPerMinute();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return integer(raw, 1, 10_000);
+        }
+    },
+
+    /** 회원의 이미지 업로드 1분 한도. 정수 1~10000. */
+    RATELIMIT_MEDIA_UPLOAD_PER_MINUTE("ratelimit.media-upload-per-minute") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.rateLimit().mediaUploadPerMinute();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return integer(raw, 1, 10_000);
+        }
+    },
+
+    /** 같은 IP의 가입 1시간 한도. 정수 1~100000. */
+    RATELIMIT_SIGNUP_PER_IP_PER_HOUR("ratelimit.signup-per-ip-per-hour") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.rateLimit().signupPerIpPerHour();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return integer(raw, 1, 100_000);
+        }
+    },
+
+    /** 반복 스팸 기준 {@code { windowMinutes: 1~1440, maxCount: 2~100 }}, 둘 다 필수(005 FR-144). */
+    SPAM_DUPLICATE_COMMENT("spam.duplicate-comment") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("windowMinutes", defaults.spam().duplicateComment().windowMinutes());
+            value.put("maxCount", defaults.spam().duplicateComment().maxCount());
+            return value;
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            if (!(raw instanceof Map<?, ?> json)) {
+                throw invalid(new FieldError(VALUE, INVALID, Map.of()));
+            }
+            List<FieldError> errors = new ArrayList<>();
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            String[] fields = {"windowMinutes", "maxCount"};
+            int[][] ranges = {{1, 1440}, {2, 100}};
+            for (int i = 0; i < fields.length; i++) {
+                Object value = json.get(fields[i]);
+                if (value == null) {
+                    errors.add(FieldError.of(VALUE + "." + fields[i], "REQUIRED"));
+                } else if (value instanceof Number n && n.doubleValue() == Math.rint(n.doubleValue())
+                        && n.doubleValue() >= ranges[i][0] && n.doubleValue() <= ranges[i][1]) {
+                    normalized.put(fields[i], n.intValue());
+                } else {
+                    errors.add(new FieldError(VALUE + "." + fields[i], INVALID, range(ranges[i][0], ranges[i][1])));
+                }
+            }
+            if (!errors.isEmpty()) {
+                throw invalid(errors);
+            }
+            return normalized;
         }
     };
 
@@ -125,7 +226,7 @@ public enum SettingKey {
     }
 
     /** 행이 없을 때 쓰는 값(프로퍼티). */
-    public abstract Object defaultValue(PortalProperties properties);
+    public abstract Object defaultValue(SettingDefaults defaults);
 
     /**
      * 관리자가 보낸 값을 검증하고 저장할 모양으로 바꾼다.

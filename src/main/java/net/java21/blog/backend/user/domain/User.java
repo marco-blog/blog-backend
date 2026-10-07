@@ -175,6 +175,28 @@ public class User extends BaseTimeEntity {
         this.lockedUntil = null;
     }
 
+    public boolean isSuspended() {
+        return status == UserStatus.SUSPENDED;
+    }
+
+    /** 관리자 정지(005 FR-042). ACTIVE만 SUSPENDED로 바뀐다. @return 이번에 바뀌었으면 true */
+    public boolean suspend() {
+        if (status != UserStatus.ACTIVE) {
+            return false;
+        }
+        this.status = UserStatus.SUSPENDED;
+        return true;
+    }
+
+    /** 정지 해제(005 FR-042). SUSPENDED만 ACTIVE로 돌아간다. @return 이번에 바뀌었으면 true */
+    public boolean unsuspend() {
+        if (status != UserStatus.SUSPENDED) {
+            return false;
+        }
+        this.status = UserStatus.ACTIVE;
+        return true;
+    }
+
     /** 탈퇴(FR-009). 되돌릴 수 없다. 글 비공개·토큰 폐기는 서비스가 같은 트랜잭션에서 한다. */
     public void withdraw(Instant now) {
         this.status = UserStatus.WITHDRAWN;

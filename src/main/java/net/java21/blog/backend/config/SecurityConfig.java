@@ -11,6 +11,7 @@ import net.java21.blog.backend.security.JwtAuthenticationFilter;
 import net.java21.blog.backend.security.JwtProvider;
 import net.java21.blog.backend.security.OriginCheckFilter;
 import net.java21.blog.backend.security.OriginProperties;
+import net.java21.blog.backend.security.SuspendedUserRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -66,6 +67,9 @@ public class SecurityConfig {
             "/api/v1/portal/latest",
             "/api/v1/release-notes",
             "/api/v1/release-notes/**",
+            // 005 CAPTCHA 설정·트랙백 목록(005 contracts/api.md)
+            "/api/v1/captcha/config",
+            "/api/v1/posts/*/trackbacks",
             "/media/**",
             "/v3/api-docs",
             "/v3/api-docs/**",
@@ -101,7 +105,11 @@ public class SecurityConfig {
             "/api/v1/posts/*/unlock",
             "/api/v1/posts/*/comments",
             "/api/v1/comments/*/unlock",
-            "/api/v1/guestbook-entries/*/unlock"
+            "/api/v1/guestbook-entries/*/unlock",
+            // 005 권리 침해 신고(비회원 양식, CAPTCHA)
+            "/api/v1/rights-requests",
+            // 005 트랙백 받기(TrackBack 1.2, /api/v1 밖, Origin 검사 제외). 숫자 postId는 컨트롤러 매핑이 확인한다.
+            "/*/*/trackback"
     };
 
     /** 004 비회원도 비밀번호로 고치는 PATCH 경로(Origin 검사는 받는다). 회원·비회원 판단은 서비스가 한다. */
@@ -123,15 +131,17 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ApiErrorWriter errorWriter,
-            OriginProperties originProperties, JwtProvider jwtProvider, ObjectProvider<AdminRoleLookup> adminRoleLookup)
-            throws Exception {
+            OriginProperties originProperties, JwtProvider jwtProvider, ObjectProvider<AdminRoleLookup> adminRoleLookup,
+            ObjectProvider<SuspendedUserRegistry> suspendedUsers) throws Exception {
         AdminRoleLookup roleLookup = adminRoleLookup.getIfAvailable(() -> userId -> false);
+        SuspendedUserRegistry suspended = suspendedUsers.getIfAvailable();
         http
                 // 쿠키 인증의 CSRF 방어는 토큰 대신 Origin 검사(OriginCheckFilter)로 한다.
                 .csrf(AbstractHttpConfigurer::disable)
                 .addFilterBefore(new OriginCheckFilter(originProperties.allowedOrigins(), errorWriter),
                         CsrfFilter.class)
-                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), AnonymousAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider,
+                        suspended == null ? userId -> false : suspended::contains), AnonymousAuthenticationFilter.class)
                 .addFilterBefore(new AdminAccessFilter(roleLookup, errorWriter), AuthorizationFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
