@@ -118,7 +118,8 @@ class PostCategoryTagServiceTest {
                 categoryAccess, tagService, mediaReferences,
                 org.mockito.Mockito.mock(net.java21.blog.backend.topic.service.TopicService.class),
                 new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4),
-                net.java21.blog.backend.post.PostsProperties.defaults(), clock);
+                net.java21.blog.backend.post.PostsProperties.defaults(),
+                org.mockito.Mockito.mock(net.java21.blog.backend.spam.RateLimitPolicy.class), clock);
         draftService = new PostDraftService(blogAccess, access, postRepository, postDraftRepository,
                 postQueryRepository, tagQueryRepository, mediaReferences, clock);
         managePostService = new ManagePostService(blogAccess, managePostQueryRepository, categoryAccess,

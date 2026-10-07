@@ -14,6 +14,8 @@ import net.java21.blog.backend.media.dto.MediaUploadResponse;
 import net.java21.blog.backend.media.repository.MediaQueryRepository;
 import net.java21.blog.backend.media.repository.MediaRepository;
 import net.java21.blog.backend.media.storage.MediaStorage;
+import net.java21.blog.backend.spam.RateLimitKind;
+import net.java21.blog.backend.spam.RateLimitPolicy;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,10 +39,11 @@ public class MediaUploadService {
     private final MediaRepository mediaRepository;
     private final MediaQueryRepository mediaQueryRepository;
     private final UserRepository userRepository;
+    private final RateLimitPolicy rateLimits;
 
     public MediaUploadService(MediaProperties properties, ImageInspector inspector, MediaKeyGenerator keyGenerator,
             MediaStorage storage, MediaRepository mediaRepository, MediaQueryRepository mediaQueryRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository, RateLimitPolicy rateLimits) {
         this.properties = properties;
         this.inspector = inspector;
         this.keyGenerator = keyGenerator;
@@ -48,10 +51,23 @@ public class MediaUploadService {
         this.mediaRepository = mediaRepository;
         this.mediaQueryRepository = mediaQueryRepository;
         this.userRepository = userRepository;
+        this.rateLimits = rateLimits;
     }
 
     @Transactional
     public MediaUploadResponse upload(long userId, MultipartFile file, MediaPurpose purpose) {
+        return upload(userId, file, purpose, false);
+    }
+
+    /**
+     * @param rateLimitExempt 관리자(005 research M8: 관리자는 속도 제한을 받지 않음). 아니면 회원 1분
+     *                        {@code ratelimit.media-upload-per-minute}(30), 넘으면 429(FR-142)
+     */
+    @Transactional
+    public MediaUploadResponse upload(long userId, MultipartFile file, MediaPurpose purpose, boolean rateLimitExempt) {
+        if (!rateLimitExempt) {
+            rateLimits.check(RateLimitKind.MEDIA_UPLOAD, "u:" + userId);
+        }
         long size = file.getSize();
         if (size <= 0) {
             throw new BusinessException(ErrorCode.MEDIA_TYPE_NOT_ALLOWED, "Empty upload");

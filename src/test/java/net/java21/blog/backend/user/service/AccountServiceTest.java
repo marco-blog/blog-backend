@@ -26,6 +26,8 @@ import net.java21.blog.backend.user.domain.UserStatus;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
 import net.java21.blog.backend.user.repository.UserRepository;
 import net.java21.blog.backend.user.repository.WithdrawalRepository;
+import net.java21.blog.backend.spam.BannedWordMatcher;
+import net.java21.blog.backend.spam.repository.BannedWordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +43,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  */
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
+
+    @Mock
+    private BannedWordRepository bannedWordRepository;
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:00:00Z");
 
@@ -63,7 +68,8 @@ class AccountServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountService(userRepository, withdrawalRepository, refreshTokenRepository, passwordEncoder,
-                mediaReferences, subscriptionRepository, new MutableClock(NOW));
+                mediaReferences, subscriptionRepository, new BannedWordMatcher(bannedWordRepository),
+                new MutableClock(NOW));
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -130,6 +136,20 @@ class AccountServiceTest {
 
         assertThat(user.getNickname()).hasSize(30);
         assertThat(user.getBio()).hasSize(300);
+    }
+
+    @Test
+    void bannedNicknameIsRejected() {
+        userExists();
+        when(bannedWordRepository.findAll()).thenReturn(java.util.List.of(new net.java21.blog.backend.spam.domain.BannedWord(
+                user, "운영자", net.java21.blog.backend.spam.domain.BannedWordScope.ALL,
+                net.java21.blog.backend.spam.domain.BannedWordAction.REJECT)));
+        UpdateMeRequest request = request();
+        request.setNickname("진짜 운 영 자");
+        assertThatThrownBy(() -> service.updateProfile(7L, request))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.fieldErrors())
+                        .containsExactly(FieldError.of("nickname", "BANNED_WORD")));
+        assertThat(user.getNickname()).isEqualTo("마르코");
     }
 
     @Test

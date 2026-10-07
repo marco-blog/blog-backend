@@ -17,7 +17,6 @@ import net.java21.blog.backend.common.security.AttemptTarget;
 import net.java21.blog.backend.common.security.PasswordAttemptGuard;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.dto.GuestCredentials;
-import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import net.java21.blog.backend.support.TestEntities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,12 +34,10 @@ class GuestAuthorServiceTest {
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(4);
     @Mock
-    private GuestWriteGuard writeGuard;
-    @Mock
     private PasswordAttemptGuard attemptGuard;
 
     private GuestAuthorService service() {
-        return new GuestAuthorService(encoder, writeGuard, attemptGuard);
+        return new GuestAuthorService(encoder, attemptGuard);
     }
 
     @Test
@@ -52,19 +49,18 @@ class GuestAuthorServiceTest {
     }
 
     @Test
-    void newGuestHashesPasswordKeepsIpAndChecksRate() {
-        GuestCredentials guest = service().newGuest("  손님\u0007 ", "1234", CLIENT, GuestWriteKind.GUESTBOOK);
+    void newGuestHashesPasswordAndKeepsIp() {
+        GuestCredentials guest = service().newGuest("  손님\u0007 ", "1234", CLIENT);
 
         assertThat(guest.name()).isEqualTo("손님");
         assertThat(guest.ip()).isEqualTo("203.0.113.7");
         assertThat(guest.passwordHash()).startsWith("$2").isNotEqualTo("1234");
         assertThat(encoder.matches("1234", guest.passwordHash())).isTrue();
         assertThat(guest.toString()).doesNotContain("203.0.113.7").doesNotContain(guest.passwordHash());
-        verify(writeGuard).check(GuestWriteKind.GUESTBOOK, "203.0.113.7");
     }
 
     @Test
-    void nameAndPasswordAreValidatedBeforeRateLimit() {
+    void nameAndPasswordAreValidated() {
         assertFields("   ", "1234", "guestName", "REQUIRED");
         assertFields(null, "1234", "guestName", "REQUIRED");
         assertFields("가".repeat(31), "1234", "guestName", "TOO_LONG");
@@ -72,17 +68,8 @@ class GuestAuthorServiceTest {
         assertFields("손님", "", "guestPassword", "REQUIRED");
         assertFields("손님", "123", "guestPassword", "TOO_SHORT");
         assertFields("손님", "x".repeat(65), "guestPassword", "TOO_LONG");
-        assertThat(service().newGuest("가".repeat(30), "x".repeat(64), CLIENT, GuestWriteKind.COMMENT).name())
+        assertThat(service().newGuest("가".repeat(30), "x".repeat(64), CLIENT).name())
                 .hasSize(30);
-        verify(writeGuard).check(GuestWriteKind.COMMENT, "203.0.113.7");
-    }
-
-    @Test
-    void rateLimitRejectionPropagates() {
-        doThrow(BusinessException.retryAfter(ErrorCode.TOO_MANY_REQUESTS, "slow", 30)).when(writeGuard)
-                .check(any(), any());
-        assertCode(() -> service().newGuest("손님", "1234", CLIENT, GuestWriteKind.COMMENT),
-                ErrorCode.TOO_MANY_REQUESTS);
     }
 
     @Test
@@ -114,7 +101,7 @@ class GuestAuthorServiceTest {
     }
 
     private void assertFields(String name, String password, String field, String code) {
-        assertThatThrownBy(() -> service().newGuest(name, password, CLIENT, GuestWriteKind.GUESTBOOK))
+        assertThatThrownBy(() -> service().newGuest(name, password, CLIENT))
                 .isInstanceOfSatisfying(BusinessException.class, e -> {
                     assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
                     assertThat(e.fieldErrors()).anySatisfy(f -> {
@@ -122,6 +109,5 @@ class GuestAuthorServiceTest {
                         assertThat(f.code()).isEqualTo(code);
                     });
                 });
-        verifyNoInteractions(writeGuard);
     }
 }

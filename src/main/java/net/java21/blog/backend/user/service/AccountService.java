@@ -15,6 +15,7 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.spam.BannedWordMatcher;
 import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
@@ -37,17 +38,20 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final MediaReferenceService mediaReferences;
     private final BlogSubscriptionRepository subscriptionRepository;
+    private final BannedWordMatcher bannedWords;
     private final Clock clock;
 
     public AccountService(UserRepository userRepository, WithdrawalRepository withdrawalRepository,
             RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder,
-            MediaReferenceService mediaReferences, BlogSubscriptionRepository subscriptionRepository, Clock clock) {
+            MediaReferenceService mediaReferences, BlogSubscriptionRepository subscriptionRepository,
+            BannedWordMatcher bannedWords, Clock clock) {
         this.userRepository = userRepository;
         this.withdrawalRepository = withdrawalRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.mediaReferences = mediaReferences;
         this.subscriptionRepository = subscriptionRepository;
+        this.bannedWords = bannedWords;
         this.clock = clock;
     }
 
@@ -67,6 +71,8 @@ public class AccountService {
                 errors.add(FieldError.of("nickname", "REQUIRED"));
             } else if (nickname.length() > User.NICKNAME_MAX) {
                 errors.add(new FieldError("nickname", "TOO_LONG", Map.of("max", User.NICKNAME_MAX)));
+            } else {
+                bannedWords.collectName(errors, "nickname", nickname);
             }
         }
         String bio = null;

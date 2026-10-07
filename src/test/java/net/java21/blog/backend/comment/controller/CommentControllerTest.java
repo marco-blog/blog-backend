@@ -124,6 +124,35 @@ class CommentControllerTest {
                 eq(new CreateCommentRequest("안녕", null, true, "손님", "1234")), any(), any());
     }
 
+    /** 005 T070: CAPTCHA 토큰 바인딩, 속도 429 + Retry-After, 반복 422, 금칙어 필드 오류 형식. */
+    @Test
+    void spamDefenseErrorsUseCommonFormat() throws Exception {
+        when(commentService.create(isNull(), eq(100L), any(), any(), any()))
+                .thenThrow(BusinessException.retryAfter(ErrorCode.TOO_MANY_REQUESTS, "slow", 30))
+                .thenThrow(new BusinessException(ErrorCode.DUPLICATE_CONTENT_SPAM, "dup"))
+                .thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED, "banned",
+                        List.of(net.java21.blog.backend.common.api.FieldError.of("content", "BANNED_WORD"))))
+                .thenThrow(new BusinessException(ErrorCode.CAPTCHA_FAILED, "captcha"));
+        String body = "{\"content\":\"안녕\",\"guestName\":\"손님\",\"guestPassword\":\"1234\","
+                + "\"captchaToken\":\"e2e-pass\"}";
+        mvc.perform(post("/api/v1/posts/100/comments").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Retry-After", "30"));
+        mvc.perform(post("/api/v1/posts/100/comments").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.header.resultCode").value("DUPLICATE_CONTENT_SPAM"));
+        mvc.perform(post("/api/v1/posts/100/comments").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("content"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("BANNED_WORD"));
+        mvc.perform(post("/api/v1/posts/100/comments").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.resultCode").value("CAPTCHA_FAILED"));
+        verify(commentService, org.mockito.Mockito.atLeastOnce()).create(isNull(), eq(100L),
+                eq(new CreateCommentRequest("안녕", null, null, "손님", "1234", "e2e-pass")), any(), any());
+    }
+
     @Test
     void guestUpdateDeleteAndUnlockSendThePasswordInTheBody() throws Exception {
         CommentResponse guest = new CommentResponse(4L, "비밀", AuthorResponse.guest("손님"), false, true, NOW, NOW,

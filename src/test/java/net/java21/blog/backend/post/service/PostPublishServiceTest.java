@@ -55,6 +55,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 @ExtendWith(MockitoExtension.class)
 class PostPublishServiceTest {
 
+    @Mock
+    private net.java21.blog.backend.spam.RateLimitPolicy rateLimits;
+
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final String KEY_A = "k3Jd9fQ2xLmA7pZ0bR5tYw";
     private static final String KEY_B = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -96,7 +99,7 @@ class PostPublishServiceTest {
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
                 new TopicService(topicRepository, null, null, null, null, null, null), PASSWORD_ENCODER,
-                PostsProperties.defaults(), clock);
+                PostsProperties.defaults(), rateLimits, clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
@@ -124,6 +127,43 @@ class PostPublishServiceTest {
         assertThat(detail.status()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(detail.contentMarkdown()).isNotNull();
         assertThat(detail.blogHandle()).isEqualTo("marco");
+    }
+
+    /** 005 T069: 처음 발행(DRAFT → PUBLISHED·SCHEDULED)만 회원 1시간 한도로 센다. 수정 재발행은 세지 않는다. 관리자 제외. */
+    @Test
+    void onlyFirstPublishIsCountedAgainstTheHourlyLimit() {
+        draft("제목", "본문");
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        verify(rateLimits).check(net.java21.blog.backend.spam.RateLimitKind.POST_PUBLISH, "u:1");
+
+        draft("새 제목", "새 본문");
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        verify(rateLimits, org.mockito.Mockito.times(1)).check(any(), any());
+    }
+
+    @Test
+    void publishOverTheLimitIs429AndPostStaysDraft() {
+        draft("제목", "본문");
+        org.mockito.Mockito.doThrow(net.java21.blog.backend.common.error.BusinessException.retryAfter(
+                net.java21.blog.backend.common.error.ErrorCode.TOO_MANY_REQUESTS, "x", 100)).when(rateLimits)
+                .check(net.java21.blog.backend.spam.RateLimitKind.POST_PUBLISH, "u:1");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null)))
+                .isInstanceOf(net.java21.blog.backend.common.error.BusinessException.class);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void adminsAreNotCounted() {
+        TestEntities.with(blog.getUser(), "role", net.java21.blog.backend.user.domain.UserRole.ADMIN);
+        draft("제목", "본문");
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        org.mockito.Mockito.verifyNoInteractions(rateLimits);
     }
 
     @Test

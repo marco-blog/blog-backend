@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -24,9 +25,9 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.security.AttemptTarget;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.dto.GuestCredentials;
-import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import net.java21.blog.backend.guest.service.GuestAuthorService;
 import net.java21.blog.backend.guestbook.domain.GuestbookEntry;
+import net.java21.blog.backend.spam.WriteGuard;
 import net.java21.blog.backend.guestbook.domain.GuestbookStatus;
 import net.java21.blog.backend.guestbook.dto.GuestbookEntryResponse;
 import net.java21.blog.backend.guestbook.dto.GuestbookUpdateRequest;
@@ -69,6 +70,8 @@ class GuestbookServiceTest {
     private GuestAuthorService guestAuthors;
     @Mock
     private BlogBlockPolicy blockPolicy;
+    @Mock
+    private WriteGuard writeGuard;
 
     private GuestbookService service;
     private User owner;
@@ -78,7 +81,9 @@ class GuestbookServiceTest {
     @BeforeEach
     void setUp() {
         service = new GuestbookService(blogAccess, entryRepository, queryRepository, userRepository, guestAuthors,
-                blockPolicy, new MutableClock(NOW));
+                blockPolicy, writeGuard, new MutableClock(NOW));
+        lenient().when(writeGuard.guardNew(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(2));
+        lenient().when(writeGuard.guardEdit(any())).thenAnswer(i -> i.getArgument(0));
         owner = TestEntities.user(1L);
         writer = TestEntities.user(2L);
         blog = TestEntities.blog(10L, owner, "marco");
@@ -203,7 +208,31 @@ class GuestbookServiceTest {
         assertThat(created.content()).isEqualTo("안녕\n하세요");
         assertThat(created.author().userId()).isEqualTo(2L);
         assertThat(created.author().guest()).isFalse();
-        verify(guestAuthors, never()).newGuest(any(), any(), any(), any());
+        verify(guestAuthors, never()).newGuest(any(), any(), any());
+    }
+
+    /** 005 T066: 회원·비회원·주인 답글 모두 WriteGuard를 거치고 가린 내용을 저장한다. 수정은 금칙어만. */
+    @Test
+    void writesGoThroughWriteGuardAndStoreMaskedContent() {
+        when(writeGuard.guardNew(eq(WriteGuard.Kind.GUESTBOOK), eq(WriteGuard.Writer.member(writer, CLIENT.ip())),
+                eq("나쁜 말"), isNull(), isNull())).thenReturn("** 말");
+        service.create("marco", 2L, new GuestbookWriteRequest("나쁜 말", false, null, null, null), CLIENT);
+        ArgumentCaptor<GuestbookEntry> saved = ArgumentCaptor.forClass(GuestbookEntry.class);
+        verify(entryRepository).save(saved.capture());
+        assertThat(saved.getValue().getContent()).isEqualTo("** 말");
+
+        when(guestAuthors.newGuest("손님", "1234", CLIENT))
+                .thenReturn(new GuestCredentials("손님", "$2a$hash", "203.0.113.7"));
+        service.create("marco", null, new GuestbookWriteRequest("놀러 왔어요", false, null, "손님", "1234", "tok"),
+                CLIENT);
+        verify(writeGuard).guardNew(WriteGuard.Kind.GUESTBOOK, WriteGuard.Writer.guest(CLIENT.ip()), "놀러 왔어요",
+                "tok", "손님");
+
+        GuestbookEntry parent = withId(new GuestbookEntry(blog, writer, null, "질문", false), 60L);
+        when(entryRepository.findById(60L)).thenReturn(Optional.of(parent));
+        service.create("marco", 1L, new GuestbookWriteRequest("답글", null, 60L, null, null), CLIENT);
+        verify(writeGuard).guardNew(WriteGuard.Kind.GUESTBOOK, WriteGuard.Writer.member(owner, CLIENT.ip()), "답글",
+                null, null);
     }
 
     @Test
@@ -220,7 +249,7 @@ class GuestbookServiceTest {
 
     @Test
     void guestWritingSkipsBlockCheck() {
-        when(guestAuthors.newGuest("손님", "1234", CLIENT, GuestWriteKind.GUESTBOOK))
+        when(guestAuthors.newGuest("손님", "1234", CLIENT))
                 .thenReturn(new GuestCredentials("손님", "$2a$hash", "203.0.113.7"));
         service.create("marco", null, new GuestbookWriteRequest("안녕", false, null, "손님", "1234"), CLIENT);
         verify(blockPolicy, never()).requireNotBlocked(any(), any());
@@ -241,7 +270,7 @@ class GuestbookServiceTest {
 
     @Test
     void guestWritesThroughGuestAuthorService() {
-        when(guestAuthors.newGuest("손님", "1234", CLIENT, GuestWriteKind.GUESTBOOK))
+        when(guestAuthors.newGuest("손님", "1234", CLIENT))
                 .thenReturn(new GuestCredentials("손님", "$2a$hash", "203.0.113.7"));
 
         GuestbookEntryResponse created = service.create("marco", null,

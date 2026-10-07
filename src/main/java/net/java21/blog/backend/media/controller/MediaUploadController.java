@@ -33,8 +33,14 @@ public class MediaUploadController {
     @PostMapping(path = "/api/v1/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<ApiResponse<MediaUploadResponse>> upload(@CurrentUser AuthUser user,
             @RequestPart("file") MultipartFile file, @RequestParam(required = false) String purpose) {
-        MediaUploadResponse uploaded = uploadService.upload(user.userId(), file, parsePurpose(purpose));
+        MediaUploadResponse uploaded = uploadService.upload(user.userId(), file, parsePurpose(purpose),
+                isAdminHint(user));
         return ResponseEntity.created(URI.create(uploaded.url())).body(ApiResponse.ok(uploaded));
+    }
+
+    /** 접근 토큰의 role 힌트로 관리자인지(속도 제한 제외에만 쓴다). */
+    static boolean isAdminHint(AuthUser user) {
+        return "ADMIN".equals(user.role()) || "SUPER_ADMIN".equals(user.role());
     }
 
     /** {@code POST}(기본)·{@code PROFILE}·{@code BLOG_COVER}. */

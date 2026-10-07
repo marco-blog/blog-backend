@@ -21,6 +21,9 @@ import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
 import net.java21.blog.backend.post.repository.PostDraftRepository;
+import net.java21.blog.backend.spam.RateLimitKind;
+import net.java21.blog.backend.spam.RateLimitPolicy;
+import net.java21.blog.backend.spam.WriteGuard;
 import net.java21.blog.backend.tag.domain.TagNormalizer;
 import net.java21.blog.backend.tag.service.TagService;
 import net.java21.blog.backend.topic.domain.Topic;
@@ -45,6 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>004 예약 발행(FR-064, research B5): {@code scheduledAt}이 지금보다 미래면 예약(DRAFT·SCHEDULED 글만, PUBLISHED면 422
  * {@code SCHEDULE_NOT_ALLOWED}, {@code blog.posts.schedule-max-ahead} 넘으면 400 {@code scheduledAt INVALID}). 예약은
  * {@code published_at}을 건드리지 않고 블로그 첫 발행 시각도 남기지 않는다(작업이 실제로 발행할 때 남긴다). 없거나 지금 이하면 즉시 발행.
+ * <p>005 작성 속도(FR-142): 처음 발행만 회원 1시간 한도로 센다({@link #countFirstPublish}).
  */
 @Service
 public class PostPublishService {
@@ -63,12 +67,13 @@ public class PostPublishService {
     private final TopicService topicService;
     private final PasswordEncoder passwordEncoder;
     private final PostsProperties properties;
+    private final RateLimitPolicy rateLimits;
     private final Clock clock;
 
     public PostPublishService(PostAccess postAccess, PostDraftRepository postDraftRepository,
             MarkdownRenderer markdownRenderer, PostService postService, CategoryAccess categoryAccess,
             TagService tagService, MediaReferenceService mediaReferences, TopicService topicService,
-            PasswordEncoder passwordEncoder, PostsProperties properties, Clock clock) {
+            PasswordEncoder passwordEncoder, PostsProperties properties, RateLimitPolicy rateLimits, Clock clock) {
         this.postAccess = postAccess;
         this.postDraftRepository = postDraftRepository;
         this.markdownRenderer = markdownRenderer;
@@ -79,6 +84,7 @@ public class PostPublishService {
         this.topicService = topicService;
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
+        this.rateLimits = rateLimits;
         this.clock = clock;
     }
 
@@ -110,6 +116,7 @@ public class PostPublishService {
         Instant now = clock.instant();
         String passwordHash = passwordHash(post, settings);
         boolean schedule = schedule(post, settings.scheduledAt(), now);
+        countFirstPublish(post);
 
         RenderedContent content = markdownRenderer.render(markdown);
         String thumbnailUrl = thumbnailUrl(content, settings.thumbnailMediaKey());
@@ -164,6 +171,20 @@ public class PostPublishService {
             throw invalid(new FieldError("password", "TOO_LONG", Map.of("max", PASSWORD_MAX)));
         }
         return passwordEncoder.encode(password);
+    }
+
+    /**
+     * 005 FR-142: 처음 발행(DRAFT → PUBLISHED·SCHEDULED)만 회원 1시간 한도({@code ratelimit.post-publish-per-hour}, 모든 블로그
+     * 합계)로 센다. 수정 재발행·예약 글 다시 발행·예약 작업의 발행은 세지 않는다. 관리자는 세지 않는다. 넘으면 429.
+     */
+    private void countFirstPublish(Post post) {
+        if (post.getStatus() != PostStatus.DRAFT) {
+            return;
+        }
+        var owner = post.getBlog().getUser();
+        if (!WriteGuard.isExempt(owner)) {
+            rateLimits.check(RateLimitKind.POST_PUBLISH, "u:" + owner.getId());
+        }
     }
 
     /** 예약할지(미래 시각). 발행된 글은 422, 최대 앞날을 넘으면 400. 지금 이하이면 즉시 발행(Edge Cases). */

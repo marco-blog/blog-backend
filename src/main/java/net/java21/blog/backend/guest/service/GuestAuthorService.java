@@ -13,7 +13,6 @@ import net.java21.blog.backend.common.security.PasswordAttemptGuard;
 import net.java21.blog.backend.common.text.PlainTextNormalizer;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.dto.GuestCredentials;
-import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +22,7 @@ import org.springframework.stereotype.Service;
  *   <li>블로그의 {@code guestWriteEnabled}가 꺼져 있으면 401 {@code UNAUTHENTICATED}(front는 로그인 안내).</li>
  *   <li>이름 1~30자(제어 문자·앞뒤 공백 제거 후), 비밀번호 4~64자. 틀리면 400 {@code VALIDATION_FAILED}(field
  *       {@code guestName}·{@code guestPassword}, {@code REQUIRED}·{@code TOO_SHORT}·{@code TOO_LONG}).</li>
- *   <li>비밀번호는 BCrypt로만, IP는 엔티티가 암호화해 저장한다. 쓰기 속도는 {@link GuestWriteGuard}가 막는다.</li>
+ *   <li>비밀번호는 BCrypt로만, IP는 엔티티가 암호화해 저장한다. CAPTCHA·쓰기 속도·금칙어·반복은 005 {@code WriteGuard}가 막는다.</li>
  *   <li>수정·삭제·내용 보기의 비밀번호 확인은 {@link PasswordAttemptGuard}로 시도를 센다(틀리면 403 {@code GUEST_PASSWORD_MISMATCH}).</li>
  * </ul>
  */
@@ -35,13 +34,10 @@ public class GuestAuthorService {
     public static final int PASSWORD_MAX = 64;
 
     private final PasswordEncoder passwordEncoder;
-    private final GuestWriteGuard writeGuard;
     private final PasswordAttemptGuard attemptGuard;
 
-    public GuestAuthorService(PasswordEncoder passwordEncoder, GuestWriteGuard writeGuard,
-            PasswordAttemptGuard attemptGuard) {
+    public GuestAuthorService(PasswordEncoder passwordEncoder, PasswordAttemptGuard attemptGuard) {
         this.passwordEncoder = passwordEncoder;
-        this.writeGuard = writeGuard;
         this.attemptGuard = attemptGuard;
     }
 
@@ -52,8 +48,8 @@ public class GuestAuthorService {
         }
     }
 
-    /** 새 비회원 글의 작성자: 이름·비밀번호를 검증하고 쓰기 속도를 확인한 뒤 BCrypt 해시와 IP를 돌려준다. */
-    public GuestCredentials newGuest(String name, String password, ClientInfo client, GuestWriteKind kind) {
+    /** 새 비회원 글의 작성자: 이름·비밀번호를 검증한 뒤 BCrypt 해시와 IP를 돌려준다. */
+    public GuestCredentials newGuest(String name, String password, ClientInfo client) {
         String cleanName = PlainTextNormalizer.singleLine(name);
         List<FieldError> errors = new ArrayList<>();
         if (cleanName.isEmpty()) {
@@ -72,7 +68,6 @@ public class GuestAuthorService {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Invalid guest author", errors);
         }
         String ip = client == null ? null : client.ip();
-        writeGuard.check(kind, ip);
         return new GuestCredentials(cleanName, passwordEncoder.encode(password), ip);
     }
 
