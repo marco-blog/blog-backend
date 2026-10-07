@@ -8,8 +8,13 @@ import java.util.List;
 import java.util.Map;
 
 import net.java21.blog.backend.admin.audit.AuditActions;
+import net.java21.blog.backend.support.ExternalTestKit;
+import net.java21.blog.backend.support.StubHttpServer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * 006 T046(SC-017, US3 AS1, FR-106, research A8): {@code /api/v1/admin/**}의 GET이 아닌 매핑 전체가 아래 표에 있어야 하고, 표의 각
@@ -17,6 +22,26 @@ import org.springframework.http.HttpMethod;
  * <p><b>새 관리자 변경 API를 더하면 이 표에 행을 더한다</b>(005·007 포함). 상태를 바꾸지 않는 요청은 {@link #NO_AUDIT}에 이유와 함께 둔다.
  */
 class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
+
+    /** 007 외부 블로그 직접 등록·신청이 읽는 피드(루프백, 시험 전용 {@code allow-private}). */
+    private static final StubHttpServer FEEDS = StubHttpServer.start();
+
+    @DynamicPropertySource
+    static void feeds(DynamicPropertyRegistry registry) {
+        registry.add("blog.outbound.allow-private", () -> "true");
+        registry.add("blog.outbound.allowed-ports", () -> "80,443," + FEEDS.port());
+    }
+
+    @AfterAll
+    static void stopFeeds() {
+        FEEDS.close();
+    }
+
+    private static String feed(String name) {
+        FEEDS.respond("/" + name + ".xml", 200, "application/rss+xml", ExternalTestKit.rss("Feed " + name,
+                FEEDS.uri("/").toString(), "about", new String[] {"g1", "P1", FEEDS.uri("/" + name + "/1").toString()}));
+        return FEEDS.uri("/" + name + ".xml").toString();
+    }
 
     private static final String LONG_TEXT = "포털 노출 기준을 넘는 충분히 긴 본문입니다. ".repeat(30);
 
@@ -52,6 +77,7 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private long note;
     private long draftNote;
     private long bannedWord;
+    private long externalBlog;
 
     @Test
     void everyAdminChangeIsAudited() throws Exception {
@@ -192,6 +218,18 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                         "/api/v1/admin/banned-words/" + bannedWord, "{\"action\":\"MASK\"}")),
                 new Row("DELETE", "/api/v1/admin/banned-words/{id}", AuditActions.BANNED_WORD_DELETE, () -> new Call(
                         "/api/v1/admin/banned-words/" + bannedWord, null)),
+                // 007 외부 블로그(직접 등록·기본 주제·승인·거절)
+                new Row("POST", "/api/v1/admin/external-blogs", AuditActions.EXTERNAL_BLOG_CREATE, () -> new Call(
+                        "/api/v1/admin/external-blogs", "{\"feedUrl\":\"%s\",\"defaultTopicId\":%d,\"registrationBasis\":\"%s\"}"
+                                .formatted(feed(uniqueHandle("acdirect")), topicChildren.get(0), "public feed"))),
+                new Row("PATCH", "/api/v1/admin/external-blogs/{id}", AuditActions.EXTERNAL_BLOG_UPDATE, () -> new Call(
+                        "/api/v1/admin/external-blogs/" + externalBlog,
+                        "{\"defaultTopicId\":%d}".formatted(topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/approve", AuditActions.EXTERNAL_BLOG_APPROVE,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acexta") + "/approve", null)),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/reject", AuditActions.EXTERNAL_BLOG_REJECT,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acextr") + "/reject",
+                                "{\"reason\":\"off topic\"}")),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));
@@ -204,9 +242,20 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
             case "POST /api/v1/admin/portal/curations" -> curation = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/release-notes" -> note = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/banned-words" -> bannedWord = ((Number) reply.read("$.result.id")).longValue();
+            case "POST /api/v1/admin/external-blogs" ->
+                    externalBlog = ((Number) reply.read("$.result.id")).longValue();
             default -> {
             }
         }
+    }
+
+    /** 새 회원이 외부 블로그를 신청한다(승인 대기). 등록 id */
+    private long memberRequest(String prefix) throws Exception {
+        Member member = signup(prefix);
+        Reply created = send(HttpMethod.POST, "/api/v1/me/external-blogs", "{\"feedUrl\":\"%s\",\"defaultTopicId\":%d}"
+                .formatted(feed(uniqueHandle(prefix)), topicChildren.get(0)), member.cookie());
+        assertThat(created.status()).as(created.body()).isEqualTo(201);
+        return ((Number) created.read("$.result.id")).longValue();
     }
 
     private static String noteBody(String version, Integer baseRevisionNo) {

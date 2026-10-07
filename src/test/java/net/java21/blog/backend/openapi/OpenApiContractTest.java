@@ -233,7 +233,24 @@ class OpenApiContractTest {
             "GET /api/v1/admin/audit-logs/{id}",
             "GET /api/v1/admin/audit-logs/actions",
             "GET /api/v1/admin/admins",
-            "PUT /api/v1/admin/users/{id}/role");
+            "PUT /api/v1/admin/users/{id}/role",
+            // 007 (007 contracts/api.md) — 외부 블로그 신청·소유 인증·넘겨받기, 관리자 외부 블로그, 외부 썸네일
+            "POST /api/v1/external-blog-previews",
+            "POST /api/v1/me/external-blog-verifications",
+            "POST /api/v1/me/external-blog-verifications/{id}/check",
+            "GET /api/v1/me/external-blogs",
+            "POST /api/v1/me/external-blogs",
+            "GET /api/v1/me/external-blogs/{id}",
+            "GET /api/v1/me/external-blogs/{id}/posts",
+            "POST /api/v1/external-blogs/{id}/claim",
+            "GET /api/v1/admin/external-blogs",
+            "POST /api/v1/admin/external-blogs",
+            "GET /api/v1/admin/external-blogs/{id}",
+            "PATCH /api/v1/admin/external-blogs/{id}",
+            "POST /api/v1/admin/external-blogs/{id}/approve",
+            "POST /api/v1/admin/external-blogs/{id}/reject",
+            "GET /api/v1/admin/external-blogs/{id}/posts",
+            "GET /media/external/{key}");
 
     /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
@@ -270,7 +287,7 @@ class OpenApiContractTest {
             Map.entry("RoleChangeRequest", List.of("role")));
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
-    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
+    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /media/external/{}", "GET /{}/rss", "GET /{}/atom",
             "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
             "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file");
 

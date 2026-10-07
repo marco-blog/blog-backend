@@ -272,6 +272,7 @@ class AdminExternalBlogServiceTest {
         ExternalPost removed = x.removed(released, "removed", topic, RemovedReason.ADMIN);
         ExternalPost withdrawn = x.removed(released, "withdrawn", topic, RemovedReason.MEMBER_WITHDRAWN);
         ExternalFixtures.moveTo(released, ExternalBlogStatus.RELEASED);
+        em.flush();
         ExternalBlog otherFeed = x.blog(member, "https://elsewhere.example/feed", topic, ExternalBlogStatus.RELEASED);
         ExternalPost elsewhere = x.post(otherFeed, "elsewhere", topic, null);
         User second = f.user("second");

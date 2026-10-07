@@ -71,9 +71,13 @@ public class ExternalBlog extends BaseTimeEntity {
     @Column(name = "feed_url_hash", nullable = false, length = 64, columnDefinition = "char(64)")
     private String feedUrlHash;
 
-    /** MySQL 생성 컬럼(읽기 전용). */
+    /**
+     * 생성 컬럼(읽기 전용). 운영 스키마는 마이그레이션의 MySQL 생성 컬럼이고, 아래 정의는 엔티티로 스키마를 만드는 H2 시험에서 같은 유일
+     * 규칙(거절·해제가 아닌 등록은 피드당 하나)을 지키게 한다.
+     */
     @Column(name = "active_feed_hash", insertable = false, updatable = false, unique = true, length = 64,
-            columnDefinition = "char(64)")
+            columnDefinition = "char(64) generated always as (case when status in ('REJECTED', 'RELEASED') then null"
+                    + " else feed_url_hash end)")
     private String activeFeedHash;
 
     @Enumerated(EnumType.STRING)
