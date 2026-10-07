@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.error.BusinessException;
@@ -66,6 +67,8 @@ class GuestbookServiceTest {
     private UserRepository userRepository;
     @Mock
     private GuestAuthorService guestAuthors;
+    @Mock
+    private BlogBlockPolicy blockPolicy;
 
     private GuestbookService service;
     private User owner;
@@ -75,7 +78,7 @@ class GuestbookServiceTest {
     @BeforeEach
     void setUp() {
         service = new GuestbookService(blogAccess, entryRepository, queryRepository, userRepository, guestAuthors,
-                new MutableClock(NOW));
+                blockPolicy, new MutableClock(NOW));
         owner = TestEntities.user(1L);
         writer = TestEntities.user(2L);
         blog = TestEntities.blog(10L, owner, "marco");
@@ -163,6 +166,26 @@ class GuestbookServiceTest {
         assertThat(created.author().userId()).isEqualTo(2L);
         assertThat(created.author().guest()).isFalse();
         verify(guestAuthors, never()).newGuest(any(), any(), any(), any());
+    }
+
+    @Test
+    void blockedMemberCannotWriteAndReasonIsHidden() {
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Write not allowed")).when(blockPolicy)
+                .requireNotBlocked(10L, 2L);
+
+        BusinessException error = org.junit.jupiter.api.Assertions.assertThrows(BusinessException.class,
+                () -> service.create("marco", 2L, write("안녕"), CLIENT));
+        assertThat(error.errorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+        assertThat(error.getMessage()).doesNotContainIgnoringCase("block");
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    void guestWritingSkipsBlockCheck() {
+        when(guestAuthors.newGuest("손님", "1234", CLIENT, GuestWriteKind.GUESTBOOK))
+                .thenReturn(new GuestCredentials("손님", "$2a$hash", "203.0.113.7"));
+        service.create("marco", null, new GuestbookWriteRequest("안녕", false, null, "손님", "1234"), CLIENT);
+        verify(blockPolicy, never()).requireNotBlocked(any(), any());
     }
 
     @Test

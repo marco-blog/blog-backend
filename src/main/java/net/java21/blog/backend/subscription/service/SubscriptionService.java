@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.common.error.BusinessException;
@@ -28,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       이미 구독 중이면 같은 응답이고 이벤트는 없다. 새로 구독했을 때만 {@link BlogSubscribedEvent}(커밋 뒤 NEW_SUBSCRIBER 알림).</li>
  *   <li>취소: handle이 있는 블로그면 상태와 관계없이 된다(삭제·정지 포함). 없는 handle은 404.</li>
  *   <li>행 추가·삭제와 {@code blogs.subscriber_count} ±1은 한 트랜잭션.</li>
+ *   <li>이 블로그에서 차단된 회원(004 FR-146)은 구독할 수 없다(일반 403 {@code FORBIDDEN}). 차단할 때는
+ *       {@link #removeForBlock}이 차단과 같은 트랜잭션에서 구독을 지운다.</li>
  * </ul>
  */
 @Service
@@ -38,16 +41,18 @@ public class SubscriptionService {
     private final SubscriptionFeedQueryRepository feedQueryRepository;
     private final TagQueryRepository tagQueryRepository;
     private final ApplicationEventPublisher events;
+    private final BlogBlockPolicy blockPolicy;
     private final Clock clock;
 
     public SubscriptionService(BlogRepository blogRepository, BlogSubscriptionRepository subscriptionRepository,
             SubscriptionFeedQueryRepository feedQueryRepository, TagQueryRepository tagQueryRepository,
-            ApplicationEventPublisher events, Clock clock) {
+            ApplicationEventPublisher events, BlogBlockPolicy blockPolicy, Clock clock) {
         this.blogRepository = blogRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.feedQueryRepository = feedQueryRepository;
         this.tagQueryRepository = tagQueryRepository;
         this.events = events;
+        this.blockPolicy = blockPolicy;
         this.clock = clock;
     }
 
@@ -60,6 +65,7 @@ public class SubscriptionService {
         if (blog.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.CANNOT_SUBSCRIBE_OWN_BLOG, "Cannot subscribe to own blog: " + handle);
         }
+        blockPolicy.requireNotBlocked(blog.getId(), userId);
         int count = subscriptionRepository.lockSubscriberCount(blog.getId()).orElseThrow(() -> blogNotFound(handle));
         if (subscriptionRepository.insertIgnore(userId, blog.getId(), clock.instant()) == 1) {
             subscriptionRepository.changeSubscriberCount(blog.getId(), 1);
@@ -79,6 +85,19 @@ public class SubscriptionService {
             count = Math.max(0, count - 1);
         }
         return new SubscriptionStateResponse(blog.getHandle(), false, count);
+    }
+
+    /**
+     * 차단(004 FR-146)과 같은 트랜잭션에서 그 회원의 이 블로그 구독을 지우고 구독자 수를 줄인다(002 취소와 같은 쿼리). 구독이 없으면
+     * 아무것도 바꾸지 않는다. 알림은 없다. 지웠으면 true.
+     */
+    @Transactional
+    public boolean removeForBlock(Long blogId, Long userId) {
+        if (subscriptionRepository.delete(userId, blogId) == 1) {
+            subscriptionRepository.changeSubscriberCount(blogId, -1);
+            return true;
+        }
+        return false;
     }
 
     /** 이 회원이 이 블로그를 구독 중인지. 비로그인이면 null. 쿼리 0~1회. */

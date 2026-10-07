@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.common.error.BusinessException;
@@ -63,6 +64,8 @@ class SubscriptionServiceTest {
     private TagQueryRepository tagQueryRepository;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private BlogBlockPolicy blockPolicy;
 
     private SubscriptionService service;
     private User owner;
@@ -71,7 +74,7 @@ class SubscriptionServiceTest {
     @BeforeEach
     void setUp() {
         service = new SubscriptionService(blogRepository, subscriptionRepository, feedQueryRepository,
-                tagQueryRepository, events, new MutableClock(NOW));
+                tagQueryRepository, events, blockPolicy, new MutableClock(NOW));
         owner = TestEntities.user(OWNER);
         blog = TestEntities.blog(10L, owner, "marco");
     }
@@ -190,6 +193,30 @@ class SubscriptionServiceTest {
         assertThat(second.summary()).isNull();
         assertThat(second.thumbnailUrl()).isNull();
         assertThat(second.author().profileImageUrl()).isNull();
+    }
+
+    @Test
+    void blockedMemberCannotSubscribeAndNothingChanges() {
+        found(blog);
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.FORBIDDEN, "Write not allowed"))
+                .when(blockPolicy).requireNotBlocked(10L, READER);
+
+        assertThatThrownBy(() -> service.subscribe(READER, "marco")).isInstanceOfSatisfying(BusinessException.class,
+                e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                    assertThat(e.getMessage()).doesNotContainIgnoringCase("block");
+                });
+        verify(subscriptionRepository, never()).insertIgnore(anyLong(), anyLong(), any());
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void removeForBlockDeletesAndDecrementsOnlyWhenSubscribed() {
+        when(subscriptionRepository.delete(READER, 10L)).thenReturn(1, 0);
+
+        assertThat(service.removeForBlock(10L, READER)).isTrue();
+        assertThat(service.removeForBlock(10L, READER)).isFalse();
+        verify(subscriptionRepository, org.mockito.Mockito.times(1)).changeSubscriberCount(10L, -1);
     }
 
     private void found(Blog b) {
