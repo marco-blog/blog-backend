@@ -56,4 +56,17 @@ public interface AdminUserRepository extends Repository<User, Long> {
     default List<Long> findIdsByRoleAndStatus(UserRole role, UserStatus status) {
         return lockByRoleAndStatus(role, status).stream().map(User::getId).toList();
     }
+
+    /** 회원의 시간대(006 대시보드 날짜 경계, 작업 기록 기간). */
+    @Query("select u.timeZone from User u where u.id = :id")
+    Optional<String> findTimeZoneById(@Param("id") Long id);
+
+    /** 관리자 목록(006 FR-105): ADMIN·SUPER_ADMIN 전원(정지 포함), 권한 높은 순 → 닉네임 → id. */
+    @Query("select u from User u where u.role in :roles order by case when u.role = :top then 0 else 1 end,"
+            + " u.nickname, u.id")
+    List<User> findByRoleInOrdered(@Param("roles") Collection<UserRole> roles, @Param("top") UserRole top);
+
+    /** 회원 한 명(권한 변경 대상·응답). */
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findUserById(@Param("id") Long id);
 }

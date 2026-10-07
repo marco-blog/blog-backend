@@ -106,4 +106,14 @@ class CacheHeadersTestController {
                 .contentType(org.springframework.http.MediaType.parseMediaType("application/zip"))
                 .body(new byte[] {'P', 'K'});
     }
+
+    /** 006 관리자 API(대시보드·콘텐츠 검색·정보·작업 기록·관리자 권한). 로그인 응답이라 기본 {@code no-store}. */
+    @RequestMapping(path = {"/api/v1/admin/dashboard", "/api/v1/admin/contents/posts", "/api/v1/admin/contents/comments",
+            "/api/v1/admin/contents/guestbook-entries", "/api/v1/admin/reserved-handles",
+            "/api/v1/admin/service-settings", "/api/v1/admin/audit-logs", "/api/v1/admin/audit-logs/{id}",
+            "/api/v1/admin/audit-logs/actions", "/api/v1/admin/admins", "/api/v1/admin/users/{id}/role"},
+            method = {RequestMethod.GET, RequestMethod.PUT})
+    ApiResponse<Long> adminConsole(@CurrentUser AuthUser user) {
+        return ApiResponse.ok(user.userId());
+    }
 }
