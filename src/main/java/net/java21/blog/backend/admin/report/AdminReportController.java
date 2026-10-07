@@ -59,8 +59,8 @@ public class AdminReportController {
 
     @PatchMapping("/{id}/target")
     ApiResponse<ReportDetailResponse> assignTarget(@CurrentUser AuthUser admin, @PathVariable long id,
-            @RequestBody AssignTargetRequest request) {
-        return ApiResponse.ok(service.assignTarget(admin.userId(), id, request));
+            @RequestBody AssignTargetRequest request, HttpServletRequest http) {
+        return ApiResponse.ok(service.assignTarget(admin.userId(), id, request, http.getRemoteAddr()));
     }
 
     @PostMapping("/{id}/resolve")
