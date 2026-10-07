@@ -341,8 +341,22 @@ class OpenApiContractTest {
             Map.entry("LoginRequest", List.of("captchaToken")),
             Map.entry("GuestbookWriteRequest", List.of("captchaToken")),
             // 007 US2 외부 카드(007 contracts "003 응답 확장")
-            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")),
-            // 007 US4 등록 해제 요청, 외부 글 포털 제외
+            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")));
+
+    /** 007 요청·응답 스키마(007 contracts/api.md 타입): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> SCHEMAS_007 = Map.ofEntries(
+            Map.entry("FeedPreviewResponse", List.of("feedUrl", "siteUrl", "title", "format", "recentPosts",
+                    "registered")),
+            Map.entry("VerificationResponse", List.of("id", "feedUrl", "code", "expiresAt", "verifiedAt",
+                    "claimableExternalBlogId")),
+            Map.entry("MyExternalBlogResponse", List.of("id", "title", "siteUrl", "feedUrl", "feedFormat", "status",
+                    "registrationType", "ownershipVerified", "defaultTopicId", "rejectReason", "lastFetchedAt",
+                    "lastSuccessAt", "lastFetchResult", "postCount", "createdAt")),
+            Map.entry("MyExternalPostResponse", List.of("id", "title", "summary", "link", "thumbnailUrl",
+                    "publishedAt", "topicId", "topicSource", "status", "removedReason", "clickCount")),
+            Map.entry("ClassificationReviewResponse", List.of("id", "status", "post", "externalBlog")),
+            Map.entry("ClassificationStatsResponse", List.of("window", "classifierAccuracy", "finalAccuracy")),
+            Map.entry("TopicMappingRuleResponse", List.of("id", "keyword", "topicId", "priority", "createdBy")),
             Map.entry("ReleaseRequest", List.of("deletePosts")),
             Map.entry("ExternalExclusionResponse", List.of("externalPostId", "reason", "excludedBy", "createdAt")));
 
@@ -454,6 +468,30 @@ class OpenApiContractTest {
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
         assertThat(missing).as("문서에 없는 006 스키마 필드").isEmpty();
+    }
+
+    @Test
+    void schemasOf007AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        SCHEMAS_007.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 007 스키마 필드").isEmpty();
+    }
+
+    /** 007 출처 필터: 003 최신 글·주제 글 목록에 {@code source} 질의 파라미터(contracts "003 응답 확장"). */
+    @Test
+    void sourceParameterOf007IsDocumented() {
+        for (String path : List.of("/api/v1/portal/latest", "/api/v1/topics/{slug}/posts")) {
+            JsonNode parameters = doc.get("paths").get(path).get("get").get("parameters");
+            List<String> names = new ArrayList<>();
+            parameters.forEach(parameter -> names.add(parameter.get("name").asText()));
+            assertThat(names).as(path).contains("source");
+        }
     }
 
     @Test

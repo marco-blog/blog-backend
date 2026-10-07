@@ -243,4 +243,42 @@ class CacheHeadersWebMvcTest {
                 .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString("text/xml")))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
     }
+
+    /**
+     * 007 T088: 회원·관리자 외부 블로그 API 전부(비관리자 404 포함) 저장하지 않는다. 클릭 이동(visit)의 {@code no-store}와 외부 썸네일의
+     * {@code public, max-age=86400}은 실제 컨트롤러 시험(ExternalVisitControllerTest·ExternalThumbnailControllerTest)이 본다.
+     */
+    @Test
+    void externalMemberAndAdminResponsesAreNotStored() throws Exception {
+        when(roleLookup.isActiveAdmin(5L)).thenReturn(true);
+        for (var request : List.of(post("/api/v1/external-blog-previews"),
+                post("/api/v1/me/external-blog-verifications"), post("/api/v1/me/external-blog-verifications/3/check"),
+                get("/api/v1/me/external-blogs"), post("/api/v1/me/external-blogs"), get("/api/v1/me/external-blogs/3"),
+                patch("/api/v1/me/external-blogs/3"), post("/api/v1/external-blogs/3/claim"),
+                post("/api/v1/me/external-blogs/3/release"), get("/api/v1/me/external-blogs/3/posts"),
+                put("/api/v1/me/external-blogs/3/posts/4/topic"))) {
+            mvc.perform(request.cookie(authCookies.user(7L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        for (var request : List.of(get("/api/v1/admin/external-blogs"), post("/api/v1/admin/external-blogs"),
+                get("/api/v1/admin/external-blogs/3"), patch("/api/v1/admin/external-blogs/3"),
+                post("/api/v1/admin/external-blogs/3/approve"), post("/api/v1/admin/external-blogs/3/reject"),
+                post("/api/v1/admin/external-blogs/3/pause"), post("/api/v1/admin/external-blogs/3/resume"),
+                post("/api/v1/admin/external-blogs/3/block"), get("/api/v1/admin/external-blogs/3/posts"),
+                post("/api/v1/admin/external-posts/4/remove"), put("/api/v1/admin/portal/external-exclusions/4"),
+                delete("/api/v1/admin/portal/external-exclusions/4"), get("/api/v1/admin/classification-reviews"),
+                post("/api/v1/admin/classification-reviews/5/confirm"),
+                post("/api/v1/admin/classification-reviews/confirm-batch"),
+                get("/api/v1/admin/classification-stats"), get("/api/v1/admin/topic-mapping-rules"),
+                post("/api/v1/admin/topic-mapping-rules"), patch("/api/v1/admin/topic-mapping-rules/6"),
+                delete("/api/v1/admin/topic-mapping-rules/6"))) {
+            mvc.perform(request.cookie(authCookies.user(5L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        mvc.perform(get("/api/v1/admin/external-blogs").cookie(authCookies.user(7L)))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+    }
 }

@@ -233,7 +233,8 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                         "/api/v1/admin/banned-words/" + bannedWord, "{\"action\":\"MASK\"}")),
                 new Row("DELETE", "/api/v1/admin/banned-words/{id}", AuditActions.BANNED_WORD_DELETE, () -> new Call(
                         "/api/v1/admin/banned-words/" + bannedWord, null)),
-                // 007 외부 블로그(직접 등록·기본 주제·승인·거절)
+                // 007 외부 블로그(직접 등록·기본 주제·승인·거절). 회원 API(/api/v1/me/external-blogs/**)는 관리자 변경이 아니고
+                // 블로그 주인 경로(/blogs/{handle}/manage/**)도 아니라 006 ManageEndpointAccessMatrixTest 대상이 아니다.
                 new Row("POST", "/api/v1/admin/external-blogs", AuditActions.EXTERNAL_BLOG_CREATE, () -> new Call(
                         "/api/v1/admin/external-blogs", "{\"feedUrl\":\"%s\",\"defaultTopicId\":%d,\"registrationBasis\":\"%s\"}"
                                 .formatted(feed(uniqueHandle("acdirect")), topicChildren.get(0), "public feed"))),
