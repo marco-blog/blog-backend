@@ -38,8 +38,8 @@
 | `BLOG_MEDIA_TEMP_DIR` | `blog.media.temp-dir` | | 업로드 직후 임시 보관 디렉터리. 백업 제외 |
 | `BLOG_MEDIA_THUMBNAIL_DIR` | `blog.media.thumbnail-dir` | | 썸네일 디렉터리. 다시 만들 수 있어 백업 제외 |
 | `BLOG_EXPORT_DIR` | `blog.export.dir` | | 블로그 백업 zip 디렉터리(004 FR-145). 백업 제외(4.1절) |
-| `BLOG_CAPTCHA_SITE_KEY` | `blog.captcha.site-key` | | Cloudflare Turnstile 사이트 키(005 FR-141, 10.1절). 브라우저에 보이는 공개 값 |
-| `BLOG_CAPTCHA_SECRET_KEY` | `blog.captcha.secret-key` | 예 | Turnstile 비밀 키. prod는 provider가 `turnstile`로 고정이라 두 키 중 하나라도 비면 기동 실패 |
+| `BLOG_CAPTCHA_SITE_KEY` | `blog.captcha.site-key` | | Cloudflare Turnstile 사이트 키(005 FR-141, 10.1절). 브라우저에 보이는 공개 값. **1.0에서는 CAPTCHA를 꺼서 넣지 않는다** |
+| `BLOG_CAPTCHA_SECRET_KEY` | `blog.captcha.secret-key` | 예 | Turnstile 비밀 키. provider가 `turnstile`일 때 두 키 중 하나라도 비면 기동 실패. 1.0에서는 넣지 않는다 |
 
 세 이미지 디렉터리와 백업 디렉터리는 앱 실행 계정이 쓸 수 있어야 한다. 없으면 기동 때 만들고, 쓸 수 없으면 기동을 멈춘다.
 정식·임시 디렉터리는 같은 파일 시스템에 두는 것을 권한다(등록 때 임시 → 정식으로 옮긴다).
@@ -100,7 +100,7 @@
 | `blog.admin.dashboard-cache-ttl` | 5m | 관리 콘솔 대시보드 수치를 관리자 시간대별로 메모리에 두는 시간(006 FR-103). 0s면 매번 계산(E2E는 `BLOG_ADMIN_DASHBOARD_CACHE_TTL=0s`). 음수면 기동 실패 |
 | `blog.ratelimit.post-publish-per-hour` / `comment-per-minute` / `guestbook-per-minute` / `media-upload-per-minute` / `signup-per-ip-per-hour` | 10 / 5 / 3 / 30 / 5 | 작성 속도 한도 기본값(005 FR-142, 10.2절). 운영 설정 `ratelimit.*`가 있으면 그 값. 004의 `blog.guest.comment-per-minute`·`guestbook-per-minute`는 **없어졌다**(남겨 두면 무시된다. 환경 변수 `BLOG_GUEST_COMMENT_PER_MINUTE` 등은 지운다) |
 | `blog.spam.duplicate-comment.window-minutes` / `max-count` / `min-length` | 10 / 3 / 10 | 같은 내용 댓글·방명록 반복 기준(005 FR-144). 앞 두 값은 운영 설정 `spam.duplicate-comment` 우선. `min-length`(이보다 짧은 글은 세지 않음)는 프로퍼티로만 |
-| `blog.captcha.provider` | prod `turnstile`, local `none` | `turnstile`·`test`·`none`. prod에서 `test`·`none`이면 기동 실패. `test`는 E2E 전용(토큰 `blog.captcha.test-token`, 기본 `e2e-pass`) |
+| `blog.captcha.provider` | prod `none`(1.0에서 끔), local `none` | `turnstile`·`test`·`none`. prod에서 `test`면 기동 실패. `test`는 E2E 전용(토큰 `blog.captcha.test-token`, 기본 `e2e-pass`) |
 | `blog.captcha.verify-timeout` | 3s | Turnstile 검증 요청 시간 제한. 넘거나 Turnstile 장애면 400 `CAPTCHA_FAILED`(통과시키지 않음) |
 | `blog.captcha.login-failures-before-captcha` | 3 | 같은 이메일 또는 같은 IP의 연속 로그인 실패가 이 수 이상이면 다음 로그인에 CAPTCHA(30분 창, 성공하면 초기화). 001의 5회 잠금은 그대로 |
 | `blog.reports.member-per-hour` / `rights-request-per-ip-per-hour` | 30 / 5 | 회원 신고 1시간 한도, 권리 침해 신고 IP당 1시간 한도(005 FR-040) |
@@ -300,6 +300,8 @@ cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 �
 ## 10. 스팸 방어(005)
 
 ### 10.1 CAPTCHA(Cloudflare Turnstile) 키 발급
+
+**1.0에서는 CAPTCHA를 끈다(marco 2026-10-07).** prod의 `blog.captcha.provider`가 `none`이라 위젯이 나오지 않고 검증도 하지 않는다. 그동안 스팸은 속도 제한·반복 스팸·금칙어(10.2절 이후)로 막는다. 켤 때는 아래 키를 넣고 `application-prod.yml`의 provider를 `turnstile`로 바꾼 뒤, front 환경 변수 `BLOG_CAPTCHA_PROVIDER=turnstile`(CSP에 Turnstile 출처 추가)도 넣는다.
 
 1. Cloudflare 대시보드 → Turnstile → "Add widget". 도메인에 `blog.java21.net`(로컬 확인이 필요하면 `localhost`도)을 넣고
    위젯 모드는 "Managed"로 둔다.

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
  * {@code blog.captcha.login-failures-before-captcha}(3) 이상이면 다음 로그인에 CAPTCHA가 필요하다(없으면 400
  * {@code CAPTCHA_REQUIRED}, 틀리면 400 {@code CAPTCHA_FAILED}). 카운터는 공용 {@link RateLimiter}(30분 창)이며 로그인에 성공하면 두
  * 카운터를 지운다. 없는 이메일도 센다(가입 여부를 드러내지 않음). 필요하지 않을 때 온 토큰은 검사하지 않는다. 001의 5회 잠금은 그대로다.
+ * provider가 {@code none}이면 화면에 위젯이 없으므로 요구하지 않는다.
  */
 @Component
 public class LoginCaptchaPolicy {
@@ -42,6 +43,9 @@ public class LoginCaptchaPolicy {
 
     /** 지금 CAPTCHA가 필요한지. */
     public boolean required(String emailHash, String ip) {
+        if (verifier.provider() == CaptchaProperties.Provider.NONE) {
+            return false;
+        }
         int threshold = properties.loginFailuresBeforeCaptcha();
         return limiter.count(RateLimitKind.LOGIN_FAILURE, emailKey(emailHash)) >= threshold
                 || limiter.count(RateLimitKind.LOGIN_FAILURE, ipKey(ip)) >= threshold;

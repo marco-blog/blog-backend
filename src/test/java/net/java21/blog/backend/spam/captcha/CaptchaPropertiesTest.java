@@ -11,7 +11,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
-/** 005 T009: blog.captcha.* 기본값, prod에서 test·none·빈 키 기동 실패. */
+/** 005 T009: blog.captcha.* 기본값, prod에서 test·빈 키 기동 실패, none 허용(1.0 CAPTCHA 끔). */
 class CaptchaPropertiesTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -55,13 +55,15 @@ class CaptchaPropertiesTest {
     }
 
     @Test
-    void prodProfileAllowsOnlyTurnstile() {
-        runner.withPropertyValues("spring.profiles.active=prod").run(c -> assertThat(c).hasFailed());
+    void prodProfileRejectsTestProvider() {
+        runner.withPropertyValues("spring.profiles.active=prod").run(c -> assertThat(c).hasNotFailed());
+        runner.withPropertyValues("spring.profiles.active=prod", "blog.captcha.provider=none")
+                .run(c -> assertThat(c.getBean(CaptchaVerifier.class)).isInstanceOf(NoopCaptchaVerifier.class));
         runner.withPropertyValues("spring.profiles.active=prod", "blog.captcha.provider=test")
                 .run(c -> assertThat(c).hasFailed());
         runner.withPropertyValues("spring.profiles.active=prod", "blog.captcha.provider=turnstile",
                 "blog.captcha.site-key=s", "blog.captcha.secret-key=k").run(c -> assertThat(c).hasNotFailed());
-        assertThatThrownBy(() -> CaptchaConfig.create(CaptchaProperties.of(CaptchaProperties.Provider.NONE), true))
+        assertThatThrownBy(() -> CaptchaConfig.create(CaptchaProperties.of(CaptchaProperties.Provider.TEST), true))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(CaptchaProperties.Provider.TURNSTILE.value()).isEqualTo("turnstile");
     }

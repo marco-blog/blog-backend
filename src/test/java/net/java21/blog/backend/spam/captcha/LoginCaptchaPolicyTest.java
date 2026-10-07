@@ -46,6 +46,17 @@ class LoginCaptchaPolicyTest {
     }
 
     @Test
+    void noneProviderNeverRequiresCaptcha() {
+        LoginCaptchaPolicy none = new LoginCaptchaPolicy(new RateLimiter(nanos::get), new NoopCaptchaVerifier(),
+                CaptchaProperties.of(CaptchaProperties.Provider.NONE));
+        for (int i = 0; i < 5; i++) {
+            none.recordFailure("h1", "1.1.1.1");
+        }
+        assertThat(none.required("h1", "1.1.1.1")).isFalse();
+        none.requireIfNeeded("h1", "1.1.1.1", null);
+    }
+
+    @Test
     void successResetsBothCountersAndWindowExpires() {
         for (int i = 0; i < 3; i++) {
             policy.recordFailure("h1", null);
