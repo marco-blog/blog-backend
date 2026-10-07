@@ -17,6 +17,7 @@ import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.comment.domain.CommentStatus;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostVisibility;
+import net.java21.blog.backend.support.JpaFixtures;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.QueryCounter;
@@ -152,6 +153,40 @@ class CommentRepositoryTest {
         assertThat(newest.profileMediaKey()).isEqualTo(mediaKey("u" + (count - 1)));
         assertThat(newest.postId()).isEqualTo((count - 1) % 2 == 0 ? post.getId() : other.getId());
         assertThat(newest.postTitle()).isEqualTo((count - 1) % 2 == 0 ? "첫 글" : "둘째 글");
+    }
+
+    /** 004(T082): 비회원 댓글은 작성자 LEFT JOIN으로 함께 나오고, 비밀 여부(답글은 부모 것도)와 이름을 같은 쿼리에서 읽는다. */
+    @Test
+    void guestAndSecretCommentsComeInTheSameQueries() {
+        Comment secretTop = comment(post, owner, null, "비밀 부모");
+        secretTop.changeSecret(true);
+        clock.advance(Duration.ofSeconds(1));
+        Comment guestReply = Comment.byGuest(post, secretTop, "손님", JpaFixtures.PROTECTED_HASH, "enc", "비회원 답글",
+                false);
+        em.persist(guestReply);
+        em.flush();
+        em.clear();
+
+        queryCounter.reset();
+        List<CommentRow> rows = queryRepository.findPostComments(post.getId());
+        assertThat(queryCounter.count()).isEqualTo(1);
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0).secret()).isTrue();
+        CommentRow guest = rows.get(1);
+        assertThat(guest.userId()).isNull();
+        assertThat(guest.guestName()).isEqualTo("손님");
+        assertThat(guest.secret()).isFalse();
+
+        queryCounter.reset();
+        Page<BlogCommentRow> page = queryRepository.findBlogComments(blog.getId(), PageRequest.of(0, 20));
+        assertThat(queryCounter.count()).isEqualTo(2);
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        BlogCommentRow newest = page.getContent().getFirst();
+        assertThat(newest.userId()).isNull();
+        assertThat(newest.guestName()).isEqualTo("손님");
+        assertThat(newest.secret()).isFalse();
+        assertThat(newest.parentSecret()).isTrue();
+        assertThat(page.getContent().get(1).parentSecret()).isNull();
     }
 
     @Test

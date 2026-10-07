@@ -101,8 +101,24 @@ class ReadCompleteServiceTest {
         assertThat(real.record(100L, null, "v:x")).isFalse();
     }
 
+    /** 004: 열지 않은 보호 글은 200이지만 세지 않는다. 열었거나 주인이면 센다. */
+    @Test
+    void lockedProtectedPostIsNotCounted() {
+        publish(PostVisibility.PROTECTED);
+
+        assertThat(service.record(100L, null, "v:abc", p -> false)).isFalse();
+        assertThat(service.record(100L, null, "v:abc")).as("쿠키 없음").isFalse();
+        verify(dailyStats, never()).upsertReadComplete(anyLong(), any(), any());
+
+        assertThat(service.record(100L, null, "v:abc", p -> true)).isTrue();
+        assertThat(service.record(100L, 1L, "u:1", p -> false)).as("주인").isTrue();
+    }
+
     private void publish(PostVisibility visibility) {
         post.publish("t", "b", "<p>b</p>", "b", "b", null, visibility, true, NOW);
+        if (visibility == PostVisibility.PROTECTED) {
+            post.applyProtection("$2a$04$hash");
+        }
         when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
     }
 }

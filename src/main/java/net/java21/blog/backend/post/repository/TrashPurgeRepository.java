@@ -3,6 +3,7 @@ package net.java21.blog.backend.post.repository;
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
 import static net.java21.blog.backend.block.domain.QBlogBlock.blogBlock;
 import static net.java21.blog.backend.category.domain.QCategory.category;
+import static net.java21.blog.backend.export.domain.QBlogExport.blogExport;
 import static net.java21.blog.backend.comment.domain.QComment.comment;
 import static net.java21.blog.backend.guestbook.domain.QGuestbookEntry.guestbookEntry;
 import static net.java21.blog.backend.post.domain.QPost.post;
@@ -91,6 +92,17 @@ public class TrashPurgeRepository {
                 .executeUpdate();
     }
 
+    /** 블로그들의 백업 파일 경로(004). 행을 지우기 전에 읽어 커밋 뒤 파일을 지운다. 쿼리 1회. */
+    public List<String> findExportFiles(List<Long> blogIds) {
+        if (blogIds.isEmpty()) {
+            return List.of();
+        }
+        return queryFactory.select(blogExport.filePath)
+                .from(blogExport)
+                .where(blogExport.blog.id.in(blogIds), blogExport.filePath.isNotNull())
+                .fetch();
+    }
+
     /** 삭제 후 보관 기간이 지났고 아직 비우지 않은(title이 남은) 블로그 id(최대 {@code limit}개). */
     public List<Long> findPurgeableBlogIds(Instant cutoff, int limit) {
         return queryFactory.select(blog.id)
@@ -104,7 +116,8 @@ public class TrashPurgeRepository {
     /**
      * 삭제된 블로그를 비운다(FR-159, data-model blogs, T181): 아직 남은 글의 카테고리를 먼저 비우고(외래 키) 카테고리를
      * 하위 → 상위 순으로 지운 뒤, 주소 재사용을 막기 위해 {@code blogs} 행은 남기되 제목·소개·대표 이미지 참조를 비운다.
-     * 그 블로그들의 구독 행(002)을 먼저 지운다. 모두 집합 UPDATE·DELETE다.
+     * 그 블로그들의 구독 행(002)을 먼저 지운다. 004 방명록·사이드바·일별 방문·차단·백업 행도 지운다(백업 파일은
+     * {@link #findExportFiles}로 미리 읽어 호출한 쪽이 커밋 뒤 지운다). 모두 집합 UPDATE·DELETE다.
      */
     public long purgeBlogs(List<Long> ids) {
         if (ids.isEmpty()) {
@@ -117,6 +130,7 @@ public class TrashPurgeRepository {
         queryFactory.delete(blogSidebarItem).where(blogSidebarItem.id.blogId.in(ids)).execute();
         queryFactory.delete(blogDailyVisit).where(blogDailyVisit.id.blogId.in(ids)).execute();
         queryFactory.delete(blogBlock).where(blogBlock.id.blogId.in(ids)).execute();
+        queryFactory.delete(blogExport).where(blogExport.blog.id.in(ids)).execute();
         queryFactory.update(post).setNull(post.category).where(post.blog.id.in(ids)).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids), category.parent.isNotNull()).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids)).execute();

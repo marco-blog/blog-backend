@@ -19,17 +19,20 @@ import net.java21.blog.backend.user.domain.UserStatus;
  * 글 노출 조건의 한 곳(T098, FR-018, data-model "노출 조건"·"글 노출 매트릭스").
  * 모든 목록·검색·피드·사이트맵·포털 쿼리는 이 조각만 쓰고, 글 상세의 주인 외 판단도 같은 규칙({@link #isBodyVisible})을 쓴다.
  * <ul>
- *   <li><b>목록 노출 가능</b> {@link #listable()}: {@code status = PUBLISHED AND visibility IN (PUBLIC) AND 작성자 ACTIVE AND 블로그 ACTIVE}.
- *       004가 {@code PROTECTED}를 {@link #LISTABLE_VISIBILITIES}에 더한다(목록에 제목만).</li>
+ *   <li><b>목록 노출 가능</b> {@link #listable()}: {@code status = PUBLISHED AND visibility IN (PUBLIC, PROTECTED) AND 작성자 ACTIVE AND 블로그 ACTIVE}.
+ *       보호 글(004)은 목록에 제목만 나온다. 예약 글(SCHEDULED)은 PUBLISHED가 아니므로 어디에도 나오지 않는다.</li>
  *   <li><b>본문 노출 가능</b> {@link #bodyVisible()}: 목록 노출 가능 AND {@code visibility = PUBLIC}.</li>
+ *   <li><b>상세</b> {@link #isDetailVisibleTo}: 주인은 휴지통을 뺀 모든 글, 그 외에는 목록 노출 가능 글(보호 글은 잠금 화면,
+ *       {@link #isLocked}).</li>
  * </ul>
  * QueryDSL 조각은 기본 별칭 {@code post}·{@code blog}·{@code user}를 쓴다. 쿼리는
  * {@code from(post).join(post.blog, blog).join(blog.user, user)}로 블로그와 작성자를 이어야 한다.
  */
 public final class PostExposure {
 
-    /** 목록에 (제목으로라도) 나올 수 있는 공개 범위. 004에서 PROTECTED를 더한다. */
-    static final Set<PostVisibility> LISTABLE_VISIBILITIES = EnumSet.of(PostVisibility.PUBLIC);
+    /** 목록에 (제목으로라도) 나올 수 있는 공개 범위. 보호 글(004)은 제목만. */
+    static final Set<PostVisibility> LISTABLE_VISIBILITIES = EnumSet.of(PostVisibility.PUBLIC,
+            PostVisibility.PROTECTED);
 
     private PostExposure() {
     }
@@ -82,6 +85,16 @@ public final class PostExposure {
         if (p.isOwnedBy(viewerId)) {
             return !p.isDeleted() && p.getBlog().isActive() && p.getBlog().getUser().isActive();
         }
-        return isBodyVisible(p);
+        // 004: 보호 글은 주인 외에도 상세(잠금 화면)가 열린다. 본문은 열람 쿠키가 있을 때만(isLocked).
+        return isListable(p);
+    }
+
+    /**
+     * 상세를 볼 수 있는 사람에게 본문을 가려야 하는지(004 FR-062): 보호 글이고, 주인이 아니고, 맞는 비밀번호로 연 적이 없다.
+     *
+     * @param unlocked 이 요청에 유효한 열람 쿠키({@code post_unlock_{id}})가 있는지
+     */
+    public static boolean isLocked(Post p, Long viewerId, boolean unlocked) {
+        return p.getVisibility() == PostVisibility.PROTECTED && !p.isOwnedBy(viewerId) && !unlocked;
     }
 }

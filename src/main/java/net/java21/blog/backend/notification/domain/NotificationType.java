@@ -8,5 +8,7 @@ public enum NotificationType {
     /** 내 글에 새 댓글·답글(내가 쓴 것 제외). target COMMENT, params {@code { postId, postTitle }}. */
     NEW_COMMENT,
     /** 내 블로그의 새 구독자. target BLOG, params {@code { blogTitle }}. */
-    NEW_SUBSCRIBER
+    NEW_SUBSCRIBER,
+    /** 004 블로그 백업 준비됨(요청한 주인에게, 행위자 없음). target BLOG_EXPORT, params {@code { blogTitle, handle, expiresAt }}. */
+    BACKUP_READY
 }

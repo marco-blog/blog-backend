@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -94,6 +95,35 @@ class JwtProviderTest {
         assertThat(provider.verify(noRole)).isEmpty();
         assertThat(provider.verify(badSubject)).isEmpty();
         assertThat(provider.verify(noExpiry)).isEmpty();
+    }
+
+    /** 004 보호 글 열람 쿠키(research B4): 같은 키, 다른 종류. 접근 토큰과 서로 바꿔 쓸 수 없다. */
+    @Test
+    void scopedTokenCarriesClaimsAndExpires() {
+        String token = provider.issueScoped("post-unlock", Map.of("pid", 12L, "pwf", "abcd"), Duration.ofMinutes(30));
+
+        assertThat(provider.verifyScoped(token, "post-unlock")).hasValueSatisfying(claims -> {
+            assertThat(((Number) claims.get("pid")).longValue()).isEqualTo(12L);
+            assertThat(claims.get("pwf")).isEqualTo("abcd");
+        });
+        assertThat(provider.verifyScoped(token, "other")).as("종류가 다르면 거부").isEmpty();
+        assertThat(provider.verify(token)).as("접근 토큰으로 쓸 수 없다").isEmpty();
+
+        clock.advance(Duration.ofMinutes(30).plusSeconds(1));
+        assertThat(provider.verifyScoped(token, "post-unlock")).isEmpty();
+    }
+
+    @Test
+    void accessTokenIsNotAScopedToken() {
+        String access = provider.issue(1L, "USER", FAMILY);
+        assertThat(provider.verifyScoped(access, "post-unlock")).isEmpty();
+        assertThat(provider.verifyScoped(null, "post-unlock")).isEmpty();
+        assertThat(provider.verifyScoped(" ", "post-unlock")).isEmpty();
+        assertThat(provider.verifyScoped("not.a.token", "post-unlock")).isEmpty();
+
+        String foreign = new JwtProvider(properties("another-unit-test-only-secret-0123456789abcdef"), clock)
+                .issueScoped("post-unlock", Map.of("pid", 1L), Duration.ofMinutes(30));
+        assertThat(provider.verifyScoped(foreign, "post-unlock")).as("다른 키로 서명").isEmpty();
     }
 
     @Nested

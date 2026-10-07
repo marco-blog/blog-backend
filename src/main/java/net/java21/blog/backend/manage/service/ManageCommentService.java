@@ -10,6 +10,7 @@ import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.comment.repository.BlogCommentRow;
 import net.java21.blog.backend.comment.repository.CommentQueryRepository;
+import net.java21.blog.backend.comment.service.CommentVisibility;
 import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,10 +58,12 @@ public class ManageCommentService {
         return new CommentStats(newComments, recent);
     }
 
+    /** 주인 화면이라 비밀 댓글(004)도 내용을 보이고 {@code secret}으로 표시한다. 비회원은 {@code author.guest}. */
     private static ManageCommentResponse toResponse(BlogCommentRow row) {
-        AuthorResponse author = row.userId() == null ? null : AuthorResponse.member(row.userId(), row.nickname(),
-                Media.urlOf(row.profileMediaKey()));
-        return new ManageCommentResponse(row.id(), row.content(), author, false, row.createdAt(), row.updatedAt(),
+        AuthorResponse author = row.userId() == null ? AuthorResponse.guest(row.guestName())
+                : AuthorResponse.member(row.userId(), row.nickname(), Media.urlOf(row.profileMediaKey()));
+        return new ManageCommentResponse(row.id(), row.content(), author, false,
+                CommentVisibility.isSecret(row.secret(), row.parentSecret()), row.createdAt(), row.updatedAt(),
                 row.postId(), row.postTitle());
     }
 }

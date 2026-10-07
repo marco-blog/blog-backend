@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.api.FieldError;
@@ -46,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       지워지면 자리만 남은 부모도 지운다(001 댓글과 같은 규칙).</li>
  *   <li>내용은 일반 텍스트(001 댓글 규칙, {@link PlainTextNormalizer})이며 front가 이스케이프해 출력한다.</li>
  * </ul>
- * 차단된 회원의 쓰기 거부는 US5(T119)가 더한다.
+ * 이 블로그에서 차단된 회원(US5 FR-146)의 쓰기는 {@link BlogBlockPolicy}가 일반 403 {@code FORBIDDEN}으로 거부한다.
  */
 @Service
 public class GuestbookService {
@@ -59,16 +60,18 @@ public class GuestbookService {
     private final GuestbookQueryRepository queryRepository;
     private final UserRepository userRepository;
     private final GuestAuthorService guestAuthors;
+    private final BlogBlockPolicy blockPolicy;
     private final Clock clock;
 
     public GuestbookService(BlogAccess blogAccess, GuestbookEntryRepository entryRepository,
             GuestbookQueryRepository queryRepository, UserRepository userRepository, GuestAuthorService guestAuthors,
-            Clock clock) {
+            BlogBlockPolicy blockPolicy, Clock clock) {
         this.blogAccess = blogAccess;
         this.entryRepository = entryRepository;
         this.queryRepository = queryRepository;
         this.userRepository = userRepository;
         this.guestAuthors = guestAuthors;
+        this.blockPolicy = blockPolicy;
         this.clock = clock;
     }
 
@@ -116,7 +119,9 @@ public class GuestbookService {
                     GuestWriteKind.GUESTBOOK);
             entry = GuestbookEntry.byGuest(blog, guest.name(), guest.passwordHash(), guest.ip(), content, secret);
         } else {
-            entry = new GuestbookEntry(blog, requireActiveMember(userId), null, content, secret);
+            User member = requireActiveMember(userId);
+            blockPolicy.requireNotBlocked(blog.getId(), userId);
+            entry = new GuestbookEntry(blog, member, null, content, secret);
         }
         entryRepository.save(entry);
         return single(entry);

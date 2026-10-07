@@ -1,6 +1,7 @@
 package net.java21.blog.backend.manage.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +15,7 @@ import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
+import net.java21.blog.backend.support.JpaFixtures;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.QueryCounter;
 import net.java21.blog.backend.user.domain.User;
@@ -182,6 +184,42 @@ class ManagePostQueryRepositoryTest {
         assertThat(repository.countOwned(marco.getId(), List.of(mine.getId(), theirs.getId(), -1L))).isEqualTo(1);
     }
 
+    /** 004(T079): 예약·보호 필터와 예약 시각. 관리 목록은 보호 글 요약을 가리지 않는다. */
+    @Test
+    void filtersScheduledAndProtectedWithScheduledAt() {
+        Instant at = T0.plusSeconds(86_400);
+        Post scheduled = new Post(marco, "예약 글");
+        scheduled.schedule("예약 글", "본문", "<p>본문</p>", "본문", "요약", null, PostVisibility.PUBLIC, true, at);
+        em.persist(scheduled);
+        Post locked = persistProtected(marco, "보호 글");
+        persistPost(marco, "공개 글", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        flushAndClear();
+
+        List<ManagePostRow> rows = repository.findPosts(marco.getId(),
+                new ManagePostFilter(PostStatus.SCHEDULED, null, null, null), TRASH_CUTOFF, PageRequest.of(0, 20))
+                .getContent();
+        assertThat(rows).extracting(ManagePostRow::id).containsExactly(scheduled.getId());
+        assertThat(rows.getFirst().scheduledAt()).isEqualTo(at);
+        assertThat(ids(new ManagePostFilter(null, PostVisibility.PROTECTED, null, null)))
+                .containsExactly(locked.getId());
+    }
+
+    /** 004 결정 26: 일괄로 PROTECTED를 지정할 수 없고, 보호 글을 다른 공개 범위로 바꾸면 비밀번호를 지운다. */
+    @Test
+    void bulkVisibilityClearsPasswordAndRejectsProtected() {
+        Post locked = persistProtected(marco, "보호 글");
+        flushAndClear();
+
+        assertThatThrownBy(() -> repository.changeVisibility(marco.getId(), List.of(locked.getId()),
+                PostVisibility.PROTECTED, NOW)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(repository.changeVisibility(marco.getId(), List.of(locked.getId()), PostVisibility.PUBLIC, NOW))
+                .isEqualTo(1);
+        em.clear();
+        Post reloaded = em.find(Post.class, locked.getId());
+        assertThat(reloaded.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(reloaded.getPasswordHash()).isNull();
+    }
+
     @Test
     void changeVisibilityIsOneSetBasedUpdateLimitedToTheBlog() {
         Post a = persistPost(marco, "A", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
@@ -292,6 +330,14 @@ class ManagePostQueryRepositoryTest {
         if (status == PostStatus.PUBLISHED) {
             p.publish(title, "본문", "<p>본문</p>", "본문", "본문", null, visibility, true, T0);
         }
+        em.persist(p);
+        return p;
+    }
+
+    private Post persistProtected(Blog b, String title) {
+        Post p = new Post(b, title);
+        p.publish(title, "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PROTECTED, true, T0);
+        p.applyProtection(JpaFixtures.PROTECTED_HASH);
         em.persist(p);
         return p;
     }

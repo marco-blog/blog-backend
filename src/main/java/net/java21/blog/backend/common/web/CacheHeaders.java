@@ -8,6 +8,9 @@ public final class CacheHeaders {
      */
     public static final String PRIVATE_NO_CACHE = "private, no-cache";
 
+    /** 저장하면 안 되는 응답(004: 보호 글 열기, 백업 파일). Spring Security 기본값과 같은 뜻을 명시적으로 붙인다. */
+    public static final String NO_STORE = "no-store";
+
     private CacheHeaders() {
     }
 }

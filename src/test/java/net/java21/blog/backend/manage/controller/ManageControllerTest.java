@@ -57,10 +57,10 @@ class ManageControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final PostSummaryResponse TRASHED = new PostSummaryResponse(5L, "버린 글", "요약", null, null,
-            List.of(), 3, 0, PostVisibility.PRIVATE, PostStatus.DELETED, NOW, NOW, false, false, NOW,
+            List.of(), 3, 0, PostVisibility.PRIVATE, PostStatus.DELETED, NOW, NOW, false, false, null, NOW,
             Instant.parse("2026-11-05T04:24:19Z"));
     private static final PostSummaryResponse LIVE = new PostSummaryResponse(6L, "글", null, null, null, List.of(), 0,
-            0, PostVisibility.PUBLIC, PostStatus.DRAFT, null, NOW, true, false, null, null);
+            0, PostVisibility.PUBLIC, PostStatus.DRAFT, null, NOW, true, false, null, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -74,7 +74,7 @@ class ManageControllerTest {
     private ManageCommentService commentService;
 
     private static final ManageCommentResponse COMMENT = new ManageCommentResponse(7L, "좋은 글",
-            AuthorResponse.member(2L, "작성자", null), false, NOW, NOW, 6L, "글");
+            AuthorResponse.member(2L, "작성자", null), false, false, NOW, NOW, 6L, "글");
 
     @Test
     void comments() throws Exception {

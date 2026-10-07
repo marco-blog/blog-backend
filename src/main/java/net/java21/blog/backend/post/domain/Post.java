@@ -25,7 +25,9 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * 글(posts, T096). 상태 전이(data-model "상태 전이"): DRAFT → PUBLISHED(발행), PUBLISHED → DRAFT 불가,
- * DRAFT/PUBLISHED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
+ * DRAFT/PUBLISHED/SCHEDULED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
+ * 004 예약 발행: DRAFT/SCHEDULED → SCHEDULED({@link #schedule}), SCHEDULED → DRAFT({@link #unschedule}),
+ * SCHEDULED → PUBLISHED(정기 작업의 조건부 UPDATE 또는 즉시 발행).
  * 작성 중 내용은 {@link PostDraft}에 두고 발행 때 이 행에 반영한다(FR-108).
  * 카테고리는 LAZY 연관이며 목록 조회는 DTO projection으로 읽는다(N+1 없음). 002의 좋아요 수({@code like_count})는 읽기 전용으로 매핑하고
  * (좋아요·취소의 원자적 UPDATE로만 바뀐다). 003의 주제({@code topic_id}, 소분류)는 LAZY 연관으로 매핑한다.
@@ -169,9 +171,65 @@ public class Post extends BaseTimeEntity {
         this.visibility = visibility;
         this.commentEnabled = commentEnabled;
         this.status = PostStatus.PUBLISHED;
+        this.scheduledAt = null;
         if (publishedAt == null) {
             this.publishedAt = now;
         }
+    }
+
+    /**
+     * 예약 발행(004 FR-064, research B5). 발행과 같은 내용을 반영하되 상태는 SCHEDULED, {@code scheduled_at}을 정하고
+     * {@code published_at}은 건드리지 않는다. 발행 전 글(DRAFT·SCHEDULED)만 예약할 수 있다.
+     */
+    public void schedule(String title, String markdown, String html, String text, String summary, String thumbnailUrl,
+            PostVisibility visibility, boolean commentEnabled, Instant scheduledAt) {
+        if (status != PostStatus.DRAFT && status != PostStatus.SCHEDULED) {
+            throw new IllegalStateException("Only unpublished posts can be scheduled: " + id);
+        }
+        this.title = title;
+        this.contentMarkdown = markdown;
+        this.contentHtml = html;
+        this.contentText = text;
+        this.summary = summary;
+        this.thumbnailUrl = thumbnailUrl;
+        this.visibility = visibility;
+        this.commentEnabled = commentEnabled;
+        this.status = PostStatus.SCHEDULED;
+        this.scheduledAt = scheduledAt;
+    }
+
+    /** 예약 취소(004 research B5): SCHEDULED → DRAFT, 예약 시각을 지운다. */
+    public void unschedule() {
+        if (status != PostStatus.SCHEDULED) {
+            throw new IllegalStateException("Post is not scheduled: " + id);
+        }
+        this.status = PostStatus.DRAFT;
+        this.scheduledAt = null;
+    }
+
+    public boolean isScheduled() {
+        return status == PostStatus.SCHEDULED;
+    }
+
+    /**
+     * 보호 글 비밀번호(004 FR-062). 공개 범위가 PROTECTED일 때만 해시를 두고, 아니면 지운다({@code ck_posts_protected_password}).
+     * PROTECTED인데 {@code passwordHash}가 null이면 지금 해시를 유지한다(이미 보호 글이면 비밀번호 생략 가능).
+     */
+    public void applyProtection(String passwordHash) {
+        if (visibility == PostVisibility.PROTECTED) {
+            if (passwordHash != null) {
+                this.passwordHash = passwordHash;
+            }
+            if (this.passwordHash == null) {
+                throw new IllegalStateException("Protected post requires a password: " + id);
+            }
+        } else {
+            this.passwordHash = null;
+        }
+    }
+
+    public boolean isProtected() {
+        return visibility == PostVisibility.PROTECTED;
     }
 
     /** 공지 지정·해제(004 FR-059). */

@@ -21,12 +21,14 @@ public class WithdrawalRepository {
 
     /**
      * 그 회원의 모든 블로그(삭제된 블로그 포함)의 모든 글을 비공개로 바꾼다. 이전 공개 범위는 보관하지 않는다. UPDATE 1회.
+     * 보호 글(004)의 비밀번호 해시도 지운다({@code ck_posts_protected_password}).
      *
      * @return 바꾼 글 수
      */
     public long makeAllPostsPrivate(long userId) {
         return queryFactory.update(post)
                 .set(post.visibility, PostVisibility.PRIVATE)
+                .setNull(post.passwordHash)
                 .where(post.blog.id.in(JPAExpressions.select(blog.id).from(blog).where(blog.user.id.eq(userId))))
                 .execute();
     }

@@ -13,6 +13,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.subscription.dto.SubscriptionStateResponse;
@@ -39,8 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 스레드마다 따로 커밋해야 하므로 테스트 트랜잭션을 쓰지 않고 끝에 지운다.
  */
 @MySqlRepositoryTest
-@Import({SubscriptionService.class, SubscriptionFeedQueryRepository.class, TagQueryRepository.class,
-        SubscriptionConcurrencyTest.Events.class})
+@Import({SubscriptionService.class, BlogBlockPolicy.class, SubscriptionFeedQueryRepository.class,
+        TagQueryRepository.class, SubscriptionConcurrencyTest.Events.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class SubscriptionConcurrencyTest {
 

@@ -7,6 +7,7 @@ import net.java21.blog.backend.common.time.TimeConfig;
 import net.java21.blog.backend.common.web.VisitorKeyResolver;
 import net.java21.blog.backend.config.SecurityConfig;
 import net.java21.blog.backend.post.PostsProperties;
+import net.java21.blog.backend.post.service.PostUnlockCookies;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
@@ -25,6 +26,7 @@ import org.springframework.context.annotation.Import;
  *       그 의존 빈({@link ApiErrorWriter}, UTC Clock {@link TimeConfig})</li>
  *   <li>{@link AuthCookies}: 로그인 쿠키 생성</li>
  *   <li>{@link VisitorKeyResolver}(004): 방문자 키·방문자 쿠키. 글 설정({@link PostsProperties})의 기본값을 쓴다</li>
+ *   <li>{@link PostUnlockCookies}(004): 보호 글 열람 쿠키 검사(실제 서명 키로 판단)</li>
  *   <li>모든 요청에 허용된 {@code Origin}(application-test.yml)을 실어 상태 변경 요청이 Origin 검사를 통과한다.
  *       Origin 검사 자체를 확인하는 테스트는 이 구성을 쓰지 않는다.</li>
  * </ul>
@@ -32,7 +34,8 @@ import org.springframework.context.annotation.Import;
  * {@code WebMvcConfig}(WebMvcConfigurer)는 {@code @WebMvcTest}가 스스로 찾아 올린다.
  */
 @TestConfiguration(proxyBeanMethods = false)
-@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class, AuthCookies.class, VisitorKeyResolver.class})
+@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class, AuthCookies.class, VisitorKeyResolver.class,
+        PostUnlockCookies.class})
 @EnableConfigurationProperties(PostsProperties.class)
 public class WebMvcTestSupport {
 

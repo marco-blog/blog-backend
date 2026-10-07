@@ -37,8 +37,9 @@
 | `BLOG_MEDIA_UPLOAD_DIR` | `blog.media.upload-dir` | | 이미지 정식 보관 디렉터리. **백업 대상**(4절) |
 | `BLOG_MEDIA_TEMP_DIR` | `blog.media.temp-dir` | | 업로드 직후 임시 보관 디렉터리. 백업 제외 |
 | `BLOG_MEDIA_THUMBNAIL_DIR` | `blog.media.thumbnail-dir` | | 썸네일 디렉터리. 다시 만들 수 있어 백업 제외 |
+| `BLOG_EXPORT_DIR` | `blog.export.dir` | | 블로그 백업 zip 디렉터리(004 FR-145). 백업 제외(4.1절) |
 
-세 이미지 디렉터리는 앱 실행 계정이 쓸 수 있어야 한다. 없으면 기동 때 만들고, 쓸 수 없으면 기동을 멈춘다.
+세 이미지 디렉터리와 백업 디렉터리는 앱 실행 계정이 쓸 수 있어야 한다. 없으면 기동 때 만들고, 쓸 수 없으면 기동을 멈춘다.
 정식·임시 디렉터리는 같은 파일 시스템에 두는 것을 권한다(등록 때 임시 → 정식으로 옮긴다).
 
 ### 2.2 선택 값
@@ -85,6 +86,15 @@
 | `blog.portal.topic-auto-hide-threshold` | 20 | 주제 탭 자동 숨김 기준(최근 30일 글 수). 운영 설정 `portal.topic-auto-hide-threshold` 우선 |
 | `blog.portal.popular-window` / `topic-count-window` | 7d / 30d | 인기 점수 기간, 주제별 글 수 기간 |
 | `blog.posts.stats-retention` | 90d | 글 일별 통계(`post_daily_stats`) 보관 기간(003) |
+| `blog.posts.unlock-ttl` | 30m | 보호 글 열람 쿠키(`post_unlock`) 수명(004 FR-062) |
+| `blog.posts.password-max-failures` / `password-lock-duration` | 5 / 10m | 보호 글·비회원 글 비밀번호 연속 실패 허용 수와 막는 시간(IP·방문자 쿠키 기준, 메모리) |
+| `blog.posts.schedule-max-ahead` | 365d | 예약 발행으로 정할 수 있는 가장 먼 시각(004 FR-064) |
+| `blog.stats.time-zone` / `visit-dedup-max-size` / `bot-user-agent-pattern` | Asia/Seoul / 200000 / `application.yml` 참고 | 방문자 수·월별 보관함의 날짜 기준 시간대, 방문 중복 제거 캐시 크기, 세지 않는 User-Agent(004 FR-061·067) |
+| `blog.guest.comment-per-minute` / `guestbook-per-minute` | 5 / 3 | 비회원 댓글·방명록 IP당 1분 한도(004 FR-066). E2E·수동 검증은 `BLOG_GUEST_COMMENTPERMINUTE=1000`처럼 크게 |
+| `blog.guest.ip-retention` | 90d | 비회원 작성 IP 보관 기간. 지나면 개인정보 파기 작업이 IP만 지운다(글은 남김) |
+| `blog.export.retention` / `min-interval` / `stale-running` | 7d / 24h / 1h | 백업 파일 보관 기간, 블로그별 요청 간격(하루 한 번), 이 시간 넘게 RUNNING이면 기동 때 실패 처리(004 FR-145) |
+| `blog.jobs.scheduled-publish-delay` | 30s | 예약 발행 작업 주기(앞 실행이 끝난 뒤 기준). 실제 발행 지연은 최대 이 값 + 처리 시간 |
+| `blog.jobs.export-poll-delay` | 30s | 대기 중인 백업을 만드는 작업 주기(한 번에 최대 10건을 차례로) |
 | `blog.release-notes.portal-card-days` | 14d | 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시부터, 003 FR-162) |
 
 ## 3. 로그
@@ -131,6 +141,19 @@ find /backup/media -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +
   `thumbnail-dir`은 비워 두면 요청 때 다시 만들어진다. `temp-dir`은 비워도 된다.
 - 한 달에 한 번은 복구 연습을 한다(덤프가 열리는지, 아무 글의 이미지가 보이는지).
 
+## 4.1 블로그 백업 파일 (`blog.export.dir`, 004)
+
+블로그 주인이 요청한 백업 zip(`yyyy/MM/{uuid}.zip`)을 둔다. 앱 실행 계정만 읽고 쓸 수 있게(`chmod 700`) 둔다. 없으면 기동 때
+만들고, 쓸 수 없으면 기동을 멈춘다.
+
+- **DB 백업에 포함되지 않고, 7일 뒤 지워지는 임시 파일**이라 서버 일일 백업 대상에서 빼도 된다. 잃어버리면 주인이 다시 요청하면 된다
+  (`blog_exports` 행은 DB에 남지만 파일이 없으면 내려받기가 404).
+- 디스크: 백업 하나는 그 블로그의 글(Markdown)과 주인 이미지 원본 크기의 합 정도다. 블로그별 하루 한 번, 7일 보관이라
+  최악은 (블로그 수 × 7 × 블로그 크기)다. 여유 공간을 모니터링하고, 부족하면 `blog.export.retention`을 줄인다.
+- zip에는 그 블로그의 글·임시 저장본·카테고리·주인이 올린 이미지만 들어간다. 비밀번호 해시·이메일·다른 회원의 댓글·방명록은 넣지 않는다.
+- 기동 때 `blog.export.stale-running`(1시간) 넘게 RUNNING인 백업은 FAILED(`INTERRUPTED`)로 바꾸고 만들다 만 파일을 지운다.
+- 블로그가 휴지통 비우기로 완전히 지워지면 그 블로그의 백업 행과 파일도 함께 지운다.
+
 ## 5. 정기 작업
 
 Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron은 **JVM 기본 시간대** 기준이므로
@@ -141,8 +164,11 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 |---|---|---|---|---|
 | 이미지 정리 | `MediaCleanupJob` | `blog.media.cleanup-cron` | `0 0 * * * *`(매시 정각) | 24시간 지난 TEMP와 어디서도 쓰지 않는 ORPHANED 이미지의 행·원본·썸네일 삭제 (FR-072·073) |
 | 휴지통 비우기 | `TrashPurgeJob` | `blog.jobs.trash-purge-cron` | `0 30 3 * * *`(매일 03:30) | 휴지통 30일 지난 글 영구 삭제, 삭제 30일 지난 블로그의 카테고리 삭제·제목 비우기(주소는 재사용 방지로 남김) (FR-084·159) |
-| 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139) |
+| 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139), `blog.guest.ip-retention`(90일) 지난 비회원 댓글·방명록의 작성 IP 삭제 (004 FR-066) |
 | 알림 정리 | `NotificationPurgeJob` | `blog.jobs.notification-purge-cron` | `0 15 4 * * *`(매일 04:15) | `blog.notifications.retention`(90일) 지난 알림 삭제 (002 FR-033) |
+| 예약 발행 | `ScheduledPublishJob` | `blog.jobs.scheduled-publish-delay`(고정 지연) | 30초 | 예약 시각이 지난 SCHEDULED 글을 발행(구독자 알림·피드 반영 포함, 004 FR-064) |
+| 백업 생성 | `BlogExportJob` | `blog.jobs.export-poll-delay`(고정 지연) | 30초 | PENDING 백업을 RUNNING으로 바꿔 zip을 만들고 READY(완료 알림) 또는 FAILED로 둔다 (004 FR-145) |
+| 백업 정리 | `BlogExportCleanupJob` | `blog.jobs.export-cleanup-cron` | `0 10 * * * *`(매시 10분) | 만료(`blog.export.retention`, 7일)된 READY 백업의 파일을 지우고 EXPIRED로 바꾼다 |
 | 글 통계 정리 | `PostStatsPurgeJob` | `blog.jobs.post-stats-purge-cron` | `0 45 4 * * *`(매일 04:45) | `blog.posts.stats-retention`(90일) 지난 `post_daily_stats` 행 삭제 (003 research P4) |
 
 포털 인기 점수·주제별 글 수는 정기 작업이 아니라 요청 때 계산해 `blog.portal.cache-ttl`(5분) 동안 메모리에 둔다(서버를 여러 대 두면

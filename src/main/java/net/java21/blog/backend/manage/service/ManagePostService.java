@@ -19,6 +19,7 @@ import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.manage.repository.ManagePostRow;
+import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.data.domain.Page;
@@ -79,6 +80,10 @@ public class ManagePostService {
             case CHANGE_VISIBILITY -> {
                 if (request.visibility() == null) {
                     throw invalid("visibility", "REQUIRED", Map.of());
+                }
+                if (request.visibility() == PostVisibility.PROTECTED) {
+                    // 004 결정 표 26번: 보호 글은 비밀번호가 필요하므로 발행 설정에서만 지정한다.
+                    throw invalid("visibility", "INVALID", Map.of("allowed", List.of("PUBLIC", "PRIVATE")));
                 }
                 requireOwned(blog, postIds);
                 yield new BulkPostResponse(

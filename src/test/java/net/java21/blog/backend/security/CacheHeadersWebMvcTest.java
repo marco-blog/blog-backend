@@ -143,4 +143,24 @@ class CacheHeadersWebMvcTest {
                 .andExpect(status().isNotFound())
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
     }
+
+    /** 004 T123: 주인 API·보호 글 열기·백업 파일은 저장하지 않고, 글 상세(보는 사람마다 다름)는 그대로 둔다. */
+    @Test
+    void blogFeatureOwnerUnlockAndExportFileAreNotStored() throws Exception {
+        for (var request : List.of(get("/api/v1/blogs/marco/manage/stats"), get("/api/v1/blogs/marco/exports"),
+                post("/api/v1/blogs/marco/exports"), get("/api/v1/blogs/marco/blocks"),
+                put("/api/v1/blogs/marco/blocks/3"), delete("/api/v1/blogs/marco/blocks/3"),
+                post("/api/v1/posts/1/unschedule"), get("/api/v1/blogs/marco/exports/3/file"))) {
+            mvc.perform(request.cookie(authCookies.user(7L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        mvc.perform(post("/api/v1/posts/1/unlock"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        mvc.perform(get("/api/v1/blogs/marco/exports/3/file"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/blogs/marco/blocks"))
+                .andExpect(status().isUnauthorized());
+    }
 }

@@ -184,26 +184,43 @@ class OpenApiContractTest {
             "PUT /api/v1/blogs/{handle}/sidebar",
             "GET /api/v1/blogs/{handle}/archive",
             "POST /api/v1/blogs/{handle}/visits",
-            "GET /api/v1/blogs/{handle}/manage/stats");
+            "GET /api/v1/blogs/{handle}/manage/stats",
+            // 004 글 공개 옵션(US3): 보호 글 열기·예약 취소·비회원 댓글 내용 보기
+            "POST /api/v1/posts/{id}/unlock",
+            "POST /api/v1/posts/{id}/unschedule",
+            "POST /api/v1/comments/{id}/unlock",
+            // 004 블로그 백업(US4)
+            "POST /api/v1/blogs/{handle}/exports",
+            "GET /api/v1/blogs/{handle}/exports",
+            "GET /api/v1/blogs/{handle}/exports/{id}/file",
+            "GET /api/v1/blogs/{handle}/blocks",
+            "PUT /api/v1/blogs/{handle}/blocks/{userId}",
+            "DELETE /api/v1/blogs/{handle}/blocks/{userId}");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
             "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
-            "GET /robots.txt");
+            "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file");
 
-    /** 002·003이 001 응답에 더한 필드(각 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
-    static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.of(
-            "MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote"),
-            "BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
-                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled"),
-            "PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice"),
-            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled", "defaultTopicId",
-                    "guestbookEnabled", "guestWriteEnabled"),
-            "DraftWriteRequest", List.of("topicId"),
-            "DraftResponse", List.of("topicId"),
-            "PublishSettingsRequest", List.of("topicId", "notice"),
-            "DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors"),
-            "PostSummaryResponse", List.of("notice"));
+    /** 002~004가 001 응답·요청에 더한 필드(각 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.ofEntries(
+            Map.entry("MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote")),
+            Map.entry("BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
+                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+            Map.entry("PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice", "locked",
+                    "scheduledAt")),
+            Map.entry("UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled",
+                    "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+            Map.entry("DraftWriteRequest", List.of("topicId")),
+            Map.entry("DraftResponse", List.of("topicId")),
+            Map.entry("PublishSettingsRequest", List.of("topicId", "notice", "password", "scheduledAt")),
+            Map.entry("DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors")),
+            Map.entry("PostSummaryResponse", List.of("notice", "scheduledAt")),
+            // 004 비밀·비회원 댓글(004 contracts "001~003 요청·응답 확장")
+            Map.entry("CommentResponse", List.of("secret")),
+            Map.entry("AuthorResponse", List.of("guest")),
+            Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword")),
+            Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
@@ -279,7 +296,7 @@ class OpenApiContractTest {
                     : names(node.get("properties"));
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
-        assertThat(missing).as("문서에 없는 002·003 응답 확장 필드").isEmpty();
+        assertThat(missing).as("문서에 없는 002~004 응답 확장 필드").isEmpty();
     }
 
     @Test

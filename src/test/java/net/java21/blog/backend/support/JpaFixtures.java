@@ -26,6 +26,8 @@ import net.java21.blog.backend.user.domain.User;
 public class JpaFixtures {
 
     public static final Instant T0 = Instant.parse("2026-10-01T00:00:00Z");
+    /** 보호 글(004) 비밀번호 "secret1"의 BCrypt 해시(비용 4). */
+    public static final String PROTECTED_HASH = "$2a$04$ZYzMyrGQlHSVU2Iu3lk5eeGJTrcgI6079NcWo99ZLWs5DfNyLYOim";
 
     private final EntityManager em;
     private int hashSeq;
@@ -65,10 +67,20 @@ public class JpaFixtures {
         if (status != PostStatus.DRAFT) {
             p.publish(title, "본문", "<p>본문</p>", "본문", "요약 " + title, null, visibility, true,
                     T0.plusSeconds(60L * minutes));
+            p.applyProtection(visibility == PostVisibility.PROTECTED ? PROTECTED_HASH : null);
         }
         if (status == PostStatus.DELETED) {
             p.moveToTrash(T0.plusSeconds(60L * minutes + 1));
         }
+        em.persist(p);
+        return p;
+    }
+
+    /** 예약 글(004 SCHEDULED). {@code scheduledAt}에 발행될 예정. */
+    public Post scheduled(Blog blog, String title, PostVisibility visibility, Instant scheduledAt) {
+        Post p = new Post(blog, title);
+        p.schedule(title, "본문", "<p>본문</p>", "본문", "요약 " + title, null, visibility, true, scheduledAt);
+        p.applyProtection(visibility == PostVisibility.PROTECTED ? PROTECTED_HASH : null);
         em.persist(p);
         return p;
     }
@@ -109,6 +121,7 @@ public class JpaFixtures {
         p.assignTopic(topic);
         if (status != PostStatus.DRAFT) {
             p.publish(title, text, "<p>" + text + "</p>", text, "요약 " + title, null, visibility, true, publishedAt);
+            p.applyProtection(visibility == PostVisibility.PROTECTED ? PROTECTED_HASH : null);
         }
         if (status == PostStatus.DELETED) {
             p.moveToTrash(publishedAt.plusSeconds(1));

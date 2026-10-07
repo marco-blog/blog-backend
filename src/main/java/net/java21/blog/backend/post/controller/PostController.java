@@ -19,9 +19,12 @@ import net.java21.blog.backend.post.dto.PostListFilter;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
 import net.java21.blog.backend.post.dto.SavedDraftResponse;
+import net.java21.blog.backend.post.dto.UnlockPostRequest;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.PostUnlockCookies;
+import net.java21.blog.backend.post.service.PostUnlockService;
 import net.java21.blog.backend.post.service.ReadCompleteService;
 import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
@@ -53,11 +56,16 @@ public class PostController {
     private final VisitorKeyResolver visitorKeys;
     private final RelatedPostService relatedPostService;
     private final ReadCompleteService readCompleteService;
+    private final PostUnlockService postUnlockService;
+    private final PostUnlockCookies unlockCookies;
 
     public PostController(PostService postService, PostDraftService postDraftService,
             PostPublishService postPublishService, ViewCountService viewCountService, VisitorKeyResolver visitorKeys,
-            RelatedPostService relatedPostService, ReadCompleteService readCompleteService) {
+            RelatedPostService relatedPostService, ReadCompleteService readCompleteService,
+            PostUnlockService postUnlockService, PostUnlockCookies unlockCookies) {
         this.postService = postService;
+        this.postUnlockService = postUnlockService;
+        this.unlockCookies = unlockCookies;
         this.readCompleteService = readCompleteService;
         this.relatedPostService = relatedPostService;
         this.postDraftService = postDraftService;
@@ -98,10 +106,34 @@ public class PostController {
     /** 요청한 사람에 따라 {@code likedByMe}가 다르므로 공개 GET이지만 {@code Cache-Control: private, no-cache}(002 contracts/api.md). */
     @GetMapping("/api/v1/posts/{id}")
     ResponseEntity<ApiResponse<PostDetailResponse>> detail(@CurrentUser(required = false) AuthUser viewer,
-            @PathVariable Long id) {
+            @PathVariable Long id, HttpServletRequest request) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, CacheHeaders.PRIVATE_NO_CACHE)
-                .body(ApiResponse.ok(postService.detail(id, viewer == null ? null : viewer.userId())));
+                .body(ApiResponse.ok(postService.detail(id, viewer == null ? null : viewer.userId(),
+                        unlockCookies.checker(request))));
+    }
+
+    /**
+     * 보호 글 열기(004 FR-062). 맞으면 본문을 포함한 상세와 30분 열람 쿠키({@code post_unlock_{id}}). 비밀번호를 다루므로
+     * {@code Cache-Control: no-store}. 시도 제한의 방문자 키는 쿠키가 있을 때만 쓰고(새로 발급하지 않음) IP와 함께 센다.
+     */
+    @PostMapping("/api/v1/posts/{id}/unlock")
+    ResponseEntity<ApiResponse<PostDetailResponse>> unlock(@CurrentUser(required = false) AuthUser viewer,
+            @PathVariable Long id, @RequestBody(required = false) UnlockPostRequest body,
+            HttpServletRequest request) {
+        Long viewerId = viewer == null ? null : viewer.userId();
+        PostUnlockService.Unlocked unlocked = postUnlockService.unlock(id, viewerId,
+                body == null ? null : body.password(), visitorKeys.peek(viewerId, request), request.getRemoteAddr());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, CacheHeaders.NO_STORE)
+                .header(HttpHeaders.SET_COOKIE, unlocked.cookie().toString())
+                .body(ApiResponse.ok(unlocked.detail()));
+    }
+
+    /** 예약 취소(004 research B5): SCHEDULED → DRAFT. 예약 상태가 아니면 409 {@code POST_NOT_SCHEDULED}. */
+    @PostMapping("/api/v1/posts/{id}/unschedule")
+    ApiResponse<PostSummaryResponse> unschedule(@CurrentUser AuthUser user, @PathVariable Long id) {
+        return ApiResponse.ok(postService.unschedule(user.userId(), id));
     }
 
     /** 같은 블로그의 관련 글 최대 5편(002 FR-068). 기준 글을 볼 수 없으면 404 {@code POST_NOT_FOUND}. */
@@ -153,7 +185,8 @@ public class PostController {
     ApiResponse<Void> view(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
             HttpServletRequest request, HttpServletResponse response) {
         Long viewerId = viewer == null ? null : viewer.userId();
-        viewCountService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response));
+        viewCountService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response),
+                unlockCookies.checker(request));
         return ApiResponse.ok();
     }
 
@@ -165,7 +198,8 @@ public class PostController {
     ApiResponse<Void> readComplete(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
             HttpServletRequest request, HttpServletResponse response) {
         Long viewerId = viewer == null ? null : viewer.userId();
-        readCompleteService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response));
+        readCompleteService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response),
+                unlockCookies.checker(request));
         return ApiResponse.ok();
     }
 }
