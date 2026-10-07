@@ -33,6 +33,37 @@ public interface ExternalBlogRepository extends JpaRepository<ExternalBlog, Long
         return countHeld(userId, ExternalBlogStatus.NOT_COUNTED);
     }
 
+    /** 같은 피드의 가장 최근 등록(상태 무관). 인증 확인 때 피드 주소를 찾는다. */
+    Optional<ExternalBlog> findFirstByFeedUrlHashOrderByIdDesc(String feedUrlHash);
+
+    /**
+     * 수집 성공(200)을 한 번에 기록한다(research E5, 쿼리 수 고정). ACTIVE가 아니게 됐으면 0행 — 호출한 쪽은 글을 저장하지 않는다.
+     * 이름·사이트 주소는 비어 있을 때만 채운다.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update ExternalBlog b set b.lastFetchedAt = :now, b.lastSuccessAt = :now, b.lastFetchResult = :result,"
+            + " b.lastHttpStatus = :http, b.etag = :etag, b.lastModified = :lastModified, b.consecutiveFailures = 0,"
+            + " b.firstFailedAt = null, b.nextFetchAt = :next,"
+            + " b.title = case when (b.title is null or b.title = '') then :title else b.title end,"
+            + " b.siteUrl = case when (b.siteUrl is null or b.siteUrl = '') then :siteUrl else b.siteUrl end,"
+            + " b.feedFormat = :format, b.updatedAt = :now"
+            + " where b.id = :id and b.status = :active")
+    int recordFetched(@Param("id") Long id, @Param("active") ExternalBlogStatus active,
+            @Param("result") net.java21.blog.backend.external.domain.FetchResultCode result,
+            @Param("http") Integer httpStatus, @Param("etag") String etag, @Param("lastModified") String lastModified,
+            @Param("title") String title, @Param("siteUrl") String siteUrl,
+            @Param("format") net.java21.blog.backend.external.feed.FeedFormat format, @Param("now") java.time.Instant now,
+            @Param("next") java.time.Instant next);
+
+    /** 수집 결과 304(변경 없음). ETag·Last-Modified는 그대로. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update ExternalBlog b set b.lastFetchedAt = :now, b.lastSuccessAt = :now, b.lastFetchResult = :result,"
+            + " b.lastHttpStatus = 304, b.consecutiveFailures = 0, b.firstFailedAt = null, b.nextFetchAt = :next,"
+            + " b.updatedAt = :now where b.id = :id and b.status = :active")
+    int recordNotModified(@Param("id") Long id, @Param("active") ExternalBlogStatus active,
+            @Param("result") net.java21.blog.backend.external.domain.FetchResultCode result,
+            @Param("now") java.time.Instant now, @Param("next") java.time.Instant next);
+
     /** 회원의 등록 전부(탈퇴, research E16). */
     List<ExternalBlog> findByMemberId(Long userId);
 }

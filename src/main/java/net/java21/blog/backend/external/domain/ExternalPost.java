@@ -134,11 +134,11 @@ public class ExternalPost extends BaseTimeEntity {
 
     /**
      * 같은 글의 갱신(research E5): 제목·요약·이미지 주소·발행 시각·카테고리가 바뀌었을 때만. 주제는 다시 정하지 않는다. guid가 바뀌었으면
-     * 새 값으로.
+     * 새 값으로. 링크가 바뀌었고 {@code linkHash}가 null이 아니면 링크와 해시를 바꾼다(null이면 다른 글이 쓰는 링크라 그대로 둠).
      *
      * @return 바뀐 것이 있으면 true
      */
-    public boolean refresh(FeedItem item, String guidHash) {
+    public boolean refresh(FeedItem item, String guidHash, String linkHash) {
         boolean changed = false;
         if (!Objects.equals(title, item.title())) {
             title = item.title();
@@ -167,8 +167,9 @@ public class ExternalPost extends BaseTimeEntity {
             this.guidHash = guidHash;
             changed = true;
         }
-        if (!Objects.equals(link, item.link())) {
+        if (linkHash != null && !Objects.equals(link, item.link())) {
             link = item.link();
+            this.linkHash = linkHash;
             changed = true;
         }
         return changed;

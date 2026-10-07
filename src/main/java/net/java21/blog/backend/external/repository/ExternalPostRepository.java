@@ -24,6 +24,17 @@ public interface ExternalPostRepository extends JpaRepository<ExternalPost, Long
     @Query("select p from ExternalPost p where p.externalBlog.id = :blogId and p.linkHash in :hashes")
     List<ExternalPost> findByLinkHashes(@Param("blogId") Long blogId, @Param("hashes") Collection<String> hashes);
 
+    /** 썸네일 키의 글(블로그 함께). */
+    @Query("select p from ExternalPost p join fetch p.externalBlog where p.thumbnailKey = :key")
+    Optional<ExternalPost> findByThumbnailKeyWithBlog(@Param("key") String key);
+
+    /** 소급 대상(research E7): 최근 발행·ACTIVE·이미지 주소 있음·썸네일 없음. */
+    @Query("select p.id from ExternalPost p where p.externalBlog.id = :blogId and p.status = :active"
+            + " and p.imageUrl is not null and p.thumbnailKey is null and p.publishedAt >= :since"
+            + " order by p.publishedAt desc, p.id desc")
+    List<Long> findBackfillIds(@Param("blogId") Long blogId, @Param("active") ExternalPostStatus active,
+            @Param("since") Instant since, org.springframework.data.domain.Limit limit);
+
     @Query("select p from ExternalPost p join fetch p.externalBlog where p.id = :id")
     Optional<ExternalPost> findWithBlog(@Param("id") Long id);
 
@@ -64,6 +75,14 @@ public interface ExternalPostRepository extends JpaRepository<ExternalPost, Long
     int deleteByIds(@Param("ids") Collection<Long> ids);
 
     long countByExternalBlogIdAndStatus(Long blogId, ExternalPostStatus status);
+
+    /** 등록의 글(발행 최신순). {@code status}가 null이면 전체. */
+    @Query(value = "select p from ExternalPost p where p.externalBlog.id = :blogId"
+            + " and (:status is null or p.status = :status) order by p.publishedAt desc, p.id desc",
+            countQuery = "select count(p) from ExternalPost p where p.externalBlog.id = :blogId"
+                    + " and (:status is null or p.status = :status)")
+    org.springframework.data.domain.Page<ExternalPost> findPage(@Param("blogId") Long blogId,
+            @Param("status") ExternalPostStatus status, org.springframework.data.domain.Pageable pageable);
 
     /** 클릭 수 1 증가(쿼리 1회). */
     @Modifying

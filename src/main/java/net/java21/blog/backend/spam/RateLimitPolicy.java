@@ -2,6 +2,7 @@ package net.java21.blog.backend.spam;
 
 import java.time.Duration;
 
+import net.java21.blog.backend.config.ExternalFeedProperties;
 import net.java21.blog.backend.report.ReportsProperties;
 import net.java21.blog.backend.setting.SettingKey;
 import net.java21.blog.backend.setting.service.SystemSettingsService;
@@ -27,13 +28,15 @@ public class RateLimitPolicy {
     private final SystemSettingsService settings;
     private final ReportsProperties reports;
     private final TrackbackProperties trackback;
+    private final ExternalFeedProperties external;
 
     public RateLimitPolicy(RateLimiter limiter, SystemSettingsService settings, ReportsProperties reports,
-            TrackbackProperties trackback) {
+            TrackbackProperties trackback, ExternalFeedProperties external) {
         this.limiter = limiter;
         this.settings = settings;
         this.reports = reports;
         this.trackback = trackback;
+        this.external = external;
     }
 
     /** 지금 쓰는 한도. */
@@ -47,6 +50,9 @@ public class RateLimitPolicy {
             case REPORT -> new Limit(reports.memberPerHour(), HOUR);
             case RIGHTS_REQUEST -> new Limit(reports.rightsRequestPerIpPerHour(), HOUR);
             case TRACKBACK_RECEIVE -> new Limit(trackback.receiveLimit(), trackback.receiveWindow());
+            // 007 외부 블로그(research E8): 회원별 시간당
+            case EXTERNAL_PREVIEW -> new Limit(external.previewPerHour(), HOUR);
+            case EXTERNAL_VERIFY_CHECK -> new Limit(external.verifyChecksPerHour(), HOUR);
             case LOGIN_FAILURE, DUPLICATE_CONTENT ->
                 throw new IllegalArgumentException(kind + " has no fixed rate limit policy");
         };

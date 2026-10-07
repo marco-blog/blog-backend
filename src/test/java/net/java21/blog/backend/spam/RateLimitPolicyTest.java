@@ -26,7 +26,8 @@ class RateLimitPolicyTest {
     private SystemSettingsService settings;
 
     private RateLimitPolicy policy() {
-        return new RateLimitPolicy(limiter, settings, ReportsProperties.defaults(), TrackbackProperties.defaults());
+        return new RateLimitPolicy(limiter, settings, ReportsProperties.defaults(), TrackbackProperties.defaults(),
+                net.java21.blog.backend.config.ExternalFeedProperties.defaults());
     }
 
     @Test
@@ -52,6 +53,10 @@ class RateLimitPolicyTest {
         assertThat(policy.limit(RateLimitKind.RIGHTS_REQUEST).limit()).isEqualTo(5);
         assertThat(policy.limit(RateLimitKind.TRACKBACK_RECEIVE))
                 .isEqualTo(new RateLimitPolicy.Limit(10, Duration.ofMinutes(10)));
+        assertThat(policy.limit(RateLimitKind.EXTERNAL_PREVIEW))
+                .isEqualTo(new RateLimitPolicy.Limit(20, Duration.ofHours(1)));
+        assertThat(policy.limit(RateLimitKind.EXTERNAL_VERIFY_CHECK))
+                .isEqualTo(new RateLimitPolicy.Limit(10, Duration.ofHours(1)));
         assertThatThrownBy(() -> policy.limit(RateLimitKind.LOGIN_FAILURE)).isInstanceOf(IllegalArgumentException.class);
     }
 
