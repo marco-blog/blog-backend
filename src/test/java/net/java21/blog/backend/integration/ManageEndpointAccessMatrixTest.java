@@ -48,6 +48,8 @@ class ManageEndpointAccessMatrixTest extends AdminConsoleIntegrationSupport {
             new Row("POST", "/api/v1/blogs/{handle}/manage/posts/bulk",
                     f -> "{\"postIds\":[" + f.postId() + "],\"action\":\"CHANGE_VISIBILITY\",\"visibility\":\"PRIVATE\"}"),
             new Row("GET", "/api/v1/blogs/{handle}/manage/comments", f -> NONE),
+            // 005 받은 트랙백(US3)
+            new Row("GET", "/api/v1/blogs/{handle}/manage/trackbacks", f -> NONE),
             // 004 통계·사이드바
             new Row("GET", "/api/v1/blogs/{handle}/manage/stats", f -> NONE),
             new Row("GET", "/api/v1/blogs/{handle}/manage/sidebar", f -> NONE),

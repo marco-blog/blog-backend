@@ -1,6 +1,9 @@
 package net.java21.blog.backend.security;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,6 +17,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 
 import net.java21.blog.backend.admin.AdminRoleLookup;
+import net.java21.blog.backend.spam.captcha.CaptchaController;
+import net.java21.blog.backend.spam.captcha.CaptchaProperties;
+import net.java21.blog.backend.trackback.controller.TrackbackXmlController;
+import net.java21.blog.backend.trackback.service.ReceiveOutcome;
+import net.java21.blog.backend.trackback.service.TrackbackReceiveService;
 import net.java21.blog.backend.support.AuthCookies;
 import net.java21.blog.backend.support.WebMvcTestSupport;
 import org.junit.jupiter.api.Test;
@@ -31,7 +39,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * 실제 보안 설정({@code SecurityConfig})의 기본 캐시 헤더(Spring Security {@code no-cache, no-store, max-age=0, must-revalidate})가
  * 성공·오류(401·403) 응답 모두에 붙고, 스스로 Cache-Control을 정한 응답(이미지의 긴 캐시)은 덮어쓰지 않는지 본다.
  */
-@WebMvcTest(controllers = CacheHeadersTestController.class)
+@WebMvcTest(controllers = {CacheHeadersTestController.class, CaptchaController.class, TrackbackXmlController.class})
 @Import({WebMvcTestSupport.class, CacheHeadersTestController.class})
 class CacheHeadersWebMvcTest {
 
@@ -41,6 +49,10 @@ class CacheHeadersWebMvcTest {
     private AuthCookies authCookies;
     @MockitoBean
     private AdminRoleLookup roleLookup;
+    @MockitoBean
+    private CaptchaProperties captchaProperties;
+    @MockitoBean
+    private TrackbackReceiveService trackbackReceiveService;
 
     @ParameterizedTest
     @ValueSource(strings = {"/api/v1/me", "/api/v1/me/blogs", "/api/v1/blogs/marco/manage/posts",
@@ -181,6 +193,54 @@ class CacheHeadersWebMvcTest {
         }
         mvc.perform(put("/api/v1/admin/users/9/role").cookie(authCookies.user(5L)))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+    }
+
+    /** 005 T108: 관리자 API(신고·숨김·회원·금칙어)와 주인 API(받은 트랙백·보내기 결과·삭제)는 비관리자 404를 포함해 저장하지 않는다. */
+    @Test
+    void moderationAdminAndOwnerResponsesAreNotStored() throws Exception {
+        when(roleLookup.isActiveAdmin(5L)).thenReturn(true);
+        for (var request : List.of(get("/api/v1/admin/reports"), get("/api/v1/admin/reports/summary"),
+                get("/api/v1/admin/reports/3"), post("/api/v1/admin/reports/3/resolve"),
+                put("/api/v1/admin/contents/post/3/hidden"), delete("/api/v1/admin/contents/post/3/hidden"),
+                get("/api/v1/admin/contents/hidden-posts"), get("/api/v1/admin/users"),
+                post("/api/v1/admin/users/9/suspend"), get("/api/v1/admin/banned-words"),
+                post("/api/v1/admin/banned-words"), patch("/api/v1/admin/banned-words/3"),
+                delete("/api/v1/admin/banned-words/3"))) {
+            mvc.perform(request.cookie(authCookies.user(5L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        mvc.perform(get("/api/v1/admin/banned-words").cookie(authCookies.user(7L)))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        for (var request : List.of(get("/api/v1/blogs/marco/manage/trackbacks"), get("/api/v1/posts/1/trackback-pings"),
+                delete("/api/v1/trackbacks/3"))) {
+            mvc.perform(request.cookie(authCookies.user(7L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+    }
+
+    /** 005 T108: CAPTCHA 설정은 비로그인 공개 값이라 1시간 공유 캐시(실제 {@link CaptchaController}). */
+    @Test
+    void captchaConfigIsPubliclyCachedForAnHour() throws Exception {
+        when(captchaProperties.provider()).thenReturn(CaptchaProperties.Provider.TEST);
+        mvc.perform(get("/api/v1/captcha/config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.provider").value("test"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=3600"));
+    }
+
+    /** 005 T108: 트랙백 받기 XML 응답(실제 {@link TrackbackXmlController})은 저장하지 않는다. */
+    @Test
+    void trackbackXmlResponseIsNotStored() throws Exception {
+        when(trackbackReceiveService.receive(anyString(), anyLong(), any(), any()))
+                .thenReturn(ReceiveOutcome.ACCEPTED);
+        mvc.perform(post("/marco/1/trackback").contentType("application/x-www-form-urlencoded")
+                        .content("url=https%3A%2F%2Fother.example%2Fp%2F1&title=t"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString("text/xml")))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
     }
 }

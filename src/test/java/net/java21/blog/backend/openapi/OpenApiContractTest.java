@@ -235,6 +235,21 @@ class OpenApiContractTest {
             "GET /api/v1/admin/admins",
             "PUT /api/v1/admin/users/{id}/role");
 
+    /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
+            Map.entry("CaptchaConfigResponse", List.of("provider", "siteKey")),
+            Map.entry("CreateReportRequest", List.of("targetType", "targetId", "reason", "detail")),
+            Map.entry("ReportCreatedResponse", List.of("id", "status")),
+            Map.entry("BannedWordRequest", List.of("word", "scope", "action")),
+            Map.entry("BannedWordResponse", List.of("id", "word", "scope", "action", "createdBy", "createdAt",
+                    "updatedAt")),
+            Map.entry("TrackbackResponse", List.of("id", "title", "excerpt", "blogName", "url", "receivedAt",
+                    "internal")),
+            Map.entry("ManagedTrackbackResponse", List.of("id", "title", "excerpt", "blogName", "url", "receivedAt",
+                    "internal", "hidden", "post")),
+            Map.entry("TrackbackPingResponse", List.of("id", "targetUrl", "status", "errorCode", "errorMessage",
+                    "attemptedAt", "createdAt")));
+
     /** 006 응답 스키마(006 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_006 = Map.ofEntries(
             Map.entry("AdminDashboardResponse", List.of("today", "totals", "pendingReports", "trend", "timeZone",
@@ -362,6 +377,26 @@ class OpenApiContractTest {
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
         assertThat(missing).as("문서에 없는 002~004 응답 확장 필드").isEmpty();
+    }
+
+    @Test
+    void schemasOf005AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        SCHEMAS_005.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 005 스키마 필드").isEmpty();
+    }
+
+    /** 트랙백 받기({@code POST /{handle}/{postId}/trackback})는 TrackBack 1.2 XML이라 API 문서에 없다(005 contracts). */
+    @Test
+    void trackbackXmlEndpointIsNotDocumented() {
+        assertThat(documentedOperations()).noneMatch(op -> op.endsWith("/trackback"));
+        assertThat(names(doc.get("paths"))).noneMatch(path -> path.endsWith("/trackback"));
     }
 
     @Test
