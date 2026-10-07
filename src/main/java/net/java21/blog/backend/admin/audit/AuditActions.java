@@ -1,7 +1,11 @@
 package net.java21.blog.backend.admin.audit;
 
+import java.util.List;
+
 /**
- * 관리자 작업 기록의 동작 코드·대상 종류(006 data-model {@code admin_audit_logs} 표). 003이 쓰는 행만 둔다(005~007이 더한다).
+ * 관리자 작업 기록의 동작 코드·대상 종류(006 data-model {@code admin_audit_logs} 표). 코드 상수는 이 클래스 한 곳에 두고
+ * {@link #ALL}·{@link #TARGETS}가 전체 목록이다(006 research A6, 작업 기록 화면의 필터 선택지 {@code GET /admin/audit-logs/actions}).
+ * 관리자 변경 API를 더하는 스펙(005·007)은 상수를 더하고 {@link #ALL}·{@link #TARGETS}에도 넣는다({@code AuditActionsTest}가 확인).
  */
 public final class AuditActions {
 
@@ -51,6 +55,28 @@ public final class AuditActions {
     public static final String BANNED_WORD_CREATE = "BANNED_WORD_CREATE";
     public static final String BANNED_WORD_UPDATE = "BANNED_WORD_UPDATE";
     public static final String BANNED_WORD_DELETE = "BANNED_WORD_DELETE";
+
+    // 001·006 회원 블로그 한도(FR-160)와 관리자 권한 부여·회수(FR-105). target USER, before/after {"maxBlogs"}·{"role"}
+    public static final String USER_BLOG_LIMIT_CHANGE = "USER_BLOG_LIMIT_CHANGE";
+    public static final String ROLE_GRANT = "ROLE_GRANT";
+    public static final String ROLE_REVOKE = "ROLE_REVOKE";
+
+    /** 알려진 동작 코드 전체(리플렉션 없이 상수로, 006 data-model 표 순서). */
+    public static final List<String> ALL = List.of(
+            TOPIC_CREATE, TOPIC_UPDATE, TOPIC_REORDER, TOPIC_HIDE, TOPIC_UNHIDE, TOPIC_PIN, TOPIC_UNPIN,
+            CURATION_CREATE, CURATION_UPDATE, CURATION_DELETE,
+            PORTAL_EXCLUDE, PORTAL_UNEXCLUDE,
+            SETTING_CHANGE,
+            RELEASE_NOTE_CREATE, RELEASE_NOTE_UPDATE, RELEASE_NOTE_PUBLISH, RELEASE_NOTE_UNPUBLISH,
+            RELEASE_NOTE_DELETE,
+            USER_SUSPEND, USER_UNSUSPEND, REPORT_ACTION, REPORT_DISMISS, CONTENT_HIDE, CONTENT_UNHIDE,
+            BANNED_WORD_CREATE, BANNED_WORD_UPDATE, BANNED_WORD_DELETE,
+            USER_BLOG_LIMIT_CHANGE, ROLE_GRANT, ROLE_REVOKE);
+
+    /** 알려진 대상 종류 전체. */
+    public static final List<String> TARGETS = List.of(
+            TARGET_USER, TARGET_TOPIC, TARGET_CURATION, TARGET_POST, TARGET_SETTING, TARGET_RELEASE_NOTE,
+            TARGET_REPORT, TARGET_COMMENT, TARGET_GUESTBOOK, TARGET_TRACKBACK, TARGET_BANNED_WORD);
 
     private AuditActions() {
     }

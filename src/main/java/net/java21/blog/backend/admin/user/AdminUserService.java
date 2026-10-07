@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AdminUserService {
 
-    static final String ACTION_BLOG_LIMIT = "USER_BLOG_LIMIT_CHANGE";
+    static final String ACTION_BLOG_LIMIT = AuditActions.USER_BLOG_LIMIT_CHANGE;
     static final String TARGET_USER = AuditActions.TARGET_USER;
     static final int QUERY_MIN = 2;
     static final String FIELD_MAX_BLOGS = "maxBlogs";

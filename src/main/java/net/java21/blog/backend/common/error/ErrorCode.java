@@ -115,7 +115,10 @@ public enum ErrorCode {
     BANNED_WORD_EXISTS(HttpStatus.CONFLICT),
     BANNED_WORD_NOT_FOUND(HttpStatus.NOT_FOUND),
     TRACKBACK_NOT_FOUND(HttpStatus.NOT_FOUND),
-    TRACKBACK_NOT_ALLOWED(HttpStatus.UNPROCESSABLE_CONTENT);
+    TRACKBACK_NOT_ALLOWED(HttpStatus.UNPROCESSABLE_CONTENT),
+
+    // 006 관리 화면 (006 contracts/api.md 오류 코드 표). USER_NOT_ACTIVE·LAST_SUPER_ADMIN은 005 것을 함께 쓴다.
+    CANNOT_CHANGE_OWN_ROLE(HttpStatus.UNPROCESSABLE_CONTENT);
 
     private final HttpStatus status;
 

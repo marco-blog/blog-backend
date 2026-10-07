@@ -163,4 +163,24 @@ class CacheHeadersWebMvcTest {
         mvc.perform(get("/api/v1/blogs/marco/blocks"))
                 .andExpect(status().isUnauthorized());
     }
+
+    /** 006 T065: 관리 콘솔 API 전부(읽기·권한 변경, 비관리자 404 포함) 저장하지 않는다. */
+    @Test
+    void adminConsoleResponsesAreNotStored() throws Exception {
+        when(roleLookup.isActiveAdmin(5L)).thenReturn(true);
+        for (String path : List.of("/api/v1/admin/dashboard", "/api/v1/admin/contents/posts",
+                "/api/v1/admin/contents/comments", "/api/v1/admin/contents/guestbook-entries",
+                "/api/v1/admin/reserved-handles", "/api/v1/admin/service-settings", "/api/v1/admin/audit-logs",
+                "/api/v1/admin/audit-logs/3", "/api/v1/admin/audit-logs/actions", "/api/v1/admin/admins")) {
+            mvc.perform(get(path).cookie(authCookies.user(5L)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+            mvc.perform(get(path).cookie(authCookies.user(7L)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        mvc.perform(put("/api/v1/admin/users/9/role").cookie(authCookies.user(5L)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+    }
 }
