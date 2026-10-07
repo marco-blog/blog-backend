@@ -83,4 +83,27 @@ class CacheHeadersTestController {
     ResponseEntity<String> xml() {
         return ResponseEntity.ok().cacheControl(CacheControl.noCache()).body("<xml/>");
     }
+
+    /** 004 주인 API(통계·백업·차단). 로그인 응답이라 기본 {@code no-store}. */
+    @RequestMapping(path = {"/api/v1/blogs/{handle}/manage/stats", "/api/v1/blogs/{handle}/exports",
+            "/api/v1/blogs/{handle}/blocks", "/api/v1/blogs/{handle}/blocks/{userId}",
+            "/api/v1/posts/{id}/unschedule"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    ApiResponse<Long> blogFeatureOwner(@CurrentUser AuthUser user) {
+        return ApiResponse.ok(user.userId());
+    }
+
+    /** 004 보호 글 열기: 비로그인도 부르고 열람 쿠키를 준다. */
+    @PostMapping("/api/v1/posts/{id}/unlock")
+    ApiResponse<Long> unlock(@PathVariable long id) {
+        return ApiResponse.ok(id);
+    }
+
+    /** 004 백업 파일: 실제 BlogExportController처럼 스스로 {@code no-store}를 붙인다. */
+    @GetMapping("/api/v1/blogs/{handle}/exports/{id}/file")
+    ResponseEntity<byte[]> exportFile(@CurrentUser AuthUser user) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .contentType(org.springframework.http.MediaType.parseMediaType("application/zip"))
+                .body(new byte[] {'P', 'K'});
+    }
 }
