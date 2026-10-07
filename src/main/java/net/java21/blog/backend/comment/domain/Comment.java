@@ -126,6 +126,32 @@ public class Comment extends BaseTimeEntity {
         this.content = content;
     }
 
+    public boolean isHidden() {
+        return status == CommentStatus.HIDDEN;
+    }
+
+    public boolean isActive() {
+        return status == CommentStatus.ACTIVE;
+    }
+
+    /** 관리자 숨김(005 FR-041). ACTIVE만 HIDDEN으로 바뀐다. @return 이번에 바뀌었으면 true */
+    public boolean hide() {
+        if (status != CommentStatus.ACTIVE) {
+            return false;
+        }
+        this.status = CommentStatus.HIDDEN;
+        return true;
+    }
+
+    /** 숨김 해제(005 FR-041). HIDDEN만 ACTIVE로 돌아간다. @return 이번에 바뀌었으면 true */
+    public boolean unhide() {
+        if (status != CommentStatus.HIDDEN) {
+            return false;
+        }
+        this.status = CommentStatus.ACTIVE;
+        return true;
+    }
+
     /** 답글이 남은 최상위 댓글을 "삭제된 댓글" 자리로 남긴다. */
     public void markDeleted() {
         this.status = CommentStatus.DELETED;

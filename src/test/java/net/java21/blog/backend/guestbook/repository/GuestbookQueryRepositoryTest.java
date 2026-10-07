@@ -124,6 +124,30 @@ class GuestbookQueryRepositoryTest {
         assertThat(rows.get(1).content()).isEqualTo("최근 글");
     }
 
+    /** 005 T034: 숨긴 글은 쓴 회원에게만, 다른 사람에게는 보이는 답글이 남았을 때만(빈 자리) 목록에 나온다. */
+    @Test
+    void hiddenEntriesAppearOnlyForTheirAuthorOrAsPlaceholders() {
+        GuestbookEntry hiddenWithReply = entry(new GuestbookEntry(blog, visitor, null, "숨긴 글", false), 1);
+        GuestbookEntry hiddenAlone = entry(new GuestbookEntry(blog, visitor, null, "답글 없는 숨긴 글", false), 2);
+        GuestbookEntry open = entry(new GuestbookEntry(blog, owner, null, "공개", false), 3);
+        entry(new GuestbookEntry(blog, owner, hiddenWithReply, "주인 답글", false), 4);
+        GuestbookEntry hiddenReply = entry(new GuestbookEntry(blog, visitor, open, "숨긴 답글", false), 5);
+        hiddenWithReply.hide();
+        hiddenAlone.hide();
+        hiddenReply.hide();
+        fx.flushAndClear();
+
+        assertThat(repository.findPage(blog.getId(), owner.getId(), PageRequest.of(0, 20)).getContent())
+                .extracting(GuestbookRow::id).containsExactly(open.getId(), hiddenWithReply.getId());
+        Page<GuestbookRow> mine = repository.findPage(blog.getId(), visitor.getId(), PageRequest.of(0, 20));
+        assertThat(mine.getContent()).extracting(GuestbookRow::id)
+                .containsExactly(open.getId(), hiddenAlone.getId(), hiddenWithReply.getId());
+        assertThat(mine.getTotalElements()).isEqualTo(3);
+        assertThat(repository.findReplies(List.of(open.getId()), null)).isEmpty();
+        assertThat(repository.findReplies(List.of(open.getId()), visitor.getId())).extracting(GuestbookRow::id)
+                .containsExactly(hiddenReply.getId());
+    }
+
     private GuestbookEntry entry(GuestbookEntry entry, int minutes) {
         em.persist(entry);
         em.flush();

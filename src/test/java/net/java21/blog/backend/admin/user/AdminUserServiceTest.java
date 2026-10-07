@@ -14,10 +14,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import net.java21.blog.backend.admin.audit.AdminAuditService;
+import net.java21.blog.backend.admin.report.ReportQueryRepository;
+import net.java21.blog.backend.admin.user.dto.AdminUserDetail;
+import net.java21.blog.backend.admin.user.dto.AdminUserSummary;
 import net.java21.blog.backend.admin.user.dto.BlogLimitRequest;
 import net.java21.blog.backend.admin.user.dto.BlogLimitResponse;
 import net.java21.blog.backend.blog.BlogsProperties;
@@ -27,6 +31,11 @@ import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
+import net.java21.blog.backend.user.domain.UserStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,13 +62,18 @@ class AdminUserServiceTest {
     private BlogRepository blogRepository;
     @Mock
     private AdminAuditService auditService;
+    @Mock
+    private AdminUserQueryRepository queryRepository;
+    @Mock
+    private ReportQueryRepository reportQueryRepository;
 
     private AdminUserService service;
 
     @BeforeEach
     void setUp() {
         service = new AdminUserService(userRepository, adminUserRepository, blogRepository, new BlogsProperties(3),
-                auditService, Clock.fixed(NOW, ZoneOffset.UTC));
+                auditService, Clock.fixed(NOW, ZoneOffset.UTC), queryRepository, reportQueryRepository,
+                TestEntities.HASHER);
     }
 
     @Test
@@ -120,6 +134,74 @@ class AdminUserServiceTest {
                             .satisfies(f -> assertThat(f.code()).isEqualTo("REQUIRED"));
                 });
         verify(userRepository, never()).findByIdForUpdate(eq(MARCO));
+    }
+
+    @Test
+    void searchByEmailUsesTheNormalizedHash() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<AdminUserSummary> page = new PageImpl<>(List.of());
+        String hash = TestEntities.HASHER.hashEmail(" Marco@Example.com ".strip());
+        when(queryRepository.search(new AdminUserQueryRepository.Search(hash, null, null), pageable)).thenReturn(page);
+
+        assertThat(service.search(" Marco@Example.com ", "email", pageable)).isSameAs(page);
+    }
+
+    @Test
+    void searchDefaultsToNicknamePrefixAndLowercasesHandles() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<AdminUserSummary> page = new PageImpl<>(List.of());
+        when(queryRepository.search(any(), eq(pageable))).thenReturn(page);
+
+        service.search("마르코", null, pageable);
+        verify(queryRepository).search(new AdminUserQueryRepository.Search(null, "마르코", null), pageable);
+        service.search("Marco", "handle", pageable);
+        verify(queryRepository).search(new AdminUserQueryRepository.Search(null, null, "marco"), pageable);
+    }
+
+    @Test
+    void searchRejectsShortQueriesAndUnknownModes() {
+        Pageable pageable = PageRequest.of(0, 20);
+        assertThatThrownBy(() -> service.search(" a ", "nickname", pageable))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.fieldErrors()).singleElement()
+                        .satisfies(f -> assertThat(f.code()).isEqualTo("TOO_SHORT")));
+        assertThatThrownBy(() -> service.search(null, "nickname", pageable)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.search("marco", "phone", pageable))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.fieldErrors()).singleElement()
+                        .satisfies(f -> assertThat(f.field()).isEqualTo("by")));
+    }
+
+    @Test
+    void detailCountsActiveBlogsAndUsesTheDefaultLimit() {
+        when(userRepository.findById(MARCO)).thenReturn(Optional.of(TestEntities.user(MARCO)));
+        List<AdminUserDetail.BlogItem> blogs = List.of(new AdminUserDetail.BlogItem("marco", "Marco", BlogStatus.ACTIVE),
+                new AdminUserDetail.BlogItem("old", "Old", BlogStatus.DELETED));
+        when(queryRepository.findBlogs(MARCO)).thenReturn(blogs);
+        when(queryRepository.countPosts(MARCO)).thenReturn(12L);
+        when(reportQueryRepository.countReceivedBy(MARCO)).thenReturn(3L);
+        when(queryRepository.findLastLoginAt(MARCO)).thenReturn(NOW);
+
+        AdminUserDetail detail = service.detail(MARCO);
+
+        assertThat(detail.id()).isEqualTo(MARCO);
+        assertThat(detail.status()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(detail.blogCount()).isEqualTo(1);
+        assertThat(detail.postCount()).isEqualTo(12);
+        assertThat(detail.receivedReportCount()).isEqualTo(3);
+        assertThat(detail.lastLoginAt()).isEqualTo(NOW);
+        assertThat(detail.blogs()).hasSize(2);
+        assertThat(detail.blogLimit()).isEqualTo(new AdminUserDetail.BlogLimit(1, 3, false));
+    }
+
+    @Test
+    void detailShowsACustomLimitAndUnknownUsersAre404() {
+        when(userRepository.findById(MARCO))
+                .thenReturn(Optional.of(TestEntities.with(TestEntities.user(MARCO), "maxBlogs", 5)));
+        when(queryRepository.findBlogs(MARCO)).thenReturn(List.of());
+        assertThat(service.detail(MARCO).blogLimit()).isEqualTo(new AdminUserDetail.BlogLimit(0, 5, true));
+
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.detail(99L)).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.USER_NOT_FOUND));
     }
 
     private static Map<String, Object> value(Integer maxBlogs) {

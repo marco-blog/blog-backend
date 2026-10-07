@@ -85,6 +85,9 @@ public class PostPublishService {
     @Transactional
     public PostDetailResponse publish(long userId, Long postId, PublishSettingsRequest settings) {
         Post post = postAccess.requireOwnedEditablePost(postId, userId);
+        if (post.isHidden()) {
+            throw new BusinessException(ErrorCode.POST_HIDDEN, "Post is hidden by an administrator: " + postId);
+        }
         PostDraft draft = postDraftRepository.findById(postId).orElse(null);
         String title = draft != null ? draft.getTitle() : post.getTitle();
         String markdown = draft != null ? draft.getContentMarkdown() : post.getContentMarkdown();

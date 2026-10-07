@@ -97,11 +97,46 @@ blog:
     time-zone: Asia/Seoul
     visit-dedup-max-size: 200000
     bot-user-agent-pattern: "(?i)(bot|crawler|spider|slurp|facebookexternalhit|preview)"
-  # 004 비회원 댓글·방명록(FR-066): IP당 1분 한도와 작성 IP 보관 기간. 로컬 수동 검증·E2E는 BLOG_GUEST_*_PER_MINUTE=1000으로 띄운다.
+  # 004 비회원 댓글·방명록(FR-066): 작성 IP 보관 기간. 작성 한도는 005 blog.ratelimit.*(E2E는 BLOG_RATELIMIT_*로 넉넉하게 띄운다).
   guest:
+    ip-retention: 90d
+  # 005 작성 속도 한도 기본값(운영 설정 ratelimit.*가 없을 때). 004 blog.guest.*-per-minute를 대체한다.
+  ratelimit:
+    post-publish-per-hour: 10
     comment-per-minute: 5
     guestbook-per-minute: 3
-    ip-retention: 90d
+    media-upload-per-minute: 30
+    signup-per-ip-per-hour: 5
+  # 005 반복 스팸 기준 기본값(운영 설정 spam.duplicate-comment가 없을 때)
+  spam:
+    duplicate-comment:
+      window-minutes: 10
+      max-count: 3
+      min-length: 10
+  # 005 CAPTCHA(FR-141): provider는 프로필 파일이 정한다(local none, prod turnstile). secret은 커밋하지 않는다.
+  captcha:
+    test-token: e2e-pass
+    verify-timeout: 3s
+    login-failures-before-captcha: 3
+  # 005 신고(FR-040·041)
+  reports:
+    member-per-hour: 30
+    rights-request-per-ip-per-hour: 5
+    penalty-window: 90d
+  # 005 트랙백(FR-049~055)
+  trackback:
+    receive-limit: 10
+    receive-window: 10m
+    connect-timeout: 5s
+    read-timeout: 5s
+    max-targets: 10
+    executor-threads: 2
+    executor-queue: 100
+    recover-pending-after: 5m
+  # 005 나가는 요청(SSRF 방어, research M16). allow-private는 시험용(prod에서 true면 기동 실패).
+  outbound:
+    allowed-ports: 80,443,8080,8443
+    allow-private: false
   # 004 블로그 백업(FR-145): 디렉터리(dir)는 프로필 파일이 정한다(local ./data/exports, prod 환경 변수 BLOG_EXPORT_DIR 필수).
   export:
     retention: 7d
@@ -115,6 +150,9 @@ blog:
   privacy:
     withdrawn-retention: 30d
     login-history-retention: 90d
+    # 005: 처리 후 권리 침해 신고 연락 이메일, 트랙백 송신 IP 보관 기간
+    rights-request-retention: 365d
+    trackback-ip-retention: 90d
   jobs:
     # 개인정보 파기(FR-138·139): 탈퇴 30일 경과 회원의 개인정보, 90일 지난 로그인 기록, 만료된 재설정·리프레시 토큰.
     privacy-purge-cron: "0 0 4 * * *"

@@ -1,6 +1,7 @@
 package net.java21.blog.backend.mail;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Locale;
 
 import jakarta.mail.MessagingException;
@@ -8,6 +9,8 @@ import jakarta.mail.internet.MimeMessage;
 
 import net.java21.blog.backend.config.AsyncConfig;
 import net.java21.blog.backend.config.SiteProperties;
+import net.java21.blog.backend.report.domain.ReportStatus;
+import net.java21.blog.backend.report.event.ReportResolvedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
@@ -85,5 +88,48 @@ public class MailService {
     /** 회원 언어 → 메일 언어. 미설정이면 en. */
     static Locale localeOf(String language) {
         return language == null || language.isBlank() ? Locale.ENGLISH : Locale.forLanguageTag(language);
+    }
+
+    /**
+     * 005 권리 침해 신고 결과(research M10): 신고자는 비회원이라 언어를 모르므로 제목·본문에 ko와 en을 함께 쓴다. 결정(조치·미조치)과
+     * 신고한 주소만 넣고 관리자 메모는 넣지 않는다. 받는 주소는 로그에 쓰지 않는다.
+     */
+    @Async(AsyncConfig.EXECUTOR)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onRightsRequestResolved(ReportResolvedEvent event) {
+        for (ReportResolvedEvent.RightsRecipient recipient : event.rights()) {
+            try {
+                sender.send(rightsRequestMessage(recipient, event.decision()));
+                log.info("Rights request result mail sent: reportId={}", recipient.reportId());
+            } catch (MailException | MessagingException e) {
+                log.warn("Rights request result mail failed: reportId={}, error={}", recipient.reportId(),
+                        e.getClass().getSimpleName());
+            }
+        }
+    }
+
+    private MimeMessage rightsRequestMessage(ReportResolvedEvent.RightsRecipient recipient, ReportStatus decision)
+            throws MessagingException {
+        String key = decision == ReportStatus.ACTIONED ? "actioned" : "dismissed";
+        StringBuilder subject = new StringBuilder();
+        StringBuilder text = new StringBuilder();
+        for (Locale locale : List.of(Locale.KOREAN, Locale.ENGLISH)) {
+            String siteName = messages.getMessage("mail.site-name", null, locale);
+            Object[] args = {siteName, recipient.targetUrl()};
+            if (!subject.isEmpty()) {
+                subject.append(" / ");
+                text.append("\n\n----------\n\n");
+            }
+            subject.append(messages.getMessage("mail.rightsRequest.subject", args, locale));
+            text.append(messages.getMessage("mail.rightsRequest.body." + key, args, locale));
+        }
+        String html = "<p>" + HtmlUtils.htmlEscape(text.toString()).replace("\n", "<br>") + "</p>";
+        MimeMessage message = sender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+        helper.setFrom(properties.from());
+        helper.setTo(recipient.contactEmail());
+        helper.setSubject(subject.toString());
+        helper.setText(text.toString(), html);
+        return message;
     }
 }

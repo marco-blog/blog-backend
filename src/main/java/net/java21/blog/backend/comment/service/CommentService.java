@@ -52,6 +52,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       자리만 남은 부모도 지운다.</li>
  *   <li>{@code posts.comment_count}는 표시되는 댓글(답글 포함) 수이며 쓰기·삭제와 같은 트랜잭션에서 바꾼다("구현 전 결정 사항" 5번).</li>
  *   <li>내용은 HTML을 받지 않는 일반 텍스트다. 제어 문자만 지우고 그대로 저장하며 front가 출력할 때 이스케이프한다(research R8).</li>
+ *   <li>005: 관리자가 숨긴 댓글(HIDDEN)은 작성 회원에게만 내용과 {@code hidden: true}로, 다른 사람에게는 보이는 답글이 있을 때만
+ *       빈 자리로 보인다. 숨긴 댓글은 고치거나 지우거나 답글을 달 수 없다(없는 댓글과 같은 404).</li>
  *   <li>댓글·답글을 저장하면 {@link CommentCreatedEvent}를 발행한다. 커밋 뒤 블로그 주인에게 알림을 만든다(002 research D3).</li>
  * </ul>
  */
@@ -239,7 +241,7 @@ public class CommentService {
     /** 고치거나 지울 댓글: 있고, 삭제 자리가 아니고, 그 글을 이 사람이 볼 수 있어야 한다(아니면 404). 잠긴 보호 글은 403. */
     private Comment requireVisibleComment(Long commentId, Long userId, PostUnlockCheck unlock) {
         Comment comment = commentRepository.findWithPostAndOwner(commentId)
-                .filter(c -> !c.isDeleted())
+                .filter(Comment::isActive)
                 .filter(c -> PostExposure.isDetailVisibleTo(c.getPost(), userId))
                 .orElseThrow(() -> commentNotFound(commentId));
         requireUnlocked(comment.getPost(), userId, unlock);
@@ -257,7 +259,7 @@ public class CommentService {
 
     private Comment requireReplyTarget(Post post, Long parentId) {
         Comment parent = commentRepository.findById(parentId)
-                .filter(c -> !c.isDeleted())
+                .filter(Comment::isActive)
                 .orElseThrow(() -> commentNotFound(parentId));
         if (parent.isReply() || !parent.getPost().getId().equals(post.getId())) {
             throw new BusinessException(ErrorCode.REPLY_DEPTH_EXCEEDED,
@@ -300,7 +302,8 @@ public class CommentService {
         }
         Map<Long, List<CommentResponse>> replies = new LinkedHashMap<>();
         for (CommentRow row : rows) {
-            if (row.parentId() != null && row.status() == CommentStatus.ACTIVE) {
+            if (row.parentId() != null
+                    && (row.status() == CommentStatus.ACTIVE || hiddenForAuthor(row, viewerId))) {
                 CommentRow parent = byId.get(row.parentId());
                 replies.computeIfAbsent(row.parentId(), id -> new ArrayList<>())
                         .add(toResponse(row, parent, viewerId, postOwnerId, List.of()));
@@ -312,16 +315,33 @@ public class CommentService {
                 continue;
             }
             List<CommentResponse> children = List.copyOf(replies.getOrDefault(row.id(), List.of()));
-            if (row.status() == CommentStatus.ACTIVE || !children.isEmpty()) {
+            if (row.status() == CommentStatus.ACTIVE || hiddenForAuthor(row, viewerId) || !children.isEmpty()) {
                 tree.add(toResponse(row, null, viewerId, postOwnerId, children));
             }
         }
         return tree;
     }
 
+    /** 숨긴 댓글을 쓴 회원 본인이 보는지(내용과 숨김 안내를 준다, 005 FR-041). 비회원 작성 숨김 글은 누구에게도 내용이 없다. */
+    private static boolean hiddenForAuthor(CommentRow row, Long viewerId) {
+        return row.status() == CommentStatus.HIDDEN && viewerId != null && viewerId.equals(row.userId());
+    }
+
+    private static AuthorResponse memberAuthor(CommentRow row) {
+        return AuthorResponse.member(row.userId(), row.nickname(), Media.urlOf(row.profileMediaKey()));
+    }
+
     private static CommentResponse toResponse(CommentRow row, CommentRow parent, Long viewerId, Long postOwnerId,
             List<CommentResponse> replies) {
         boolean secret = CommentVisibility.isSecret(row.secret(), parent == null ? null : parent.secret());
+        if (row.status() == CommentStatus.HIDDEN) {
+            if (!hiddenForAuthor(row, viewerId)) {
+                return new CommentResponse(row.id(), null, null, false, secret, row.createdAt(), row.updatedAt(),
+                        replies, true);
+            }
+            return new CommentResponse(row.id(), row.content(), memberAuthor(row), false, secret, row.createdAt(),
+                    row.updatedAt(), replies, true);
+        }
         if (row.status() != CommentStatus.ACTIVE) {
             return new CommentResponse(row.id(), null, null, true, secret, row.createdAt(), row.updatedAt(),
                     replies);

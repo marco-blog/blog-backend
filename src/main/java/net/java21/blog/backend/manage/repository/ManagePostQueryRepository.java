@@ -99,18 +99,27 @@ public class ManagePostQueryRepository {
                 .set(post.visibility, visibility)
                 .setNull(post.passwordHash)
                 .set(post.updatedAt, now)
-                .where(post.blog.id.eq(blogId), post.id.in(postIds))
+                .where(post.blog.id.eq(blogId), post.id.in(postIds), post.status.ne(PostStatus.HIDDEN))
                 .execute();
     }
 
+    /** 이 블로그 글 중 관리자가 숨긴 글 수(005: 일괄 공개 범위·공지에서 건너뛴다). */
+    public long countHidden(Long blogId, Collection<Long> postIds) {
+        Long count = queryFactory.select(post.count()).from(post)
+                .where(post.blog.id.eq(blogId), post.id.in(postIds), post.status.eq(PostStatus.HIDDEN))
+                .fetchOne();
+        return count == null ? 0 : count;
+    }
+
     /**
-     * 이 블로그 글의 공지 여부를 한 번에 바꾼다(004 FR-059). 휴지통 글은 건너뛴다. 공지 지정은 글 수정이 아니므로
+     * 이 블로그 글의 공지 여부를 한 번에 바꾼다(004 FR-059). 휴지통 글과 005 관리자가 숨긴 글은 건너뛴다. 공지 지정은 글 수정이 아니므로
      * {@code updated_at}을 바꾸지 않는다. 바뀐 행 수(이미 같은 값인 글 포함, 휴지통 제외).
      */
     public long changeNotice(Long blogId, Collection<Long> postIds, boolean notice) {
         return queryFactory.update(post)
                 .set(post.notice, notice)
-                .where(post.blog.id.eq(blogId), post.id.in(postIds), post.status.ne(PostStatus.DELETED))
+                .where(post.blog.id.eq(blogId), post.id.in(postIds),
+                        post.status.notIn(PostStatus.DELETED, PostStatus.HIDDEN))
                 .execute();
     }
 

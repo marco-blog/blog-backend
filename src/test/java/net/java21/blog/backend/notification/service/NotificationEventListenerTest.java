@@ -6,11 +6,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -24,6 +26,9 @@ import net.java21.blog.backend.notification.domain.NotificationTargetType;
 import net.java21.blog.backend.notification.domain.NotificationType;
 import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.notification.repository.NotificationRepository;
+import net.java21.blog.backend.report.domain.ReportStatus;
+import net.java21.blog.backend.report.domain.ReportTargetType;
+import net.java21.blog.backend.report.event.ReportResolvedEvent;
 import net.java21.blog.backend.subscription.event.BlogSubscribedEvent;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
@@ -133,6 +138,41 @@ class NotificationEventListenerTest {
         assertThat(n.getTargetId()).isEqualTo(3L);
         assertThat(n.getParams()).isEqualTo(Map.of("blogTitle", "마르코의 블로그", "handle", "marco", "expiresAt",
                 expires.toString()));
+    }
+
+    /** 005 신고 처리(T042): 회원 신고자마다 REPORT_RESOLVED, target REPORT, 행위자·블로그 없음, 대상 내용 없음. */
+    @Test
+    void reportResolvedNotifiesEachMemberReporter() {
+        listener.onReportResolved(new ReportResolvedEvent(ReportTargetType.COMMENT, ReportStatus.ACTIONED,
+                List.of(new ReportResolvedEvent.MemberRecipient(41L, READER),
+                        new ReportResolvedEvent.MemberRecipient(42L, OWNER)),
+                List.of(new ReportResolvedEvent.RightsRecipient(43L, "me@example.com", "https://x.example"))));
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(2)).saveAndFlush(captor.capture());
+        Notification first = captor.getAllValues().getFirst();
+        assertThat(first.getUser()).isSameAs(reader);
+        assertThat(first.getActor()).isNull();
+        assertThat(first.getBlog()).isNull();
+        assertThat(first.getType()).isEqualTo(NotificationType.REPORT_RESOLVED);
+        assertThat(first.getTargetType()).isEqualTo(NotificationTargetType.REPORT);
+        assertThat(first.getTargetId()).isEqualTo(41L);
+        assertThat(first.getParams()).isEqualTo(Map.of("targetType", "COMMENT", "decision", "ACTIONED"));
+        assertThat(captor.getAllValues().get(1).getUser()).isSameAs(owner);
+    }
+
+    @Test
+    void reportResolvedFailureForOneReporterDoesNotStopTheOthers() {
+        when(notificationRepository.saveAndFlush(any())).thenThrow(new IllegalStateException("db down"))
+                .thenReturn(null);
+        assertThatCode(() -> listener.onReportResolved(new ReportResolvedEvent(null, ReportStatus.DISMISSED,
+                List.of(new ReportResolvedEvent.MemberRecipient(41L, READER),
+                        new ReportResolvedEvent.MemberRecipient(42L, OWNER)), List.of())))
+                .doesNotThrowAnyException();
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(2)).saveAndFlush(captor.capture());
+        assertThat(captor.getAllValues().get(1).getParams()).containsEntry("targetType", null)
+                .containsEntry("decision", "DISMISSED");
     }
 
     @Test

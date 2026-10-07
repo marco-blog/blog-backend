@@ -16,6 +16,7 @@ import net.java21.blog.backend.notification.domain.NotificationTargetType;
 import net.java21.blog.backend.notification.domain.NotificationType;
 import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.notification.repository.NotificationRepository;
+import net.java21.blog.backend.report.event.ReportResolvedEvent;
 import net.java21.blog.backend.subscription.event.BlogSubscribedEvent;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.slf4j.Logger;
@@ -141,6 +142,30 @@ public class NotificationEventListener {
             });
         } catch (RuntimeException e) {
             log.warn("BACKUP_READY notification failed: exportId={}, error={}", event.exportId(), e.toString());
+        }
+    }
+
+    /**
+     * 005 신고 처리 → 회원 신고자마다 REPORT_RESOLVED(target REPORT/그 신고 id, params {@code { targetType, decision }}, 행위자·블로그
+     * 없음). 대상의 제목·내용은 넣지 않는다(신고자가 볼 수 없게 된 내용을 알림이 드러내지 않게).
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onReportResolved(ReportResolvedEvent event) {
+        for (ReportResolvedEvent.MemberRecipient recipient : event.members()) {
+            try {
+                requiresNew.executeWithoutResult(status -> {
+                    Map<String, Object> params = new LinkedHashMap<>();
+                    params.put("targetType", event.targetType() == null ? null : event.targetType().name());
+                    params.put("decision", event.decision().name());
+                    notificationRepository.saveAndFlush(new Notification(
+                            userRepository.getReferenceById(recipient.reporterId()), null, null,
+                            NotificationType.REPORT_RESOLVED, NotificationTargetType.REPORT, recipient.reportId(),
+                            params));
+                });
+            } catch (RuntimeException e) {
+                log.warn("REPORT_RESOLVED notification failed: reportId={}, error={}", recipient.reportId(),
+                        e.toString());
+            }
         }
     }
 }
