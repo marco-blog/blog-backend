@@ -27,7 +27,9 @@ import org.hibernate.type.SqlTypes;
  * 블로그(blogs). 회원 1 : 블로그 N(R28). {@code handle}은 삭제된 블로그를 포함해 유일하고 바꿀 수 없다(FR-002, FR-159).
  * 002의 구독자 수({@code subscriber_count}, 읽기 전용 카운터: 구독·취소 때 원자적 UPDATE로만 바꾼다)와 피드 설정
  * ({@code feed_item_count}, {@code feed_content_mode})과 003의 포털 설정({@code portal_enabled}, {@code default_topic_id},
- * {@code first_published_at})을 매핑한다. 004~007이 더한 컬럼(guestbook_enabled 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * {@code first_published_at})을 매핑한다. 004의 방명록·비회원 쓰기 설정({@code guestbook_enabled}, {@code guest_write_enabled})과
+ * 전체 방문자 수({@code total_visitors}, 읽기 전용 카운터: 방문 기록의 원자적 UPDATE로만 바꾼다)를 매핑한다.
+ * 005~007이 더한 컬럼({@code trackback_enabled} 등)은 DB 기본값이 있으므로 매핑하지 않는다.
  */
 @Entity
 @Table(name = "blogs")
@@ -100,6 +102,19 @@ public class Blog extends BaseTimeEntity {
     @Column(name = "first_published_at")
     private Instant firstPublishedAt;
 
+    /** 방명록 사용(004 FR-058, 기본 켜짐). 꺼도 행은 지우지 않는다. */
+    @Column(name = "guestbook_enabled", nullable = false)
+    private boolean guestbookEnabled = true;
+
+    /** 비회원 댓글·방명록 허용(004 FR-066, 기본 꺼짐). */
+    @Column(name = "guest_write_enabled", nullable = false)
+    private boolean guestWriteEnabled;
+
+    /** 전체 방문자 수(004 FR-067). 엔티티 저장으로 바꾸지 않는다(방문 기록의 원자적 UPDATE만, research B9). */
+    @ColumnDefault("0")
+    @Column(name = "total_visitors", nullable = false, insertable = false, updatable = false)
+    private long totalVisitors;
+
     protected Blog() {
     }
 
@@ -161,6 +176,29 @@ public class Blog extends BaseTimeEntity {
         if (firstPublishedAt == null) {
             this.firstPublishedAt = publishedAt;
         }
+    }
+
+    /** 방명록·비회원 쓰기 설정(004 FR-058, FR-066). */
+    public void changeGuestSettings(boolean guestbookEnabled, boolean guestWriteEnabled) {
+        this.guestbookEnabled = guestbookEnabled;
+        this.guestWriteEnabled = guestWriteEnabled;
+    }
+
+    public boolean isGuestbookEnabled() {
+        return guestbookEnabled;
+    }
+
+    public boolean isGuestWriteEnabled() {
+        return guestWriteEnabled;
+    }
+
+    public long getTotalVisitors() {
+        return totalVisitors;
+    }
+
+    /** 이 회원이 주인인지. 주인 프록시를 초기화하지 않는다. */
+    public boolean isOwnedBy(Long userId) {
+        return userId != null && user.getId().equals(userId);
     }
 
     public boolean isPortalEnabled() {
