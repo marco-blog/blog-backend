@@ -69,6 +69,8 @@ class MemberExternalBlogControllerTest {
     private MemberExternalBlogService service;
     @MockitoBean
     private ExternalPostTopicService topicService;
+    @MockitoBean
+    private ReleaseService releaseService;
 
     private MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder builder, String body) {
         return builder.cookie(authCookies.user(USER)).contentType(MediaType.APPLICATION_JSON).content(body);
@@ -79,12 +81,13 @@ class MemberExternalBlogControllerTest {
         for (MockHttpServletRequestBuilder request : List.of(post("/api/v1/external-blog-previews"),
                 post("/api/v1/me/external-blog-verifications"), post("/api/v1/me/external-blog-verifications/1/check"),
                 get("/api/v1/me/external-blogs"), post("/api/v1/me/external-blogs"), get("/api/v1/me/external-blogs/1"),
-                get("/api/v1/me/external-blogs/1/posts"), post("/api/v1/external-blogs/1/claim"))) {
+                get("/api/v1/me/external-blogs/1/posts"), post("/api/v1/external-blogs/1/claim"),
+                post("/api/v1/me/external-blogs/1/release"))) {
             mvc.perform(request.contentType(MediaType.APPLICATION_JSON).content("{}"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.header.resultCode").value("UNAUTHENTICATED"));
         }
-        verifyNoInteractions(previewService, verificationService, service);
+        verifyNoInteractions(previewService, verificationService, service, releaseService);
     }
 
     @Test
@@ -234,5 +237,30 @@ class MemberExternalBlogControllerTest {
         mvc.perform(json(post("/api/v1/external-blogs/12/claim"), "{\"verificationId\":21}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.header.resultCode").value("EXTERNAL_BLOG_STATE_CONFLICT"));
+    }
+
+    @Test
+    void releaseKeepsOrDeletes() throws Exception {
+        MyExternalBlogResponse released = new MyExternalBlogResponse(11L, "Remote", "https://remote.example/", FEED,
+                FeedFormat.RSS, ExternalBlogStatus.RELEASED, RegistrationType.MEMBER_REQUEST, true, 3L, null, null,
+                null, null, 0, AT);
+        when(releaseService.release(USER, 11L, true)).thenReturn(released);
+        mvc.perform(json(post("/api/v1/me/external-blogs/11/release"), "{\"deletePosts\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.result.status").value("RELEASED"))
+                .andExpect(jsonPath("$.result.postCount").value(0));
+
+        when(releaseService.release(USER, 11L, null)).thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED,
+                "x", List.of(FieldError.of("deletePosts", "REQUIRED"))));
+        mvc.perform(json(post("/api/v1/me/external-blogs/11/release"), "{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("deletePosts"));
+
+        when(releaseService.release(USER, 12L, false)).thenThrow(BusinessException.withParams(
+                ErrorCode.EXTERNAL_BLOG_STATE_CONFLICT, "x", Map.of("status", "RELEASED", "action", "release")));
+        mvc.perform(json(post("/api/v1/me/external-blogs/12/release"), "{\"deletePosts\":false}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.header.params.status").value("RELEASED"));
     }
 }

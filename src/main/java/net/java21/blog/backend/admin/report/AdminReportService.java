@@ -49,7 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <ul>
  *   <li>목록: 대상 묶음(대기는 첫 접수 오래된 순)과 대상 미리보기. 쿼리는 묶음 2회 + 대상 종류별 미리보기 1회씩.</li>
  *   <li>처리: 대상의 모든 PENDING 신고를 같은 결과로 조건부 UPDATE 한 번에 닫는다. {@code HIDE_CONTENT}는 {@link ContentHideService},
- *       {@code SUSPEND_USER}는 {@link SuspensionService}를 같은 트랜잭션에서 부른다. 작업 기록 {@code REPORT_ACTION}·
+ *       {@code SUSPEND_USER}는 {@link SuspensionService}, 007 {@code REMOVE_FROM_PORTAL}(외부 글)·{@code BLOCK_EXTERNAL_BLOG}(외부
+ *       블로그)는 {@link ExternalReportActions}를 같은 트랜잭션에서 부른다. 작업 기록 {@code REPORT_ACTION}·
  *       {@code REPORT_DISMISS}(target REPORT/대표 id, after에 닫은 id 목록·조치). 커밋 뒤 {@link ReportResolvedEvent}로 회원 신고자
  *       알림과 권리 침해 결과 메일을 보낸다.</li>
  *   <li>대상 지정: 대상이 없는 권리 침해 신고만(아니면 409 {@code REPORT_ALREADY_TARGETED}). 작업 기록
@@ -68,12 +69,14 @@ public class AdminReportService {
     private final UserRepository userRepository;
     private final AdminAuditService auditService;
     private final ApplicationEventPublisher events;
+    private final ExternalReportActions externalActions;
     private final Clock clock;
 
     public AdminReportService(ReportRepository reportRepository, ReportQueryRepository queryRepository,
             ReportTargetPreviewRepository previews, ReportTargetHandlers handlers,
             ContentHideService contentHideService, SuspensionService suspensionService, UserRepository userRepository,
-            AdminAuditService auditService, ApplicationEventPublisher events, Clock clock) {
+            AdminAuditService auditService, ApplicationEventPublisher events, ExternalReportActions externalActions,
+            Clock clock) {
         this.reportRepository = reportRepository;
         this.queryRepository = queryRepository;
         this.previews = previews;
@@ -83,6 +86,7 @@ public class AdminReportService {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.events = events;
+        this.externalActions = externalActions;
         this.clock = clock;
     }
 
@@ -178,7 +182,20 @@ public class AdminReportService {
                 throw new BusinessException(ErrorCode.REPORT_TARGET_REQUIRED, "Report has no target: " + id);
             }
             chosen = parseAction(request.action());
-            if (chosen == ReportAction.HIDE_CONTENT) {
+            String memo = note == null ? "report #" + id : note;
+            if (chosen == ReportAction.REMOVE_FROM_PORTAL || chosen == ReportAction.BLOCK_EXTERNAL_BLOG) {
+                ReportTargetType required = chosen == ReportAction.REMOVE_FROM_PORTAL ? ReportTargetType.EXTERNAL_POST
+                        : ReportTargetType.EXTERNAL_BLOG;
+                if (report.getTargetType() != required) {
+                    throw new BusinessException(ErrorCode.REPORT_ACTION_NOT_ALLOWED,
+                            "Action " + chosen + " needs target " + required + ": " + id);
+                }
+                if (chosen == ReportAction.REMOVE_FROM_PORTAL) {
+                    externalActions.removeFromPortal(adminId, report.getTargetId(), memo, requestIp);
+                } else {
+                    externalActions.blockExternalBlog(adminId, report.getTargetId(), memo, requestIp);
+                }
+            } else if (chosen == ReportAction.HIDE_CONTENT) {
                 contentHideService.hide(adminId, report.getTargetType(), report.getTargetId(),
                         note == null ? "report #" + id : note, requestIp);
             } else if (chosen == ReportAction.SUSPEND_USER) {
@@ -250,7 +267,8 @@ public class AdminReportService {
             return ReportAction.valueOf(raw);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Validation failed", List.of(new FieldError(
-                    "action", "INVALID", Map.of("allowed", List.of("HIDE_CONTENT", "SUSPEND_USER")))));
+                    "action", "INVALID", Map.of("allowed", List.of("HIDE_CONTENT", "SUSPEND_USER",
+                            "REMOVE_FROM_PORTAL", "BLOCK_EXTERNAL_BLOG")))));
         }
     }
 

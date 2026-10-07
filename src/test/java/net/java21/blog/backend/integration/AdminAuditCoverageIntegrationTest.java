@@ -86,6 +86,7 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private long bannedWord;
     private long externalBlog;
     private long mappingRule;
+    private long excludedExternalPost;
     private ExternalFixtures externalFixtures;
 
     @Autowired
@@ -260,6 +261,27 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                         () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, "{\"priority\":5}")),
                 new Row("DELETE", "/api/v1/admin/topic-mapping-rules/{id}", AuditActions.TOPIC_MAPPING_RULE_DELETE,
                         () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, null)),
+                // 007 운영(US4): 일시 중지·재개·차단, 외부 글 내림, 외부 글 포털 제외·해제
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/pause", AuditActions.EXTERNAL_BLOG_PAUSE,
+                        () -> new Call("/api/v1/admin/external-blogs/" + externalBlog + "/pause",
+                                "{\"reason\":\"점검\"}")),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/resume", AuditActions.EXTERNAL_BLOG_RESUME,
+                        () -> new Call("/api/v1/admin/external-blogs/" + externalBlog + "/resume", null)),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/block", AuditActions.EXTERNAL_BLOG_BLOCK,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acextb") + "/block",
+                                "{\"reason\":\"spam\"}")),
+                new Row("POST", "/api/v1/admin/external-posts/{id}/remove", AuditActions.EXTERNAL_POST_REMOVE,
+                        () -> new Call("/api/v1/admin/external-posts/" + externalPost() + "/remove",
+                                "{\"reason\":\"저작권\"}")),
+                new Row("PUT", "/api/v1/admin/portal/external-exclusions/{externalPostId}",
+                        AuditActions.PORTAL_EXCLUDE, () -> {
+                            excludedExternalPost = externalPost();
+                            return new Call("/api/v1/admin/portal/external-exclusions/" + excludedExternalPost,
+                                    "{\"reason\":\"광고\"}");
+                        }),
+                new Row("DELETE", "/api/v1/admin/portal/external-exclusions/{externalPostId}",
+                        AuditActions.PORTAL_UNEXCLUDE, () -> new Call(
+                                "/api/v1/admin/portal/external-exclusions/" + excludedExternalPost, null)),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));
@@ -290,6 +312,18 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
             Topic topic = em.find(Topic.class, topicChildren.get(0));
             ExternalBlog blog = em.find(ExternalBlog.class, externalBlog);
             return externalFixtures.review(externalFixtures.post(blog, "검수 글", topic, null), topic, 0.2).getId();
+        });
+    }
+
+    /** 직접 등록한 외부 블로그에 노출 중인 글을 하나 만든다. 글 id */
+    private long externalPost() {
+        return tx.execute(status -> {
+            if (externalFixtures == null) {
+                externalFixtures = new ExternalFixtures(em);
+            }
+            Topic topic = em.find(Topic.class, topicChildren.get(0));
+            ExternalBlog blog = em.find(ExternalBlog.class, externalBlog);
+            return externalFixtures.post(blog, "운영 글", topic, null).getId();
         });
     }
 

@@ -347,4 +347,110 @@ class AdminExternalBlogServiceTest {
         em.clear();
         return postRepository.findById(post.getId()).orElseThrow().getExternalBlog().getId();
     }
+
+    // ---- 007 T073: 일시 중지·재개·차단(US4 AS2, FR-127) ----
+
+    private ExternalPostStatus statusOf(ExternalPost post) {
+        em.flush();
+        em.clear();
+        return postRepository.findById(post.getId()).orElseThrow().getStatus();
+    }
+
+    @Test
+    void pauseKeepsPostsAndResumeResetsFailures() {
+        ExternalBlog blog = x.blog(member, url("a"), topic, ExternalBlogStatus.ACTIVE);
+        ExternalPost post = x.post(blog, "kept", topic, null);
+        blog.recordFailure(net.java21.blog.backend.external.domain.FetchResultCode.TIMEOUT, null, JpaFixtures.T0,
+                JpaFixtures.T0.plusSeconds(60));
+        em.flush();
+
+        AdminExternalBlogResponse paused = service.pause(admin.getId(), blog.getId(), " 점검 ", IP);
+        assertThat(paused.base().status()).isEqualTo(ExternalBlogStatus.PAUSED);
+        assertThat(paused.nextFetchAt()).isNull();
+        assertThat(statusOf(post)).isEqualTo(ExternalPostStatus.ACTIVE);
+        AdminAuditLog pauseLog = audits(AuditActions.EXTERNAL_BLOG_PAUSE).getFirst();
+        assertThat(pauseLog.getReason()).isEqualTo("점검");
+        assertThat(pauseLog.getBefore()).containsEntry("status", "ACTIVE");
+        assertThat(pauseLog.getAfter()).containsEntry("status", "PAUSED");
+        BusinessException again = catchThrowableOfType(BusinessException.class,
+                () -> service.pause(admin.getId(), blog.getId(), null, IP));
+        assertThat(again.errorCode()).isEqualTo(ErrorCode.EXTERNAL_BLOG_STATE_CONFLICT);
+        assertThat(again.params()).containsEntry("action", "pause");
+
+        AdminExternalBlogResponse resumed = service.resume(admin.getId(), blog.getId(), IP);
+        assertThat(resumed.base().status()).isEqualTo(ExternalBlogStatus.ACTIVE);
+        assertThat(resumed.consecutiveFailures()).isZero();
+        assertThat(resumed.firstFailedAt()).isNull();
+        assertThat(resumed.nextFetchAt()).isEqualTo(clock.instant());
+        assertThat(audits(AuditActions.EXTERNAL_BLOG_RESUME)).hasSize(1);
+        BusinessException activeResume = catchThrowableOfType(BusinessException.class,
+                () -> service.resume(admin.getId(), blog.getId(), IP));
+        assertThat(activeResume.params()).containsEntry("action", "resume");
+        BusinessException longReason = catchThrowableOfType(BusinessException.class,
+                () -> service.pause(admin.getId(), blog.getId(), "x".repeat(501), IP));
+        assertThat(longReason.fieldErrors()).singleElement().satisfies(fe -> assertThat(fe.code()).isEqualTo("TOO_LONG"));
+    }
+
+    @Test
+    void stoppedCanResume() {
+        ExternalBlog blog = x.blog(member, url("a"), topic, ExternalBlogStatus.STOPPED);
+        em.flush();
+        assertThat(service.resume(admin.getId(), blog.getId(), IP).base().status())
+                .isEqualTo(ExternalBlogStatus.ACTIVE);
+    }
+
+    @Test
+    void blockRemovesPostsAndKeptPostsOfSameFeed() {
+        ExternalBlog released = x.blog(member, url("a"), topic, ExternalBlogStatus.RELEASED);
+        ExternalPost kept = x.post(released, "kept", topic, null);
+        ExternalBlog active = x.blog(f.user("second"), url("a"), topic, ExternalBlogStatus.ACTIVE);
+        ExternalPost current = x.post(active, "current", topic, null);
+        ExternalPost alreadyRemoved = x.removed(active, "old", topic, RemovedReason.ADMIN);
+        ExternalBlog otherFeed = x.blog(member, "https://elsewhere.example/feed", topic, ExternalBlogStatus.ACTIVE);
+        ExternalPost elsewhere = x.post(otherFeed, "elsewhere", topic, null);
+        em.flush();
+
+        BusinessException noReason = catchThrowableOfType(BusinessException.class,
+                () -> service.block(admin.getId(), active.getId(), " ", IP));
+        assertThat(noReason.fieldErrors()).singleElement().satisfies(fe -> assertThat(fe.code()).isEqualTo("REQUIRED"));
+        // 같은 피드에 활성 등록이 있으면 해제된 등록 차단은 409(그 등록을 차단)
+        BusinessException releasedConflict = catchThrowableOfType(BusinessException.class,
+                () -> service.block(admin.getId(), released.getId(), "spam", IP));
+        assertThat(releasedConflict.errorCode()).isEqualTo(ErrorCode.EXTERNAL_BLOG_STATE_CONFLICT);
+        assertThat(releasedConflict.params()).containsEntry("activeExternalBlogId", active.getId());
+
+        AdminExternalBlogResponse blocked = service.block(admin.getId(), active.getId(), "spam", IP);
+
+        assertThat(blocked.base().status()).isEqualTo(ExternalBlogStatus.BLOCKED);
+        assertThat(statusOf(current)).isEqualTo(ExternalPostStatus.REMOVED);
+        ExternalPost keptAfter = postRepository.findById(kept.getId()).orElseThrow();
+        assertThat(keptAfter.getStatus()).isEqualTo(ExternalPostStatus.REMOVED);
+        assertThat(keptAfter.getRemovedReason()).isEqualTo(RemovedReason.BLOG_BLOCKED);
+        assertThat(postRepository.findById(alreadyRemoved.getId()).orElseThrow().getRemovedReason())
+                .isEqualTo(RemovedReason.ADMIN);
+        assertThat(statusOf(elsewhere)).isEqualTo(ExternalPostStatus.ACTIVE);
+        AdminAuditLog log = audits(AuditActions.EXTERNAL_BLOG_BLOCK).getFirst();
+        assertThat(log.getReason()).isEqualTo("spam");
+        assertThat(log.getAfter()).containsEntry("status", "BLOCKED").containsEntry("removedPosts", 2);
+        verify(events).publishEvent(new PortalChangedEvent("external:block"));
+        BusinessException twice = catchThrowableOfType(BusinessException.class,
+                () -> service.block(admin.getId(), active.getId(), "spam", IP));
+        assertThat(twice.errorCode()).isEqualTo(ErrorCode.EXTERNAL_BLOG_STATE_CONFLICT);
+    }
+
+    @Test
+    void releasedRegistrationWithKeptPostsCanBeBlocked() {
+        ExternalBlog released = x.blog(member, url("a"), topic, ExternalBlogStatus.RELEASED);
+        ExternalPost kept = x.post(released, "kept", topic, null);
+        em.flush();
+
+        assertThat(service.block(admin.getId(), released.getId(), "rights", IP).base().status())
+                .isEqualTo(ExternalBlogStatus.BLOCKED);
+        assertThat(statusOf(kept)).isEqualTo(ExternalPostStatus.REMOVED);
+        // 차단된 피드는 다시 신청할 수 없다(넘겨받기 불가)
+        BusinessException duplicate = catchThrowableOfType(BusinessException.class,
+                () -> service.create(admin.getId(), url("a"), topic.getId(), "basis", IP));
+        assertThat(duplicate.errorCode()).isEqualTo(ErrorCode.EXTERNAL_BLOG_ALREADY_REGISTERED);
+        assertThat(duplicate.params()).containsEntry("claimable", false);
+    }
 }

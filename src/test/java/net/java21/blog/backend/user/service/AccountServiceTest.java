@@ -24,6 +24,7 @@ import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
+import net.java21.blog.backend.user.event.MemberWithdrawnEvent;
 import net.java21.blog.backend.user.repository.UserRepository;
 import net.java21.blog.backend.user.repository.WithdrawalRepository;
 import net.java21.blog.backend.spam.BannedWordMatcher;
@@ -35,6 +36,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -61,6 +63,8 @@ class AccountServiceTest {
     private MediaReferenceService mediaReferences;
     @Mock
     private BlogSubscriptionRepository subscriptionRepository;
+    @Mock
+    private ApplicationEventPublisher events;
 
     private AccountService service;
     private User user;
@@ -68,7 +72,7 @@ class AccountServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountService(userRepository, withdrawalRepository, refreshTokenRepository, passwordEncoder,
-                mediaReferences, subscriptionRepository, new BannedWordMatcher(bannedWordRepository),
+                mediaReferences, subscriptionRepository, new BannedWordMatcher(bannedWordRepository), events,
                 new MutableClock(NOW));
         user = TestEntities.user(7L, "marco@example.com", "$2a$hash", "마르코");
     }
@@ -236,6 +240,7 @@ class AccountServiceTest {
         verify(withdrawalRepository, never()).makeAllPostsPrivate(anyLong());
         verify(refreshTokenRepository, never()).revokeAllByUserId(anyLong(), any());
         verify(subscriptionRepository, never()).deleteAllByUser(anyLong());
+        verify(events, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -250,6 +255,8 @@ class AccountServiceTest {
         assertThat(user.isActive()).isFalse();
         verify(withdrawalRepository).makeAllPostsPrivate(7L);
         verify(refreshTokenRepository).revokeAllByUserId(7L, NOW);
+        // 007 FR-157: 같은 트랜잭션에서 외부 블로그 해제·글 내림
+        verify(events).publishEvent(new MemberWithdrawnEvent(7L, NOW));
     }
 
     /**

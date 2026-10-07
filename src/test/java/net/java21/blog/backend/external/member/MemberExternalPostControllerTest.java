@@ -64,6 +64,8 @@ class MemberExternalPostControllerTest {
     private MemberExternalBlogService service;
     @MockitoBean
     private ExternalPostTopicService topicService;
+    @MockitoBean
+    private ReleaseService releaseService;
 
     private MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder builder, String body) {
         return builder.cookie(authCookies.user(USER)).contentType(MediaType.APPLICATION_JSON).content(body);

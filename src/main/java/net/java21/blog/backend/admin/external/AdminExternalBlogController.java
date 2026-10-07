@@ -83,6 +83,25 @@ public class AdminExternalBlogController {
         return ApiResponse.ok(service.reject(admin.userId(), id, request.reason(), http.getRemoteAddr()));
     }
 
+    @PostMapping("/{id}/pause")
+    ApiResponse<AdminExternalBlogResponse> pause(@CurrentUser AuthUser admin, @PathVariable long id,
+            @RequestBody(required = false) ReasonRequest request, HttpServletRequest http) {
+        return ApiResponse.ok(service.pause(admin.userId(), id, request == null ? null : request.reason(),
+                http.getRemoteAddr()));
+    }
+
+    @PostMapping("/{id}/resume")
+    ApiResponse<AdminExternalBlogResponse> resume(@CurrentUser AuthUser admin, @PathVariable long id,
+            HttpServletRequest http) {
+        return ApiResponse.ok(service.resume(admin.userId(), id, http.getRemoteAddr()));
+    }
+
+    @PostMapping("/{id}/block")
+    ApiResponse<AdminExternalBlogResponse> block(@CurrentUser AuthUser admin, @PathVariable long id,
+            @RequestBody ReasonRequest request, HttpServletRequest http) {
+        return ApiResponse.ok(service.block(admin.userId(), id, request.reason(), http.getRemoteAddr()));
+    }
+
     @GetMapping("/{id}/posts")
     ApiResponse<List<AdminExternalPostResponse>> posts(@PathVariable long id,
             @RequestParam(required = false) ExternalPostStatus status, @RequestParam(required = false) Integer page,

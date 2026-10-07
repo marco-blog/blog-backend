@@ -156,6 +156,34 @@ class AdminExternalBlogControllerTest {
     }
 
     @Test
+    void pauseResumeBlock() throws Exception {
+        when(service.pause(eq(ADMIN), eq(11L), isNull(), anyString())).thenReturn(BLOG);
+        mvc.perform(post("/api/v1/admin/external-blogs/11/pause").cookie(authCookies.user(ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.id").value(11));
+        when(service.pause(eq(ADMIN), eq(12L), eq("점검"), anyString())).thenReturn(BLOG);
+        mvc.perform(post("/api/v1/admin/external-blogs/12/pause").cookie(authCookies.user(ADMIN))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"점검\"}"))
+                .andExpect(status().isOk());
+
+        when(service.resume(eq(ADMIN), eq(11L), anyString())).thenReturn(BLOG);
+        mvc.perform(post("/api/v1/admin/external-blogs/11/resume").cookie(authCookies.user(ADMIN)))
+                .andExpect(status().isOk());
+
+        when(service.block(eq(ADMIN), eq(11L), eq("spam"), anyString())).thenReturn(BLOG);
+        mvc.perform(post("/api/v1/admin/external-blogs/11/block").cookie(authCookies.user(ADMIN))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"spam\"}"))
+                .andExpect(status().isOk());
+        when(service.block(eq(ADMIN), eq(13L), eq("spam"), anyString())).thenThrow(BusinessException.withParams(
+                ErrorCode.EXTERNAL_BLOG_STATE_CONFLICT, "x",
+                java.util.Map.of("status", "RELEASED", "action", "block", "activeExternalBlogId", 14)));
+        mvc.perform(post("/api/v1/admin/external-blogs/13/block").cookie(authCookies.user(ADMIN))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"spam\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.header.params.activeExternalBlogId").value(14));
+    }
+
+    @Test
     void nonAdminsGet404() throws Exception {
         mvc.perform(get("/api/v1/admin/external-blogs").cookie(authCookies.user(6L)))
                 .andExpect(status().isNotFound())

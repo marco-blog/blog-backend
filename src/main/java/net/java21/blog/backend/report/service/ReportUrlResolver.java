@@ -2,6 +2,7 @@ package net.java21.blog.backend.report.service;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -10,12 +11,13 @@ import java.util.regex.Pattern;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.config.SiteProperties;
 import net.java21.blog.backend.report.domain.ReportTargetType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * 권리 침해 신고 주소 → 신고 대상(005 research M2). {@code blog.base-url}과 같은 호스트의 {@code /{handle}/{postId}}면 글,
  * {@code #comment-{id}}·{@code #trackback-{id}} 조각이 있으면 그 글에 속한 댓글·트랙백, {@code /{handle}/guestbook#guestbook-{id}}면 그
- * 블로그의 방명록 글. 쿼리와 끝 {@code /}는 무시한다. 다른 호스트·해석 실패·없는 대상·소속이 맞지 않으면 빈 값(관리자가 지정한다).
+ * 블로그의 방명록 글. 쿼리와 끝 {@code /}는 무시한다. 그 전에 추가 해석기({@link UrlTargetResolver}, 007 외부 글)에 묻는다. 다른 호스트·해석 실패·없는 대상·소속이 맞지 않으면 빈 값(관리자가 지정한다).
  */
 @Component
 public class ReportUrlResolver {
@@ -26,10 +28,17 @@ public class ReportUrlResolver {
 
     private final SiteProperties site;
     private final ReportTargetHandlers handlers;
+    private final List<UrlTargetResolver> extra;
 
     public ReportUrlResolver(SiteProperties site, ReportTargetHandlers handlers) {
+        this(site, handlers, List.of());
+    }
+
+    @Autowired
+    public ReportUrlResolver(SiteProperties site, ReportTargetHandlers handlers, List<UrlTargetResolver> extra) {
         this.site = site;
         this.handlers = handlers;
+        this.extra = List.copyOf(extra);
     }
 
     public Optional<ReportTarget> resolve(String url) {
@@ -40,6 +49,12 @@ public class ReportUrlResolver {
             base = new URI(site.baseUrl());
         } catch (URISyntaxException | RuntimeException e) {
             return Optional.empty();
+        }
+        for (UrlTargetResolver resolver : extra) {
+            Optional<ReportTarget> found = resolver.resolveUrl(uri, base);
+            if (found.isPresent()) {
+                return found;
+            }
         }
         if (uri.getHost() == null || base.getHost() == null
                 || !uri.getHost().toLowerCase(Locale.ROOT).equals(base.getHost().toLowerCase(Locale.ROOT))

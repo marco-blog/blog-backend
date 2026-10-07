@@ -3,6 +3,7 @@ package net.java21.blog.backend.admin.external;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import net.java21.blog.backend.external.domain.ExternalBlog;
 import net.java21.blog.backend.external.domain.ExternalBlogStatus;
 import net.java21.blog.backend.external.domain.ExternalPost;
 import net.java21.blog.backend.external.domain.ExternalPostStatus;
+import net.java21.blog.backend.external.domain.RemovedReason;
 import net.java21.blog.backend.external.dto.AdminExternalBlogResponse;
 import net.java21.blog.backend.external.dto.AdminExternalPostResponse;
 import net.java21.blog.backend.external.feed.FeedDiscovery;
@@ -207,6 +209,62 @@ public class AdminExternalBlogService {
         return get(id);
     }
 
+    /** 일시 중지(ACTIVE만, 글은 그대로 노출). 사유는 선택(작업 기록에만). */
+    @Transactional
+    public AdminExternalBlogResponse pause(long adminId, long id, String reason, String requestIp) {
+        String text = optionalText("reason", reason);
+        ExternalBlog blog = blogRepository.findById(id).orElseThrow(() -> notFound(id));
+        String before = blog.getStatus().name();
+        blog.pause();
+        blogRepository.flush();
+        auditService.record(adminId, AuditActions.EXTERNAL_BLOG_PAUSE, AuditActions.TARGET_EXTERNAL_BLOG, id, null,
+                value("status", before), value("status", blog.getStatus().name()), text, requestIp);
+        return get(id);
+    }
+
+    /** 재개(PAUSED·STOPPED만): 실패 수·첫 실패 초기화, 바로 수집({@code next_fetch_at = now}). */
+    @Transactional
+    public AdminExternalBlogResponse resume(long adminId, long id, String requestIp) {
+        ExternalBlog blog = blogRepository.findById(id).orElseThrow(() -> notFound(id));
+        String before = blog.getStatus().name();
+        blog.resume(clock.instant());
+        blogRepository.flush();
+        auditService.record(adminId, AuditActions.EXTERNAL_BLOG_RESUME, AuditActions.TARGET_EXTERNAL_BLOG, id,
+                value("status", before), value("status", blog.getStatus().name()), requestIp);
+        return get(id);
+    }
+
+    /**
+     * 차단(사유 필수, BLOCKED가 아니면 모두): 그 등록과 같은 피드의 해제된 등록에 남은 글을 모두 {@code REMOVED}({@code BLOG_BLOCKED}).
+     * 해제된 등록인데 같은 피드에 거절·해제가 아닌 다른 등록이 있으면 409({@code activeExternalBlogId}) — 그 등록을 차단한다.
+     */
+    @Transactional
+    public AdminExternalBlogResponse block(long adminId, long id, String reason, String requestIp) {
+        String text = requireText("reason", reason);
+        ExternalBlog blog = blogRepository.findById(id).orElseThrow(() -> notFound(id));
+        if (blog.getStatus() == ExternalBlogStatus.RELEASED) {
+            ExternalBlog holding = blogRepository.findHolding(blog.getFeedUrlHash()).orElse(null);
+            if (holding != null && !holding.getId().equals(id)) {
+                throw blog.conflict("block", Map.of("activeExternalBlogId", holding.getId()));
+            }
+        }
+        String before = blog.getStatus().name();
+        blog.block();
+        blogRepository.flush();
+        List<Long> blogIds = new ArrayList<>();
+        blogIds.add(id);
+        blogRepository.findByFeedUrlHashAndStatus(blog.getFeedUrlHash(), ExternalBlogStatus.RELEASED)
+                .forEach(released -> blogIds.add(released.getId()));
+        int removed = postRepository.removeAllActive(blogIds,
+                RemovedReason.BLOG_BLOCKED, clock.instant());
+        Map<String, Object> after = value("status", ExternalBlogStatus.BLOCKED.name());
+        after.put("removedPosts", removed);
+        auditService.record(adminId, AuditActions.EXTERNAL_BLOG_BLOCK, AuditActions.TARGET_EXTERNAL_BLOG, id, null,
+                value("status", before), after, text, requestIp);
+        events.publishEvent(new PortalChangedEvent("external:block"));
+        return get(id);
+    }
+
     /** 같은 피드의 해제된 등록에 남은 글을 {@code blog}로 옮긴다. 옮긴 글이 있으면 포털 캐시 무효화. */
     private void takeOverKeptPosts(ExternalBlog blog, Instant now) {
         int moved = postRepository.moveKeptPosts(blog.getFeedUrlHash(), blog.getId(), now);
@@ -225,6 +283,18 @@ public class AdminExternalBlogService {
         String text = value == null ? "" : value.strip();
         if (text.isEmpty()) {
             throw invalid(FieldError.of(field, "REQUIRED"));
+        }
+        if (text.length() > REASON_MAX) {
+            throw invalid(new FieldError(field, "TOO_LONG", Map.of("max", REASON_MAX)));
+        }
+        return text;
+    }
+
+    /** 선택 사유: 비면 null, 500자 넘으면 400. */
+    static String optionalText(String field, String value) {
+        String text = value == null ? "" : value.strip();
+        if (text.isEmpty()) {
+            return null;
         }
         if (text.length() > REASON_MAX) {
             throw invalid(new FieldError(field, "TOO_LONG", Map.of("max", REASON_MAX)));

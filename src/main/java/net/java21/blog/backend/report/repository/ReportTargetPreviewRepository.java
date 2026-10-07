@@ -7,6 +7,7 @@ import static net.java21.blog.backend.post.domain.QPost.post;
 import static net.java21.blog.backend.trackback.domain.QTrackback.trackback;
 
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,6 +31,7 @@ import net.java21.blog.backend.report.dto.ReportTargetPreview.State;
 import net.java21.blog.backend.report.dto.TargetKey;
 import net.java21.blog.backend.trackback.domain.TrackbackStatus;
 import net.java21.blog.backend.user.domain.QUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -45,9 +47,18 @@ public class ReportTargetPreviewRepository {
     private final JPAQueryFactory queryFactory;
     private final SiteProperties site;
 
+    private final Map<ReportTargetType, TargetPreviewProvider> providers = new EnumMap<>(ReportTargetType.class);
+
     public ReportTargetPreviewRepository(JPAQueryFactory queryFactory, SiteProperties site) {
+        this(queryFactory, site, List.of());
+    }
+
+    @Autowired
+    public ReportTargetPreviewRepository(JPAQueryFactory queryFactory, SiteProperties site,
+            List<TargetPreviewProvider> providers) {
         this.queryFactory = queryFactory;
         this.site = site;
+        providers.forEach(provider -> provider.types().forEach(type -> this.providers.put(type, provider)));
     }
 
     /** 대상 하나(없으면 MISSING). */
@@ -68,7 +79,11 @@ public class ReportTargetPreviewRepository {
                 case GUESTBOOK -> guestbook(ids, found);
                 case TRACKBACK -> trackbacks(ids, found);
                 default -> {
-                    // 007 처리기가 없는 종류는 MISSING으로 둔다.
+                    // 007 외부 대상은 그 미리보기 제공자가, 제공자가 없으면 MISSING으로 둔다.
+                    TargetPreviewProvider provider = providers.get(type);
+                    if (provider != null) {
+                        provider.previews(type, ids, found);
+                    }
                 }
             }
         });

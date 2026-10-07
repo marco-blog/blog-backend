@@ -12,6 +12,7 @@ import net.java21.blog.backend.external.member.dto.CreateExternalBlogRequest;
 import net.java21.blog.backend.external.member.dto.DefaultTopicChangeRequest;
 import net.java21.blog.backend.external.member.dto.FeedPreviewResponse;
 import net.java21.blog.backend.external.member.dto.PostTopicRequest;
+import net.java21.blog.backend.external.member.dto.ReleaseRequest;
 import net.java21.blog.backend.external.member.dto.PreviewRequest;
 import net.java21.blog.backend.external.verify.VerificationRequest;
 import net.java21.blog.backend.external.verify.VerificationResponse;
@@ -42,13 +43,15 @@ public class MemberExternalBlogController {
     private final VerificationService verificationService;
     private final MemberExternalBlogService service;
     private final ExternalPostTopicService topicService;
+    private final ReleaseService releaseService;
 
     public MemberExternalBlogController(PreviewService previewService, VerificationService verificationService,
-            MemberExternalBlogService service, ExternalPostTopicService topicService) {
+            MemberExternalBlogService service, ExternalPostTopicService topicService, ReleaseService releaseService) {
         this.previewService = previewService;
         this.verificationService = verificationService;
         this.service = service;
         this.topicService = topicService;
+        this.releaseService = releaseService;
     }
 
     @PostMapping("/api/v1/external-blog-previews")
@@ -105,6 +108,13 @@ public class MemberExternalBlogController {
     ApiResponse<MyExternalPostResponse> postTopic(@CurrentUser AuthUser user, @PathVariable long id,
             @PathVariable long postId, @RequestBody PostTopicRequest request) {
         return ApiResponse.ok(topicService.changePostTopic(user.userId(), id, postId, request.topicId()));
+    }
+
+    /** 등록 해제(남기기·삭제) 또는 해제된 등록의 남긴 글 삭제(관리 회원, 007 US4). */
+    @PostMapping("/api/v1/me/external-blogs/{id}/release")
+    ApiResponse<MyExternalBlogResponse> release(@CurrentUser AuthUser user, @PathVariable long id,
+            @RequestBody ReleaseRequest request) {
+        return ApiResponse.ok(releaseService.release(user.userId(), id, request.deletePosts()));
     }
 
     @GetMapping("/api/v1/me/external-blogs/{id}/posts")

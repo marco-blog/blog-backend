@@ -263,7 +263,15 @@ class OpenApiContractTest {
             "GET /api/v1/admin/topic-mapping-rules",
             "POST /api/v1/admin/topic-mapping-rules",
             "PATCH /api/v1/admin/topic-mapping-rules/{id}",
-            "DELETE /api/v1/admin/topic-mapping-rules/{id}");
+            "DELETE /api/v1/admin/topic-mapping-rules/{id}",
+            // 007 US4 — 등록 해제, 일시 중지·재개·차단, 외부 글 내림, 외부 글 포털 제외·해제
+            "POST /api/v1/me/external-blogs/{id}/release",
+            "POST /api/v1/admin/external-blogs/{id}/pause",
+            "POST /api/v1/admin/external-blogs/{id}/resume",
+            "POST /api/v1/admin/external-blogs/{id}/block",
+            "POST /api/v1/admin/external-posts/{id}/remove",
+            "PUT /api/v1/admin/portal/external-exclusions/{externalPostId}",
+            "DELETE /api/v1/admin/portal/external-exclusions/{externalPostId}");
 
     /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
@@ -333,7 +341,10 @@ class OpenApiContractTest {
             Map.entry("LoginRequest", List.of("captchaToken")),
             Map.entry("GuestbookWriteRequest", List.of("captchaToken")),
             // 007 US2 외부 카드(007 contracts "003 응답 확장")
-            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")));
+            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")),
+            // 007 US4 등록 해제 요청, 외부 글 포털 제외
+            Map.entry("ReleaseRequest", List.of("deletePosts")),
+            Map.entry("ExternalExclusionResponse", List.of("externalPostId", "reason", "excludedBy", "createdAt")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
