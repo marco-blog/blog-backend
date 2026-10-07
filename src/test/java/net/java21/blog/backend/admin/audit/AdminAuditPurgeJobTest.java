@@ -65,4 +65,12 @@ class AdminAuditPurgeJobTest {
         when(repository.deleteByIds(anyList())).thenReturn(0L);
         assertThat(job(1).purge()).isZero();
     }
+
+    /** 기록 삭제는 정리 작업만 한다: 기록 저장소에는 여전히 삭제 메서드가 없다(FR-106, 수정·삭제 API 없음). */
+    @Test
+    void auditLogRepositoryStillHasNoDeleteMethod() {
+        assertThat(java.util.Arrays.stream(AdminAuditLogRepository.class.getMethods())
+                .map(java.lang.reflect.Method::getName))
+                .noneMatch(name -> name.startsWith("delete") || name.startsWith("remove"));
+    }
 }
