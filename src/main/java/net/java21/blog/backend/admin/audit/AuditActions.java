@@ -21,6 +21,11 @@ public final class AuditActions {
     public static final String TARGET_GUESTBOOK = "GUESTBOOK";
     public static final String TARGET_TRACKBACK = "TRACKBACK";
     public static final String TARGET_BANNED_WORD = "BANNED_WORD";
+    // 007 외부 블로그
+    public static final String TARGET_EXTERNAL_BLOG = "EXTERNAL_BLOG";
+    public static final String TARGET_EXTERNAL_POST = "EXTERNAL_POST";
+    public static final String TARGET_TOPIC_MAPPING_RULE = "TOPIC_MAPPING_RULE";
+    public static final String TARGET_CLASSIFICATION_REVIEW = "CLASSIFICATION_REVIEW";
 
     public static final String TOPIC_CREATE = "TOPIC_CREATE";
     public static final String TOPIC_UPDATE = "TOPIC_UPDATE";
@@ -63,6 +68,20 @@ public final class AuditActions {
     public static final String ROLE_GRANT = "ROLE_GRANT";
     public static final String ROLE_REVOKE = "ROLE_REVOKE";
 
+    // 007 외부 블로그(007 contracts/api.md 관리자 API). 외부 글 포털 제외는 PORTAL_EXCLUDE·PORTAL_UNEXCLUDE(대상 EXTERNAL_POST)
+    public static final String EXTERNAL_BLOG_CREATE = "EXTERNAL_BLOG_CREATE";
+    public static final String EXTERNAL_BLOG_APPROVE = "EXTERNAL_BLOG_APPROVE";
+    public static final String EXTERNAL_BLOG_REJECT = "EXTERNAL_BLOG_REJECT";
+    public static final String EXTERNAL_BLOG_UPDATE = "EXTERNAL_BLOG_UPDATE";
+    public static final String EXTERNAL_BLOG_PAUSE = "EXTERNAL_BLOG_PAUSE";
+    public static final String EXTERNAL_BLOG_RESUME = "EXTERNAL_BLOG_RESUME";
+    public static final String EXTERNAL_BLOG_BLOCK = "EXTERNAL_BLOG_BLOCK";
+    public static final String EXTERNAL_POST_REMOVE = "EXTERNAL_POST_REMOVE";
+    public static final String TOPIC_MAPPING_RULE_CREATE = "TOPIC_MAPPING_RULE_CREATE";
+    public static final String TOPIC_MAPPING_RULE_UPDATE = "TOPIC_MAPPING_RULE_UPDATE";
+    public static final String TOPIC_MAPPING_RULE_DELETE = "TOPIC_MAPPING_RULE_DELETE";
+    public static final String CLASSIFICATION_CONFIRM = "CLASSIFICATION_CONFIRM";
+
     /** 알려진 동작 코드 전체(리플렉션 없이 상수로, 006 data-model 표 순서). */
     public static final List<String> ALL = List.of(
             TOPIC_CREATE, TOPIC_UPDATE, TOPIC_REORDER, TOPIC_HIDE, TOPIC_UNHIDE, TOPIC_PIN, TOPIC_UNPIN,
@@ -74,12 +93,16 @@ public final class AuditActions {
             USER_SUSPEND, USER_UNSUSPEND, REPORT_ACTION, REPORT_DISMISS, REPORT_TARGET_ASSIGN,
             CONTENT_HIDE, CONTENT_UNHIDE,
             BANNED_WORD_CREATE, BANNED_WORD_UPDATE, BANNED_WORD_DELETE,
-            USER_BLOG_LIMIT_CHANGE, ROLE_GRANT, ROLE_REVOKE);
+            USER_BLOG_LIMIT_CHANGE, ROLE_GRANT, ROLE_REVOKE,
+            EXTERNAL_BLOG_CREATE, EXTERNAL_BLOG_APPROVE, EXTERNAL_BLOG_REJECT, EXTERNAL_BLOG_UPDATE,
+            EXTERNAL_BLOG_PAUSE, EXTERNAL_BLOG_RESUME, EXTERNAL_BLOG_BLOCK, EXTERNAL_POST_REMOVE,
+            TOPIC_MAPPING_RULE_CREATE, TOPIC_MAPPING_RULE_UPDATE, TOPIC_MAPPING_RULE_DELETE, CLASSIFICATION_CONFIRM);
 
     /** 알려진 대상 종류 전체. */
     public static final List<String> TARGETS = List.of(
             TARGET_USER, TARGET_TOPIC, TARGET_CURATION, TARGET_POST, TARGET_SETTING, TARGET_RELEASE_NOTE,
-            TARGET_REPORT, TARGET_COMMENT, TARGET_GUESTBOOK, TARGET_TRACKBACK, TARGET_BANNED_WORD);
+            TARGET_REPORT, TARGET_COMMENT, TARGET_GUESTBOOK, TARGET_TRACKBACK, TARGET_BANNED_WORD,
+            TARGET_EXTERNAL_BLOG, TARGET_EXTERNAL_POST, TARGET_TOPIC_MAPPING_RULE, TARGET_CLASSIFICATION_REVIEW);
 
     private AuditActions() {
     }

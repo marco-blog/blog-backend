@@ -2,6 +2,7 @@ package net.java21.blog.backend.topic.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.portal.PortalProperties;
 import net.java21.blog.backend.portal.repository.TopicPostCountQueryRepository;
+import net.java21.blog.backend.portal.service.ExternalPortalSource;
 import net.java21.blog.backend.portal.service.PortalCache;
 import net.java21.blog.backend.portal.service.PortalCriteria;
 import net.java21.blog.backend.portal.service.PortalCriteriaFactory;
@@ -20,6 +22,7 @@ import net.java21.blog.backend.topic.dto.TopicNode;
 import net.java21.blog.backend.topic.repository.TopicQueryRepository;
 import net.java21.blog.backend.topic.repository.TopicRepository;
 import net.java21.blog.backend.topic.repository.TopicRow;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,10 +48,20 @@ public class TopicService {
     private final PortalCriteriaFactory criteriaFactory;
     private final SystemSettingsService settings;
     private final PortalProperties properties;
+    private final ExternalPortalSource external;
 
     public TopicService(TopicRepository topicRepository, TopicQueryRepository topicQueryRepository,
             TopicPostCountQueryRepository countRepository, PortalCache cache, PortalCriteriaFactory criteriaFactory,
             SystemSettingsService settings, PortalProperties properties) {
+        this(topicRepository, topicQueryRepository, countRepository, cache, criteriaFactory, settings, properties,
+                ExternalPortalSource.NONE);
+    }
+
+    @Autowired
+    public TopicService(TopicRepository topicRepository, TopicQueryRepository topicQueryRepository,
+            TopicPostCountQueryRepository countRepository, PortalCache cache, PortalCriteriaFactory criteriaFactory,
+            SystemSettingsService settings, PortalProperties properties, ExternalPortalSource external) {
+        this.external = external;
         this.topicRepository = topicRepository;
         this.topicQueryRepository = topicQueryRepository;
         this.countRepository = countRepository;
@@ -65,13 +78,20 @@ public class TopicService {
                 settings.topicAutoHideThreshold()));
     }
 
-    /** 소분류별 최근({@code blog.portal.topic-count-window}, 30일) 포털 노출 글 수. 캐시. */
+    /**
+     * 소분류별 최근({@code blog.portal.topic-count-window}, 30일) 포털 노출 글 수. 캐시. 007부터 포털 노출 외부 글 수를 더한다
+     * (research E13, 쿼리 1회 추가).
+     */
     @Transactional(readOnly = true)
     public Map<Long, Long> recentPostCounts() {
         return cache.get(COUNTS_KEY, () -> {
             PortalCriteria criteria = criteriaFactory.now();
             Instant since = criteria.now().minus(properties.topicCountWindow());
-            return Map.copyOf(countRepository.countRecentByTopic(criteria, since));
+            Map<Long, Long> counts = new HashMap<>(countRepository.countRecentByTopic(criteria, since));
+            if (external.enabled()) {
+                external.recentCountsByTopic(criteria.now(), since).forEach((id, n) -> counts.merge(id, n, Long::sum));
+            }
+            return Map.copyOf(counts);
         });
     }
 

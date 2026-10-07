@@ -26,6 +26,11 @@ class AdminEndpointAccessMatrixTest extends AdminConsoleIntegrationSupport {
     void everyAdminEndpointIsHiddenFromNonAdmins() throws Exception {
         List<Endpoint> endpoints = endpoints("/api/v1/admin/");
         assertThat(endpoints).as("관리자 매핑이 하나도 없으면 경로 오타").isNotEmpty();
+        // 007 T089: 외부 블로그·외부 글·포털 제외·분류 검수·현황·매핑 규칙 관리자 매핑 21개(contracts/api.md)도 같은 행렬에 든다.
+        // 경로 변수 {externalPostId}는 fill()의 기본값(없는 id)으로 채운다.
+        assertThat(endpoints.stream().filter(endpoint -> endpoint.pattern().matches(
+                "/api/v1/admin/(external-|portal/external-|classification-|topic-mapping-).*")).count())
+                .as("007 관리자 매핑").isEqualTo(21);
 
         Member member = signup("amuser");
         Member suspended = signupAs("amsusp", "ADMIN");

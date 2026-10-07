@@ -7,9 +7,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.persistence.EntityManager;
+
 import net.java21.blog.backend.admin.audit.AuditActions;
+import net.java21.blog.backend.external.domain.ExternalBlog;
+import net.java21.blog.backend.support.ExternalFixtures;
+import net.java21.blog.backend.support.ExternalTestKit;
+import net.java21.blog.backend.support.StubHttpServer;
+import net.java21.blog.backend.topic.domain.Topic;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 006 T046(SC-017, US3 AS1, FR-106, research A8): {@code /api/v1/admin/**}의 GET이 아닌 매핑 전체가 아래 표에 있어야 하고, 표의 각
@@ -17,6 +29,26 @@ import org.springframework.http.HttpMethod;
  * <p><b>새 관리자 변경 API를 더하면 이 표에 행을 더한다</b>(005·007 포함). 상태를 바꾸지 않는 요청은 {@link #NO_AUDIT}에 이유와 함께 둔다.
  */
 class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
+
+    /** 007 외부 블로그 직접 등록·신청이 읽는 피드(루프백, 시험 전용 {@code allow-private}). */
+    private static final StubHttpServer FEEDS = StubHttpServer.start();
+
+    @DynamicPropertySource
+    static void feeds(DynamicPropertyRegistry registry) {
+        registry.add("blog.outbound.allow-private", () -> "true");
+        registry.add("blog.outbound.allowed-ports", () -> "80,443," + FEEDS.port());
+    }
+
+    @AfterAll
+    static void stopFeeds() {
+        FEEDS.close();
+    }
+
+    private static String feed(String name) {
+        FEEDS.respond("/" + name + ".xml", 200, "application/rss+xml", ExternalTestKit.rss("Feed " + name,
+                FEEDS.uri("/").toString(), "about", new String[] {"g1", "P1", FEEDS.uri("/" + name + "/1").toString()}));
+        return FEEDS.uri("/" + name + ".xml").toString();
+    }
 
     private static final String LONG_TEXT = "포털 노출 기준을 넘는 충분히 긴 본문입니다. ".repeat(30);
 
@@ -52,6 +84,15 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private long note;
     private long draftNote;
     private long bannedWord;
+    private long externalBlog;
+    private long mappingRule;
+    private long excludedExternalPost;
+    private ExternalFixtures externalFixtures;
+
+    @Autowired
+    private EntityManager em;
+    @Autowired
+    private TransactionTemplate tx;
 
     @Test
     void everyAdminChangeIsAudited() throws Exception {
@@ -192,6 +233,56 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                         "/api/v1/admin/banned-words/" + bannedWord, "{\"action\":\"MASK\"}")),
                 new Row("DELETE", "/api/v1/admin/banned-words/{id}", AuditActions.BANNED_WORD_DELETE, () -> new Call(
                         "/api/v1/admin/banned-words/" + bannedWord, null)),
+                // 007 외부 블로그(직접 등록·기본 주제·승인·거절). 회원 API(/api/v1/me/external-blogs/**)는 관리자 변경이 아니고
+                // 블로그 주인 경로(/blogs/{handle}/manage/**)도 아니라 006 ManageEndpointAccessMatrixTest 대상이 아니다.
+                new Row("POST", "/api/v1/admin/external-blogs", AuditActions.EXTERNAL_BLOG_CREATE, () -> new Call(
+                        "/api/v1/admin/external-blogs", "{\"feedUrl\":\"%s\",\"defaultTopicId\":%d,\"registrationBasis\":\"%s\"}"
+                                .formatted(feed(uniqueHandle("acdirect")), topicChildren.get(0), "public feed"))),
+                new Row("PATCH", "/api/v1/admin/external-blogs/{id}", AuditActions.EXTERNAL_BLOG_UPDATE, () -> new Call(
+                        "/api/v1/admin/external-blogs/" + externalBlog,
+                        "{\"defaultTopicId\":%d}".formatted(topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/approve", AuditActions.EXTERNAL_BLOG_APPROVE,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acexta") + "/approve", null)),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/reject", AuditActions.EXTERNAL_BLOG_REJECT,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acextr") + "/reject",
+                                "{\"reason\":\"off topic\"}")),
+                // 007 분류 검수·매핑 규칙(US3)
+                new Row("POST", "/api/v1/admin/classification-reviews/{id}/confirm",
+                        AuditActions.CLASSIFICATION_CONFIRM, () -> new Call("/api/v1/admin/classification-reviews/"
+                                + pendingReview() + "/confirm", "{\"topicId\":%d}".formatted(topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/classification-reviews/confirm-batch",
+                        AuditActions.CLASSIFICATION_CONFIRM, () -> new Call(
+                                "/api/v1/admin/classification-reviews/confirm-batch",
+                                "{\"items\":[{\"id\":%d,\"topicId\":%d}]}".formatted(pendingReview(),
+                                        topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/topic-mapping-rules", AuditActions.TOPIC_MAPPING_RULE_CREATE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules", "{\"keyword\":\"%s\",\"topicId\":%d}"
+                                .formatted(uniqueHandle("acrule"), topicChildren.get(0)))),
+                new Row("PATCH", "/api/v1/admin/topic-mapping-rules/{id}", AuditActions.TOPIC_MAPPING_RULE_UPDATE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, "{\"priority\":5}")),
+                new Row("DELETE", "/api/v1/admin/topic-mapping-rules/{id}", AuditActions.TOPIC_MAPPING_RULE_DELETE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, null)),
+                // 007 운영(US4): 일시 중지·재개·차단, 외부 글 내림, 외부 글 포털 제외·해제
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/pause", AuditActions.EXTERNAL_BLOG_PAUSE,
+                        () -> new Call("/api/v1/admin/external-blogs/" + externalBlog + "/pause",
+                                "{\"reason\":\"점검\"}")),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/resume", AuditActions.EXTERNAL_BLOG_RESUME,
+                        () -> new Call("/api/v1/admin/external-blogs/" + externalBlog + "/resume", null)),
+                new Row("POST", "/api/v1/admin/external-blogs/{id}/block", AuditActions.EXTERNAL_BLOG_BLOCK,
+                        () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acextb") + "/block",
+                                "{\"reason\":\"spam\"}")),
+                new Row("POST", "/api/v1/admin/external-posts/{id}/remove", AuditActions.EXTERNAL_POST_REMOVE,
+                        () -> new Call("/api/v1/admin/external-posts/" + externalPost() + "/remove",
+                                "{\"reason\":\"저작권\"}")),
+                new Row("PUT", "/api/v1/admin/portal/external-exclusions/{externalPostId}",
+                        AuditActions.PORTAL_EXCLUDE, () -> {
+                            excludedExternalPost = externalPost();
+                            return new Call("/api/v1/admin/portal/external-exclusions/" + excludedExternalPost,
+                                    "{\"reason\":\"광고\"}");
+                        }),
+                new Row("DELETE", "/api/v1/admin/portal/external-exclusions/{externalPostId}",
+                        AuditActions.PORTAL_UNEXCLUDE, () -> new Call(
+                                "/api/v1/admin/portal/external-exclusions/" + excludedExternalPost, null)),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));
@@ -204,9 +295,46 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
             case "POST /api/v1/admin/portal/curations" -> curation = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/release-notes" -> note = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/banned-words" -> bannedWord = ((Number) reply.read("$.result.id")).longValue();
+            case "POST /api/v1/admin/external-blogs" ->
+                    externalBlog = ((Number) reply.read("$.result.id")).longValue();
+            case "POST /api/v1/admin/topic-mapping-rules" ->
+                    mappingRule = ((Number) reply.read("$.result.id")).longValue();
             default -> {
             }
         }
+    }
+
+    /** 직접 등록한 외부 블로그에 글과 대기 검수를 하나 만든다. 검수 id */
+    private long pendingReview() {
+        return tx.execute(status -> {
+            if (externalFixtures == null) {
+                externalFixtures = new ExternalFixtures(em);
+            }
+            Topic topic = em.find(Topic.class, topicChildren.get(0));
+            ExternalBlog blog = em.find(ExternalBlog.class, externalBlog);
+            return externalFixtures.review(externalFixtures.post(blog, "검수 글", topic, null), topic, 0.2).getId();
+        });
+    }
+
+    /** 직접 등록한 외부 블로그에 노출 중인 글을 하나 만든다. 글 id */
+    private long externalPost() {
+        return tx.execute(status -> {
+            if (externalFixtures == null) {
+                externalFixtures = new ExternalFixtures(em);
+            }
+            Topic topic = em.find(Topic.class, topicChildren.get(0));
+            ExternalBlog blog = em.find(ExternalBlog.class, externalBlog);
+            return externalFixtures.post(blog, "운영 글", topic, null).getId();
+        });
+    }
+
+    /** 새 회원이 외부 블로그를 신청한다(승인 대기). 등록 id */
+    private long memberRequest(String prefix) throws Exception {
+        Member member = signup(prefix);
+        Reply created = send(HttpMethod.POST, "/api/v1/me/external-blogs", "{\"feedUrl\":\"%s\",\"defaultTopicId\":%d}"
+                .formatted(feed(uniqueHandle(prefix)), topicChildren.get(0)), member.cookie());
+        assertThat(created.status()).as(created.body()).isEqualTo(201);
+        return ((Number) created.read("$.result.id")).longValue();
     }
 
     private static String noteBody(String version, Integer baseRevisionNo) {

@@ -27,8 +27,8 @@ public class TopicPostController {
 
     @GetMapping("/api/v1/topics/{slug}/posts")
     ApiResponse<List<PortalCardResponse>> posts(@PathVariable String slug,
-            @RequestParam(required = false) String sort, @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        return ApiResponse.page(topicPostService.posts(slug, sort, PAGES.resolve(page, size, null)));
+            @RequestParam(required = false) String sort, @RequestParam(required = false) String source,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return ApiResponse.page(topicPostService.posts(slug, sort, source, PAGES.resolve(page, size, null)));
     }
 }

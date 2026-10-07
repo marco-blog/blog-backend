@@ -67,7 +67,8 @@ class TrackbackReceiveServiceTest {
     void setUp() {
         limiter = new RateLimiter();
         RateLimitPolicy policy = new RateLimitPolicy(limiter, mock(SystemSettingsService.class),
-                ReportsProperties.defaults(), TrackbackProperties.defaults());
+                ReportsProperties.defaults(), TrackbackProperties.defaults(),
+                net.java21.blog.backend.config.ExternalFeedProperties.defaults());
         service = new TrackbackReceiveService(postRepository, trackbackRepository, policy,
                 new TrackbackUrls(new SiteProperties("https://blog.java21.net")),
                 new TransactionTemplate(mock(PlatformTransactionManager.class)));

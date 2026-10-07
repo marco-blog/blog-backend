@@ -28,6 +28,25 @@ class PortalCursorTest {
     }
 
     @Test
+    void sourceRoundTripsAndOldCursorIsInternal() {
+        PortalCursor.Position external = new PortalCursor.Position(Instant.parse("2026-10-06T01:24:19Z"), 7L,
+                PortalSourceType.EXTERNAL);
+        assertThat(PortalCursor.decode(PortalCursor.encode(external))).isEqualTo(external);
+        // 007 이전 커서({"p","i"}만)는 내부 글 위치로 읽는다
+        String old = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                "{\"p\":\"2026-10-06T01:24:19Z\",\"i\":5}".getBytes(StandardCharsets.UTF_8));
+        assertThat(PortalCursor.decode(old).source()).isEqualTo(PortalSourceType.INTERNAL);
+        assertThat(new PortalCursor.Position(Instant.EPOCH, 1L, null).source()).isEqualTo(PortalSourceType.INTERNAL);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"X\"", "1", "null", "\"\""})
+    void unknownSourceIsRejected(String source) {
+        String json = "{\"p\":\"2026-10-06T01:24:19Z\",\"i\":5,\"s\":" + source + "}";
+        assertInvalid(Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
     void missingCursorMeansFirstBatch() {
         assertThat(PortalCursor.decode(null)).isNull();
         assertThat(PortalCursor.decode("")).isNull();

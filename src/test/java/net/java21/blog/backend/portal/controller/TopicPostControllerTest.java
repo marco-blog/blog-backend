@@ -41,11 +41,11 @@ class TopicPostControllerTest {
 
     @Test
     void anonymousGetsTopicPostsPage() throws Exception {
-        when(topicPostService.posts("it-internet", "popular", PageRequest.of(1, 50)))
+        when(topicPostService.posts("it-internet", "popular", "external", PageRequest.of(1, 50)))
                 .thenReturn(new PageImpl<>(List.of(CARD), PageRequest.of(1, 50), 51));
 
         mvc.perform(get("/api/v1/topics/it-internet/posts").param("sort", "popular").param("page", "1")
-                        .param("size", "100"))
+                        .param("size", "100").param("source", "external"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result[0].id").value(123))
                 .andExpect(jsonPath("$.result[0].topicId").value(12))
@@ -55,7 +55,7 @@ class TopicPostControllerTest {
 
     @Test
     void defaultsAreLatestFirstPageOf20() throws Exception {
-        when(topicPostService.posts("life", null, PageRequest.of(0, 20)))
+        when(topicPostService.posts("life", null, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mvc.perform(get("/api/v1/topics/life/posts"))
@@ -66,7 +66,7 @@ class TopicPostControllerTest {
 
     @Test
     void unknownTopicIs404() throws Exception {
-        when(topicPostService.posts(eq("nope"), eq(null), eq(PageRequest.of(0, 20))))
+        when(topicPostService.posts(eq("nope"), eq(null), eq(null), eq(PageRequest.of(0, 20))))
                 .thenThrow(new BusinessException(ErrorCode.TOPIC_NOT_FOUND, "x"));
 
         mvc.perform(get("/api/v1/topics/nope/posts"))
@@ -76,7 +76,7 @@ class TopicPostControllerTest {
 
     @Test
     void invalidSortOrPageIs400() throws Exception {
-        when(topicPostService.posts("life", "oldest", PageRequest.of(0, 20)))
+        when(topicPostService.posts("life", "oldest", null, PageRequest.of(0, 20)))
                 .thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED, "x",
                         List.of(new FieldError("sort", "INVALID", Map.of("allowed", List.of("latest", "popular"))))));
 

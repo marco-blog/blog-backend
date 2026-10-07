@@ -233,7 +233,45 @@ class OpenApiContractTest {
             "GET /api/v1/admin/audit-logs/{id}",
             "GET /api/v1/admin/audit-logs/actions",
             "GET /api/v1/admin/admins",
-            "PUT /api/v1/admin/users/{id}/role");
+            "PUT /api/v1/admin/users/{id}/role",
+            // 007 (007 contracts/api.md) — 외부 블로그 신청·소유 인증·넘겨받기, 관리자 외부 블로그, 외부 썸네일
+            "POST /api/v1/external-blog-previews",
+            "POST /api/v1/me/external-blog-verifications",
+            "POST /api/v1/me/external-blog-verifications/{id}/check",
+            "GET /api/v1/me/external-blogs",
+            "POST /api/v1/me/external-blogs",
+            "GET /api/v1/me/external-blogs/{id}",
+            "GET /api/v1/me/external-blogs/{id}/posts",
+            "POST /api/v1/external-blogs/{id}/claim",
+            "GET /api/v1/admin/external-blogs",
+            "POST /api/v1/admin/external-blogs",
+            "GET /api/v1/admin/external-blogs/{id}",
+            "PATCH /api/v1/admin/external-blogs/{id}",
+            "POST /api/v1/admin/external-blogs/{id}/approve",
+            "POST /api/v1/admin/external-blogs/{id}/reject",
+            "GET /api/v1/admin/external-blogs/{id}/posts",
+            "GET /media/external/{key}",
+            // 007 US2 — 외부 글 방문(클릭 집계 후 원문으로 302)
+            "GET /api/v1/external-posts/{id}/visit",
+            // 007 US3 — 주인의 주제 고치기, 검수·현황, 매핑 규칙
+            "PATCH /api/v1/me/external-blogs/{id}",
+            "PUT /api/v1/me/external-blogs/{id}/posts/{postId}/topic",
+            "GET /api/v1/admin/classification-reviews",
+            "POST /api/v1/admin/classification-reviews/{id}/confirm",
+            "POST /api/v1/admin/classification-reviews/confirm-batch",
+            "GET /api/v1/admin/classification-stats",
+            "GET /api/v1/admin/topic-mapping-rules",
+            "POST /api/v1/admin/topic-mapping-rules",
+            "PATCH /api/v1/admin/topic-mapping-rules/{id}",
+            "DELETE /api/v1/admin/topic-mapping-rules/{id}",
+            // 007 US4 — 등록 해제, 일시 중지·재개·차단, 외부 글 내림, 외부 글 포털 제외·해제
+            "POST /api/v1/me/external-blogs/{id}/release",
+            "POST /api/v1/admin/external-blogs/{id}/pause",
+            "POST /api/v1/admin/external-blogs/{id}/resume",
+            "POST /api/v1/admin/external-blogs/{id}/block",
+            "POST /api/v1/admin/external-posts/{id}/remove",
+            "PUT /api/v1/admin/portal/external-exclusions/{externalPostId}",
+            "DELETE /api/v1/admin/portal/external-exclusions/{externalPostId}");
 
     /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
@@ -270,9 +308,10 @@ class OpenApiContractTest {
             Map.entry("RoleChangeRequest", List.of("role")));
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
-    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
+    static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /media/external/{}", "GET /{}/rss", "GET /{}/atom",
             "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
-            "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file");
+            "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file",
+            "GET /api/v1/external-posts/{}/visit");
 
     /** 002~004가 001 응답·요청에 더한 필드(각 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.ofEntries(
@@ -300,7 +339,26 @@ class OpenApiContractTest {
             // 005 CAPTCHA(US2, 005 contracts "001~004 요청 확장")
             Map.entry("SignupRequest", List.of("captchaToken")),
             Map.entry("LoginRequest", List.of("captchaToken")),
-            Map.entry("GuestbookWriteRequest", List.of("captchaToken")));
+            Map.entry("GuestbookWriteRequest", List.of("captchaToken")),
+            // 007 US2 외부 카드(007 contracts "003 응답 확장")
+            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")));
+
+    /** 007 요청·응답 스키마(007 contracts/api.md 타입): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> SCHEMAS_007 = Map.ofEntries(
+            Map.entry("FeedPreviewResponse", List.of("feedUrl", "siteUrl", "title", "format", "recentPosts",
+                    "registered")),
+            Map.entry("VerificationResponse", List.of("id", "feedUrl", "code", "expiresAt", "verifiedAt",
+                    "claimableExternalBlogId")),
+            Map.entry("MyExternalBlogResponse", List.of("id", "title", "siteUrl", "feedUrl", "feedFormat", "status",
+                    "registrationType", "ownershipVerified", "defaultTopicId", "rejectReason", "lastFetchedAt",
+                    "lastSuccessAt", "lastFetchResult", "postCount", "createdAt")),
+            Map.entry("MyExternalPostResponse", List.of("id", "title", "summary", "link", "thumbnailUrl",
+                    "publishedAt", "topicId", "topicSource", "status", "removedReason", "clickCount")),
+            Map.entry("ClassificationReviewResponse", List.of("id", "status", "post", "externalBlog")),
+            Map.entry("ClassificationStatsResponse", List.of("window", "classifierAccuracy", "finalAccuracy")),
+            Map.entry("TopicMappingRuleResponse", List.of("id", "keyword", "topicId", "priority", "createdBy")),
+            Map.entry("ReleaseRequest", List.of("deletePosts")),
+            Map.entry("ExternalExclusionResponse", List.of("externalPostId", "reason", "excludedBy", "createdAt")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
@@ -410,6 +468,30 @@ class OpenApiContractTest {
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
         assertThat(missing).as("문서에 없는 006 스키마 필드").isEmpty();
+    }
+
+    @Test
+    void schemasOf007AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        SCHEMAS_007.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 007 스키마 필드").isEmpty();
+    }
+
+    /** 007 출처 필터: 003 최신 글·주제 글 목록에 {@code source} 질의 파라미터(contracts "003 응답 확장"). */
+    @Test
+    void sourceParameterOf007IsDocumented() {
+        for (String path : List.of("/api/v1/portal/latest", "/api/v1/topics/{slug}/posts")) {
+            JsonNode parameters = doc.get("paths").get(path).get("get").get("parameters");
+            List<String> names = new ArrayList<>();
+            parameters.forEach(parameter -> names.add(parameter.get("name").asText()));
+            assertThat(names).as(path).contains("source");
+        }
     }
 
     @Test

@@ -12,7 +12,10 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.report.domain.ReportTargetType;
 import org.springframework.stereotype.Component;
 
-/** 대상 종류 → 처리기(005 research M4). 처리기가 없는 종류(1.0의 {@code EXTERNAL_*})는 400 {@code targetType INVALID}. */
+/**
+ * 대상 종류 → 처리기(005 research M4). 처리기가 없는 종류는 400 {@code targetType INVALID}. {@code EXTERNAL_*}는 007
+ * {@code external.report} 처리기가 맡는다.
+ */
 @Component
 public class ReportTargetHandlers {
 

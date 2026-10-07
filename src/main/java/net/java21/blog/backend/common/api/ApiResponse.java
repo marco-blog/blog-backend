@@ -1,6 +1,7 @@
 package net.java21.blog.backend.common.api;
 
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.data.domain.Page;
@@ -48,14 +49,24 @@ public record ApiResponse<T>(
             String resultCode,
             @JsonInclude(JsonInclude.Include.ALWAYS) String resultMessage,
             List<FieldError> fieldErrors,
-            String traceId) {
+            String traceId,
+            Map<String, Object> params) {
 
         static Header success() {
-            return new Header(true, OK, "", null, null);
+            return new Header(true, OK, "", null, null, null);
         }
 
         public static Header failure(String resultCode, String resultMessage, List<FieldError> fieldErrors, String traceId) {
-            return new Header(false, resultCode, resultMessage, fieldErrors == null || fieldErrors.isEmpty() ? null : fieldErrors, traceId);
+            return failure(resultCode, resultMessage, fieldErrors, traceId, null);
+        }
+
+        /**
+         * 오류 문구에 필요한 값(007 contracts/api.md 오류 코드 표의 {@code params}, 예: {@code {"max": 3}}). 없으면 응답에서 빠진다.
+         */
+        public static Header failure(String resultCode, String resultMessage, List<FieldError> fieldErrors, String traceId,
+                Map<String, Object> params) {
+            return new Header(false, resultCode, resultMessage, fieldErrors == null || fieldErrors.isEmpty() ? null : fieldErrors,
+                    traceId, params == null || params.isEmpty() ? null : params);
         }
     }
 }

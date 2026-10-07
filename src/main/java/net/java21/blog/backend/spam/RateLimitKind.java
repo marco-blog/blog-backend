@@ -11,5 +11,8 @@ public enum RateLimitKind {
     RIGHTS_REQUEST,
     TRACKBACK_RECEIVE,
     LOGIN_FAILURE,
-    DUPLICATE_CONTENT
+    DUPLICATE_CONTENT,
+    // 007 외부 블로그 미리보기·소유 인증 확인(회원별 시간당)
+    EXTERNAL_PREVIEW,
+    EXTERNAL_VERIFY_CHECK
 }

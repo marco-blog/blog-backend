@@ -103,6 +103,7 @@ class AdminReportServiceTest {
     private QueryCounter queryCounter;
 
     private SuspensionService suspensionService;
+    private ExternalReportActions externalActions;
     private ApplicationEventPublisher events;
     private AdminReportService service;
     private JpaFixtures fx;
@@ -116,6 +117,7 @@ class AdminReportServiceTest {
     void setUp() {
         suspensionService = mock(SuspensionService.class);
         events = mock(ApplicationEventPublisher.class);
+        externalActions = mock(ExternalReportActions.class);
         ReportTargetHandlers handlers = new ReportTargetHandlers(List.of(new PostTargetHandler(postRepository),
                 new CommentTargetHandler(commentRepository), new GuestbookTargetHandler(guestbookRepository),
                 new TrackbackTargetHandler(trackbackRepository)));
@@ -124,7 +126,7 @@ class AdminReportServiceTest {
         AdminAuditService audit = new AdminAuditService(auditLogRepository, userRepository);
         service = new AdminReportService(reportRepository, new ReportQueryRepository(queryFactory), previews, handlers,
                 new ContentHideService(handlers, previews, audit), suspensionService, userRepository, audit, events,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                externalActions, Clock.fixed(NOW, ZoneOffset.UTC));
         fx = new JpaFixtures(em);
         admin = fx.user("admin");
         owner = fx.user("owner");
@@ -334,6 +336,33 @@ class AdminReportServiceTest {
                 new ResolveReportRequest("ACTION", "REMOVE_FROM_PORTAL", null, null), IP),
                 ErrorCode.REPORT_ACTION_NOT_ALLOWED);
         verify(suspensionService, never()).suspend(anyLong(), anyLong(), anyString(), any());
+    }
+
+    @Test
+    void externalActionsNeedTheMatchingExternalTarget() {
+        Report postReport = Report.member(reporters[0], ReportTargetType.EXTERNAL_POST, 41L, owner, null,
+                ReportReason.SPAM, null);
+        Report blogReport = Report.member(reporters[1], ReportTargetType.EXTERNAL_BLOG, 42L, owner, null,
+                ReportReason.SPAM, null);
+        em.persist(postReport);
+        em.persist(blogReport);
+        fx.flushAndClear();
+
+        assertError(() -> service.resolve(admin.getId(), postReport.getId(),
+                new ResolveReportRequest("ACTION", "BLOCK_EXTERNAL_BLOG", null, null), IP),
+                ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+        assertError(() -> service.resolve(admin.getId(), blogReport.getId(),
+                new ResolveReportRequest("ACTION", "REMOVE_FROM_PORTAL", null, null), IP),
+                ErrorCode.REPORT_ACTION_NOT_ALLOWED);
+
+        ResolveReportResponse removed = service.resolve(admin.getId(), postReport.getId(),
+                new ResolveReportRequest("ACTION", "REMOVE_FROM_PORTAL", null, null), IP);
+        assertThat(removed.action()).isEqualTo(ReportAction.REMOVE_FROM_PORTAL);
+        verify(externalActions).removeFromPortal(admin.getId(), 41L, "report #" + postReport.getId(), IP);
+        ResolveReportResponse blocked = service.resolve(admin.getId(), blogReport.getId(),
+                new ResolveReportRequest("ACTION", "BLOCK_EXTERNAL_BLOG", "피싱", null), IP);
+        assertThat(blocked.action()).isEqualTo(ReportAction.BLOCK_EXTERNAL_BLOG);
+        verify(externalActions).blockExternalBlog(admin.getId(), 42L, "피싱", IP);
     }
 
     @Test

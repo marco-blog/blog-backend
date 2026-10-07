@@ -213,6 +213,40 @@ blog:
     topic-auto-hide-threshold: 20
     popular-window: 7d
     topic-count-window: 30d
+  # 007 외부 블로그 피드 수집(contracts/api.md "프로퍼티"). fetch-interval·auto-classify-min-confidence·score-weight는
+  # 운영 설정(external.*)에 값이 없을 때의 기본값이다. E2E는 BLOG_EXTERNAL_POLL_INTERVAL=2s, BLOG_EXTERNAL_FETCH_INTERVAL=PT5S,
+  # BLOG_EXTERNAL_FETCH_JITTER=PT0S, 미리보기·인증 확인 한도 1000으로 띄운다(blog-front workflow).
+  external:
+    fetch-threads: 4
+    batch-size: 50
+    poll-interval: 1m
+    fetch-interval: PT30M
+    fetch-jitter: PT5M
+    lease-time: PT10M
+    connect-timeout: 5s
+    request-timeout: 10s
+    max-redirects: 3
+    max-feed-size: 2MB
+    max-page-size: 1MB
+    max-image-size: 5MB
+    initial-window: P30D
+    max-items-per-fetch: 100
+    max-backoff: PT12H
+    stop-after: P7D
+    auto-classify-min-confidence: 0.7
+    score-weight: 1.0
+    member-limit: 3
+    preview-per-hour: 20
+    verify-checks-per-hour: 10
+    verification-ttl: PT24H
+    click-dedupe-window: PT30M
+    release-retention: P30D
+    link-check-cron: "0 30 4 * * MON"
+    link-check-batch: 500
+    cleanup-cron: "0 30 5 * * *"
+    # 외부 블로그로 등록할 수 없는 호스트(하위 도메인 포함). blog.base-url의 호스트는 항상 포함된다.
+    forbidden-hosts: blog.java21.net
+    user-agent: "java21-blog-feed/1.0 (+${blog.base-url}/updates)"
   release-notes:
     # 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시 시각부터, 003 FR-162)
     portal-card-days: 14d

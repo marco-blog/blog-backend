@@ -19,8 +19,10 @@ import net.java21.blog.backend.spam.BannedWordMatcher;
 import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.dto.UpdateMeRequest;
+import net.java21.blog.backend.user.event.MemberWithdrawnEvent;
 import net.java21.blog.backend.user.repository.UserRepository;
 import net.java21.blog.backend.user.repository.WithdrawalRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,12 +41,13 @@ public class AccountService {
     private final MediaReferenceService mediaReferences;
     private final BlogSubscriptionRepository subscriptionRepository;
     private final BannedWordMatcher bannedWords;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public AccountService(UserRepository userRepository, WithdrawalRepository withdrawalRepository,
             RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder,
             MediaReferenceService mediaReferences, BlogSubscriptionRepository subscriptionRepository,
-            BannedWordMatcher bannedWords, Clock clock) {
+            BannedWordMatcher bannedWords, ApplicationEventPublisher events, Clock clock) {
         this.userRepository = userRepository;
         this.withdrawalRepository = withdrawalRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -52,6 +55,7 @@ public class AccountService {
         this.mediaReferences = mediaReferences;
         this.subscriptionRepository = subscriptionRepository;
         this.bannedWords = bannedWords;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -138,7 +142,7 @@ public class AccountService {
      * 탈퇴(FR-009): 비밀번호 확인 → {@code status=WITHDRAWN}·{@code withdrawn_at}, 모든 블로그의 모든 글 비공개
      * (이전 값은 보관하지 않음), 모든 로그인 계열 폐기. 회원 행을 잠가 블로그 만들기·삭제와 줄 세운다.
      * 002(결정 3): 같은 트랜잭션에서 이 회원의 구독 행을 지우고 구독했던 블로그들의 구독자 수를 줄인다(쿼리 2회, 블로그 수와 무관).
-     * 좋아요 행과 좋아요 수는 그대로 둔다.
+     * 좋아요 행과 좋아요 수는 그대로 둔다. 007: 같은 트랜잭션에서 {@link MemberWithdrawnEvent}를 발행한다(외부 블로그 해제·글 내림).
      */
     @Transactional
     public void withdraw(long userId, String password) {
@@ -153,6 +157,7 @@ public class AccountService {
         subscriptionRepository.decrementSubscriberCountsOf(userId);
         subscriptionRepository.deleteAllByUser(userId);
         refreshTokenRepository.revokeAllByUserId(userId, now);
+        events.publishEvent(new MemberWithdrawnEvent(userId, now));
     }
 
     private static User requireActive(User user) {

@@ -70,6 +70,8 @@ public class SecurityConfig {
             // 005 CAPTCHA 설정·트랙백 목록(005 contracts/api.md)
             "/api/v1/captcha/config",
             "/api/v1/posts/*/trackbacks",
+            // 007 외부 글 원문 이동(클릭 수, 302). 외부 썸네일 /media/external/{key}는 아래 /media/**
+            "/api/v1/external-posts/*/visit",
             "/media/**",
             "/v3/api-docs",
             "/v3/api-docs/**",

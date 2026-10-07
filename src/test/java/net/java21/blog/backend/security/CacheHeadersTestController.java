@@ -129,4 +129,21 @@ class CacheHeadersTestController {
     ApiResponse<Long> moderation(@CurrentUser AuthUser user) {
         return ApiResponse.ok(user.userId());
     }
+
+    /** 007 회원·관리자 외부 블로그 API(contracts/api.md 회원 11·관리자 21). 로그인 응답이라 기본 {@code no-store}. */
+    @RequestMapping(path = {"/api/v1/external-blog-previews", "/api/v1/me/external-blog-verifications",
+            "/api/v1/me/external-blog-verifications/{id}/check", "/api/v1/me/external-blogs",
+            "/api/v1/me/external-blogs/{id}", "/api/v1/external-blogs/{id}/claim",
+            "/api/v1/me/external-blogs/{id}/release", "/api/v1/me/external-blogs/{id}/posts",
+            "/api/v1/me/external-blogs/{id}/posts/{postId}/topic", "/api/v1/admin/external-blogs",
+            "/api/v1/admin/external-blogs/{id}", "/api/v1/admin/external-blogs/{id}/{op}",
+            "/api/v1/admin/external-posts/{id}/remove", "/api/v1/admin/portal/external-exclusions/{id}",
+            "/api/v1/admin/classification-reviews", "/api/v1/admin/classification-reviews/{id}/confirm",
+            "/api/v1/admin/classification-reviews/confirm-batch", "/api/v1/admin/classification-stats",
+            "/api/v1/admin/topic-mapping-rules", "/api/v1/admin/topic-mapping-rules/{id}"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH,
+                    RequestMethod.DELETE})
+    ApiResponse<Long> external(@CurrentUser AuthUser user) {
+        return ApiResponse.ok(user.userId());
+    }
 }

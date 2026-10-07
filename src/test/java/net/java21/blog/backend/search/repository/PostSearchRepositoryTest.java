@@ -11,16 +11,21 @@ import java.util.concurrent.ThreadLocalRandom;
 import jakarta.persistence.EntityManager;
 
 import net.java21.blog.backend.blog.domain.Blog;
+import net.java21.blog.backend.external.domain.ExternalBlog;
+import net.java21.blog.backend.external.domain.ExternalBlogStatus;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.search.service.SearchQuery;
 import net.java21.blog.backend.search.service.SearchQueryParser;
 import net.java21.blog.backend.search.SearchProperties;
+import net.java21.blog.backend.support.ExternalFixtures;
+import net.java21.blog.backend.support.JpaFixtures;
 import net.java21.blog.backend.support.MySqlRepositoryTest;
 import net.java21.blog.backend.support.QueryCounter;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.tag.domain.PostTag;
 import net.java21.blog.backend.tag.domain.Tag;
+import net.java21.blog.backend.topic.domain.Topic;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +74,8 @@ class PostSearchRepositoryTest {
     private final List<Long> blogIds = new ArrayList<>();
     private final List<Long> postIds = new ArrayList<>();
     private final List<Long> tagIds = new ArrayList<>();
+    private final List<Long> externalBlogIds = new ArrayList<>();
+    private final List<Long> topicIds = new ArrayList<>();
     private String word;
     private String other;
 
@@ -80,6 +87,9 @@ class PostSearchRepositoryTest {
 
     @AfterEach
     void cleanUp() {
+        externalBlogIds.forEach(id -> jdbc.update("DELETE FROM external_posts WHERE external_blog_id = ?", id));
+        externalBlogIds.forEach(id -> jdbc.update("DELETE FROM external_blogs WHERE id = ?", id));
+        topicIds.forEach(id -> jdbc.update("DELETE FROM topics WHERE id = ?", id));
         postIds.forEach(id -> jdbc.update("DELETE FROM post_tags WHERE post_id = ?", id));
         tagIds.forEach(id -> jdbc.update("DELETE FROM tags WHERE id = ?", id));
         postIds.forEach(id -> jdbc.update("DELETE FROM posts WHERE id = ?", id));
@@ -198,6 +208,29 @@ class PostSearchRepositoryTest {
         assertThat(page.getContent()).extracting(SearchPostRow::id).containsExactly(ids[1]);
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(repository.search(parser.parse(word), PageRequest.of(0, 20)).getTotalElements()).isEqualTo(2);
+    }
+
+    /** 007 FR-125: 외부 글은 제목·요약에 같은 낱말이 있어도 검색에 나오지 않는다(검색은 내부 글만 본다). */
+    @Test
+    void neverReturnsExternalPosts() {
+        long[] ids = new long[1];
+        inTransaction(() -> {
+            ids[0] = post(blog(user(UserStatus.ACTIVE), "내부"), "내부 " + word, "본문", PostVisibility.PUBLIC, 1).getId();
+            JpaFixtures fixtures = new JpaFixtures(em);
+            Topic major = fixtures.topic(null, "sr-" + word, 1);
+            Topic topic = fixtures.topic(major, "sr-" + word + "-m", 1);
+            topicIds.add(topic.getId());
+            topicIds.add(major.getId());
+            ExternalBlog external = new ExternalFixtures(em).blog(null, "https://" + word + ".example/feed", topic,
+                    ExternalBlogStatus.ACTIVE);
+            externalBlogIds.add(external.getId());
+            new ExternalFixtures(em).post(external, "외부 " + word, topic, T0);
+        });
+
+        Page<SearchPostRow> page = repository.search(parser.parse(word), PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).extracting(SearchPostRow::id).containsExactly(ids[0]);
+        assertThat(page.getContent()).extracting(SearchPostRow::title).noneMatch(t -> t.startsWith("외부"));
     }
 
     private void inTransaction(Runnable work) {

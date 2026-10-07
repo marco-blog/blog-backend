@@ -187,6 +187,9 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 | 백업 정리 | `BlogExportCleanupJob` | `blog.jobs.export-cleanup-cron` | `0 10 * * * *`(매시 10분) | 만료(`blog.export.retention`, 7일)된 READY 백업의 파일을 지우고 EXPIRED로 바꾼다 |
 | 글 통계 정리 | `PostStatsPurgeJob` | `blog.jobs.post-stats-purge-cron` | `0 45 4 * * *`(매일 04:45) | `blog.posts.stats-retention`(90일) 지난 `post_daily_stats` 행 삭제 (003 research P4) |
 | 작업 기록 정리 | `AdminAuditPurgeJob` | `blog.jobs.audit-purge-cron` | `0 15 5 * * *`(매일 05:15) | `blog.admin.audit-retention`(365일) 지난 `admin_audit_logs` 행 삭제 (006 FR-106). 작업 기록을 지우는 유일한 경로 |
+| 외부 피드 수집 | `FeedFetchScheduler` | `blog.external.poll-interval`(고정 지연) | 1분 | 수집할 때가 된 외부 블로그를 골라 임대하고 `feedFetchExecutor`(스레드 `blog.external.fetch-threads`)에 넘긴다 (007, 13절) |
+| 외부 글 링크 확인 | `LinkCheckJob` | `blog.external.link-check-cron` | `0 30 4 * * MON`(월요일 04:30) | 노출 중인 외부 글 원문 주소를 `link-check-batch`(500)건씩 확인해 사라진 글을 내린다 (007) |
+| 외부 블로그 정리 | `ExternalCleanupJob` | `blog.external.cleanup-cron` | `0 30 5 * * *`(매일 05:30) | 만료 7일 지난 인증 코드, 해제된 등록의 `REMOVED` 글 중 `release-retention`(30일) 지난 것, 90일 지난 일별 클릭 삭제. 월요일 실행분은 `thumbnail-dir/external/` 아래 DB에 없는 파일도 지운다 (007, 13.5절) |
 
 포털 인기 점수·주제별 글 수는 정기 작업이 아니라 요청 때 계산해 `blog.portal.cache-ttl`(5분) 동안 메모리에 둔다(서버를 여러 대 두면
 서버마다 따로 계산한다).
@@ -378,3 +381,75 @@ Turnstile 장애·시간 초과는 실패로 본다(사람도 잠시 가입·비
    해제하면 그대로 돌아온다. 자기 자신과 마지막 최고 관리자는 정지할 수 없다.
 5. 숨김·해제·정지·해제·신고 처리는 `/admin/audit-log`에서 `CONTENT_HIDE`·`CONTENT_UNHIDE`·`USER_SUSPEND`·
    `USER_UNSUSPEND`·`REPORT_ACTION`·`REPORT_DISMISS`로 확인한다(8절).
+
+## 13. 외부 블로그(007)
+
+### 13.1 프로퍼티(`blog.external.*`)
+
+`fetch-interval`·`auto-classify-min-confidence`·`score-weight`는 운영 설정(콘솔 "외부 블로그 관리 › 설정", 키 `external.*`)에 값이
+있으면 그 값이 먼저다. 나머지는 프로퍼티로만 바꾼다(환경 변수 이름 규칙은 2.3절, 예: `BLOG_EXTERNAL_FETCHINTERVAL`).
+
+| 프로퍼티 | 기본값 | 설명 |
+|---|---|---|
+| `fetch-threads` / `batch-size` / `poll-interval` / `lease-time` | 4 / 50 / 1m / PT10M | 수집 스레드 수, 한 번에 고르는 등록 수, 고르는 주기, 고른 등록을 다른 실행이 다시 고르지 않는 시간 |
+| `fetch-interval` / `fetch-jitter` | PT30M / PT5M | 등록별 수집 주기와 흩뿌림(같은 시각에 몰리지 않게). 운영 설정 `external.fetch-interval` 우선 |
+| `connect-timeout` / `request-timeout` / `max-redirects` | 5s / 10s / 3 | 피드·블로그 첫 화면·이미지 요청 제한. 넘으면 그 회차는 `TIMEOUT` |
+| `max-feed-size` / `max-page-size` / `max-image-size` | 2MB / 1MB / 5MB | 응답 크기 한도. 넘으면 읽기를 멈추고 `TOO_LARGE` |
+| `initial-window` / `max-items-per-fetch` | P30D / 100 | 첫 수집에서 받는 기간과 한 회차 최대 글 수 |
+| `max-backoff` / `stop-after` | PT12H / P7D | 실패가 이어지면 수집 주기를 두 배씩 늘리는 상한, 첫 실패부터 이 기간이 지나면 자동 중지(`STOPPED`, 회원에게 알림) |
+| `auto-classify-min-confidence` / `score-weight` | 0.7 / 1.0 | 자동 분류를 그대로 쓰는 신뢰도(미만이면 검수 대기), 포털 인기 점수에서 외부 글 가중치 |
+| `member-limit` / `preview-per-hour` / `verify-checks-per-hour` | 3 / 20 / 10 | 회원별 외부 블로그 수(거절·해제 제외), 미리보기·인증 확인 1시간 한도 |
+| `verification-ttl` / `click-dedupe-window` / `release-retention` | PT24H / PT30M / P30D | 인증 코드 유효 시간, 같은 방문자의 클릭 중복 제거 시간, 해제된 등록의 `REMOVED` 글 보관 기간 |
+| `link-check-cron` / `link-check-batch` / `cleanup-cron` | 월 04:30 / 500 / 매일 05:30 | 5절 정기 작업 |
+| `forbidden-hosts` | `blog.java21.net` | 외부 블로그로 등록할 수 없는 호스트(하위 도메인 포함). `blog.base-url`의 호스트는 늘 포함 |
+| `user-agent` | `java21-blog-feed/1.0 (+{base-url}/updates)` | 외부 요청의 User-Agent |
+
+### 13.2 수집 주기, 자동 중지와 재개
+
+- 승인하면 바로 한 번 수집하고 그 뒤 `fetch-interval` ± `fetch-jitter`마다 읽는다. `ETag`·`Last-Modified`가 있으면 조건부 요청으로
+  바뀐 것이 없을 때 본문을 받지 않는다(`NOT_MODIFIED`).
+- 실패(`TIMEOUT`·`HTTP_ERROR`·`PARSE_ERROR`·`TOO_LARGE`·`DNS_ERROR`·`BLOCKED_ADDRESS`)가 이어지면 다음 수집까지 간격을 두 배씩 늘린다
+  (`max-backoff`까지). 첫 실패부터 `stop-after`(7일)가 지나면 `STOPPED`가 되고 회원에게 "수집을 멈췄습니다" 알림이 간다. 이미 수집된 글은
+  포털에 남는다.
+- 회원은 스스로 재개하지 않는다. 피드가 다시 열린 것을 확인했다는 문의를 받으면 콘솔 `/admin/external-blogs/{id}`에서 "재개"를 누른다
+  (실패 수·첫 실패 시각 초기화, 바로 수집). 운영자가 잠시 멈출 때는 "일시 중지"(`PAUSED`, 글 유지), 되돌릴 수 없는 정리는 "차단"
+  (`BLOCKED`, 그 등록과 같은 피드의 해제된 등록에 남은 글까지 모두 포털에서 내림, 같은 피드는 다시 신청할 수 없음).
+- 회원이 해제할 때는 "남기기"(글은 기한 없이 포털에 남고 새 글은 가져오지 않음, 같은 피드를 다시 등록하면 남긴 글이 새 등록으로 옮겨 감)
+  또는 "삭제"(바로 삭제, 되돌릴 수 없음)를 반드시 고른다. 회원이 탈퇴하면 그 회원의 등록은 해제되고 남긴 글까지 포털에서 내려간다.
+- 일시 중지·재개·차단·외부 글 내림·외부 글 포털 제외·해제는 작업 기록(`EXTERNAL_BLOG_PAUSE`·`EXTERNAL_BLOG_RESUME`·
+  `EXTERNAL_BLOG_BLOCK`·`EXTERNAL_POST_REMOVE`·`PORTAL_EXCLUDE`·`PORTAL_UNEXCLUDE`, 대상 `EXTERNAL_POST`)에 남는다.
+- 신고: 포털 외부 카드의 "삭제 요청"은 회원이면 신고(`EXTERNAL_POST`), 비회원이면 권리 침해 신고로 간다. 신고 상세의 "포털에서 내림"은
+  그 글을 `REMOVED`(`REPORT`)로, "외부 블로그 차단"은 등록을 차단한다(12절과 같은 처리 흐름).
+
+### 13.3 외부 요청 보안
+
+모든 외부 요청(미리보기·인증 확인·피드·블로그 첫 화면·이미지)은 `SafeHttpFetcher` 한 곳을 지나며 11.2절의 `OutboundUrlGuard` 규칙
+(http/https, 허용 포트, `user@` 금지, 해석한 **모든** 주소가 공인 주소)과 우리 서비스 호스트(`blog.base-url`·`forbidden-hosts`, 하위
+도메인 포함) 거부를 따른다. 리다이렉트마다 다시 검사하고 `max-redirects`를 넘으면 멈춘다. 응답 크기와 시간도 13.1절 한도로 자른다.
+
+DNS 재바인딩(검사한 뒤 다른 주소로 연결)은 앱만으로 완전히 막지 못한다. **앱 실행 계정의 나가는 연결에서 사설 대역과 메타데이터 주소를
+방화벽으로 막는다**(11.2절 목록 그대로, 169.254.169.254 필수). `blog.outbound.allow-private`는 시험 전용(루프백 피드 스텁)이며 prod
+프로필에서 true면 기동이 멈춘다.
+
+### 13.4 썸네일(`{blog.media.thumbnail-dir}/external/`)
+
+소유 인증된 외부 블로그 글의 대표 이미지만 600×400으로 줄여 `thumbnail-dir/external/{키 앞 2자}/{키}.{jpg|png}`에 둔다. 원본은 저장하지
+않는다. 이 디렉터리는 **백업하지 않는다**(4절 백업은 `upload-dir`만 대상이고, `thumbnail-dir`을 따로 백업한다면 `--exclude external/`).
+잃어도 다음 수집에서 다시 받거나 썸네일 없이 주제 색 카드로 보인다. 지운 글의 파일은 커밋 뒤 지우고, 놓친 파일은 월요일 정리 작업이 지운다.
+
+### 13.5 키워드 사전 고치기
+
+자동 분류 사전은 `src/main/resources/external/topic-keywords.yml`이다. 고칠 때는
+
+1. 소분류 slug별 낱말을 고치고(한 낱말은 한 주제에만, 한글·가나·한자는 두 글자 이상) 파일 맨 위 `version`을 올린다(예: `keyword-v2`).
+   새 버전은 이후 분류되는 글의 `classifier_version`에 남아 분류 현황에서 버전별 정확도를 비교할 수 있다.
+2. `KeywordDictionaryTest`(중복·형식)와 분류 시험이 통과하는지 보고 PR로 낸다. 배포해야 반영된다(이미 분류된 글은 다시 분류하지 않는다).
+
+운영 중 특정 낱말을 바로 바꾸려면 사전 대신 콘솔 "매핑 규칙"을 쓴다(그 뒤 수집되는 글에만 적용).
+
+### 13.6 분류 현황 비용과 선택 인덱스
+
+콘솔 "분류 현황"(`GET /admin/classification-stats`)은 최근 기간의 검수·외부 글을 모아 계산하고 5분 동안 메모리에 둔다(검수 확정이나 주인의
+주제 변경이 있으면 바로 다시 계산). 선택 인덱스 `idx_external_posts_topic_decided`는 1.0 스키마에 **넣지 않았다**. 외부 글이 수십만 건을
+넘어 현황 계산이 느려지면(느린 쿼리 로그로 확인) DBA가 그때 추가를 검토한다.
+

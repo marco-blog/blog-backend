@@ -68,6 +68,25 @@ class TopicServiceTest {
     }
 
     @Test
+    void recentCountsAddVisibleExternalPosts() {
+        PortalProperties properties = PortalProperties.defaults();
+        net.java21.blog.backend.portal.service.ExternalPortalSource external =
+                org.mockito.Mockito.mock(net.java21.blog.backend.portal.service.ExternalPortalSource.class);
+        when(external.enabled()).thenReturn(true);
+        net.java21.blog.backend.portal.service.PortalCriteria criteria =
+                new net.java21.blog.backend.portal.service.PortalCriteria(NOW, java.time.Duration.ofHours(24), 200);
+        when(criteriaFactory.now()).thenReturn(criteria);
+        java.time.Instant since = NOW.minus(properties.topicCountWindow());
+        when(countRepository.countRecentByTopic(criteria, since)).thenReturn(java.util.Map.of(2L, 3L, 4L, 1L));
+        when(external.recentCountsByTopic(NOW, since)).thenReturn(java.util.Map.of(2L, 2L, 5L, 7L));
+        TopicService withExternal = new TopicService(topicRepository, topicQueryRepository, countRepository,
+                new PortalCache(properties), criteriaFactory, settings, properties, external);
+
+        assertThat(withExternal.recentPostCounts()).containsExactlyInAnyOrderEntriesOf(
+                java.util.Map.of(2L, 5L, 4L, 1L, 5L, 7L));
+    }
+
+    @Test
     void selectableMinorIsReturned() {
         when(topicRepository.findWithParent(2L)).thenReturn(Optional.of(minor));
 

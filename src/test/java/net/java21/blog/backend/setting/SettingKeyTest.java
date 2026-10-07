@@ -16,7 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.Test;
 
-/** 005 T011: {@code ratelimit.*} 5개와 {@code spam.duplicate-comment}의 검증·기본값. */
+/** 005 T011·007 T012: {@code ratelimit.*} 5개, {@code spam.duplicate-comment}, {@code external.*} 3개의 검증·기본값. */
 class SettingKeyTest {
 
     @ParameterizedTest
@@ -70,5 +70,47 @@ class SettingKeyTest {
         assertThatThrownBy(() -> key.normalize("10")).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> key.normalize(Map.of("windowMinutes", "10", "maxCount", 3)))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void externalFetchIntervalRange() {
+        SettingKey key = SettingKey.EXTERNAL_FETCH_INTERVAL;
+        assertThat(key.normalize("PT10M")).isEqualTo("PT10M");
+        assertThat(key.normalize(" PT24H ")).isEqualTo("PT24H");
+        assertThat(key.normalize("PT90M")).isEqualTo("PT1H30M");
+        for (Object bad : new Object[] {"PT9M", "PT25H", "1h", 600, null}) {
+            assertThatThrownBy(() -> key.normalize(bad)).isInstanceOfSatisfying(BusinessException.class, e -> {
+                assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                assertThat(e.fieldErrors().get(0).params()).containsEntry("min", "PT10M").containsEntry("max", "PT24H");
+            });
+        }
+    }
+
+    @Test
+    void externalNumbers() {
+        SettingKey confidence = SettingKey.EXTERNAL_AUTO_CLASSIFY_MIN_CONFIDENCE;
+        assertThat(confidence.normalize(0)).isEqualTo(0.0);
+        assertThat(confidence.normalize(0.75)).isEqualTo(0.75);
+        assertThat(confidence.normalize(1)).isEqualTo(1.0);
+        for (Object bad : new Object[] {-0.1, 1.01, "0.5", Double.NaN, null}) {
+            assertThatThrownBy(() -> confidence.normalize(bad)).isInstanceOfSatisfying(BusinessException.class,
+                    e -> assertThat(e.fieldErrors().get(0).params()).containsEntry("min", 0).containsEntry("max", 1));
+        }
+        SettingKey weight = SettingKey.EXTERNAL_SCORE_WEIGHT;
+        assertThat(weight.normalize(10)).isEqualTo(10.0);
+        assertThat(weight.normalize(2.5)).isEqualTo(2.5);
+        assertThatThrownBy(() -> weight.normalize(10.5)).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.fieldErrors().get(0).params()).containsEntry("max", 10));
+    }
+
+    @Test
+    void externalDefaultsComeFromProperties() {
+        SettingDefaults defaults = SettingDefaults.of(net.java21.blog.backend.config.ExternalFeedProperties.defaults());
+        assertThat(SettingKey.EXTERNAL_FETCH_INTERVAL.defaultValue(defaults)).isEqualTo("PT30M");
+        assertThat(SettingKey.EXTERNAL_AUTO_CLASSIFY_MIN_CONFIDENCE.defaultValue(defaults)).isEqualTo(0.7);
+        assertThat(SettingKey.EXTERNAL_SCORE_WEIGHT.defaultValue(defaults)).isEqualTo(1.0);
+        assertThat(SettingKey.find("external.score-weight")).contains(SettingKey.EXTERNAL_SCORE_WEIGHT);
+        assertThat(new SettingDefaults(PortalProperties.defaults(), RateLimitProperties.defaults(),
+                SpamProperties.defaults()).external()).isEqualTo(net.java21.blog.backend.config.ExternalFeedProperties.defaults());
     }
 }
