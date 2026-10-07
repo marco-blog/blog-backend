@@ -56,6 +56,11 @@ public class ExternalThumbnailService {
 
     private static final Logger log = LoggerFactory.getLogger(ExternalThumbnailService.class);
 
+    /** 썸네일 공개 주소(contracts/api.md {@code GET /media/external/{key}}). */
+    public static String urlOf(String key) {
+        return key == null ? null : "/media/external/" + key;
+    }
+
     /** 저장된 썸네일 파일과 형식. */
     public record StoredFile(Path path, String mime) {
     }

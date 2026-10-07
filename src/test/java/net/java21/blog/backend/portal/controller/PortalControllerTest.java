@@ -74,7 +74,7 @@ class PortalControllerTest {
 
     @Test
     void latestReturnsCursorPage() throws Exception {
-        when(portalService.latest("abc")).thenReturn(new LatestSection(List.of(CARD), "next"));
+        when(portalService.latest("abc", null)).thenReturn(new LatestSection(List.of(CARD), "next"));
 
         mvc.perform(get("/api/v1/portal/latest").param("cursor", "abc"))
                 .andExpect(status().isOk())
@@ -85,7 +85,7 @@ class PortalControllerTest {
 
     @Test
     void lastLatestBatchHasNoNextCursor() throws Exception {
-        when(portalService.latest(null)).thenReturn(new LatestSection(List.of(), null));
+        when(portalService.latest(null, null)).thenReturn(new LatestSection(List.of(), null));
 
         mvc.perform(get("/api/v1/portal/latest"))
                 .andExpect(status().isOk())
@@ -95,7 +95,7 @@ class PortalControllerTest {
 
     @Test
     void malformedCursorIs400() throws Exception {
-        when(portalService.latest("bad")).thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED, "x",
+        when(portalService.latest("bad", null)).thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED, "x",
                 List.of(FieldError.of("cursor", "INVALID"))));
 
         mvc.perform(get("/api/v1/portal/latest").param("cursor", "bad"))
@@ -103,5 +103,33 @@ class PortalControllerTest {
                 .andExpect(jsonPath("$.header.resultCode").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.header.fieldErrors[0].field").value("cursor"))
                 .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID"));
+    }
+
+    @Test
+    void latestPassesSourceFilterAndShowsExternalCard() throws Exception {
+        PortalCardResponse external = PortalCardResponse.external(7L, "외부 글", "요약", null, 12L,
+                new PortalCardResponse.ExternalBlogRef(3L, "Dev Log", "dev.example"), CARD.publishedAt());
+        when(portalService.latest(null, "external")).thenReturn(new LatestSection(List.of(external), null));
+
+        mvc.perform(get("/api/v1/portal/latest").param("source", "external"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result[0].id").value(7))
+                .andExpect(jsonPath("$.result[0].source").value("EXTERNAL"))
+                .andExpect(jsonPath("$.result[0].visitUrl").value("/api/v1/external-posts/7/visit"))
+                .andExpect(jsonPath("$.result[0].externalBlog.siteHost").value("dev.example"))
+                .andExpect(jsonPath("$.result[0].blog.handle").doesNotExist())
+                .andExpect(jsonPath("$.result[0].blog.title").value("Dev Log"))
+                .andExpect(jsonPath("$.result[0].author").doesNotExist())
+                .andExpect(jsonPath("$.result[0].likeCount").value(0));
+    }
+
+    @Test
+    void internalCardKeepsSourceInternal() throws Exception {
+        when(portalService.latest(null, null)).thenReturn(new LatestSection(List.of(CARD), null));
+
+        mvc.perform(get("/api/v1/portal/latest"))
+                .andExpect(jsonPath("$.result[0].source").value("INTERNAL"))
+                .andExpect(jsonPath("$.result[0].visitUrl").doesNotExist())
+                .andExpect(jsonPath("$.result[0].externalBlog").doesNotExist());
     }
 }

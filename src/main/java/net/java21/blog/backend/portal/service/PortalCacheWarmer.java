@@ -12,7 +12,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
 /**
- * 포털 캐시의 주요 키({@code HOME}·{@code POPULARITY}·{@code LATEST:}·{@code TOPIC_TREE}·{@code TOPIC_COUNTS})를 방문자보다 먼저
+ * 포털 캐시의 주요 키({@code HOME}·{@code POPULARITY}·{@code LATEST:all:}·{@code TOPIC_TREE}·{@code TOPIC_COUNTS})를 방문자보다 먼저
  * 채운다(003 T130 후속). 기동 직후와 그 뒤 {@code blog.portal.cache-ttl}마다, 그리고 관리자 변경으로 캐시를 비운 직후
  * ({@link #warmSoon()}) 돈다. 주기 실행은 묵은 항목의 뒤 갱신만 시작하므로 금방 끝난다. 주제 페이지는 키가 많아 미리 채우지 않고,
  * 한 번 채워진 뒤로는 묵은 값을 주며 뒤에서 갱신한다({@link PortalCache}). {@code cache-ttl=0s}면 아무것도 하지 않는다.

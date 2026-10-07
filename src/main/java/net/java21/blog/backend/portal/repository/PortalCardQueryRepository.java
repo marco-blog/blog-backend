@@ -19,6 +19,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import net.java21.blog.backend.media.domain.QMedia;
 import net.java21.blog.backend.portal.service.PortalCriteria;
 import net.java21.blog.backend.portal.service.PortalCursor;
+import net.java21.blog.backend.portal.service.PortalSourceType;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -84,6 +85,10 @@ public class PortalCardQueryRepository {
             return null;
         }
         Objects.requireNonNull(position.publishedAt());
+        if (position.source() != PortalSourceType.INTERNAL) {
+            // 같은 시각이면 내부 글이 외부 글보다 앞이므로 외부 글 위치 다음의 내부 글은 더 이른 시각뿐이다(007 research E13)
+            return post.publishedAt.lt(position.publishedAt());
+        }
         return post.publishedAt.lt(position.publishedAt())
                 .or(post.publishedAt.eq(position.publishedAt()).and(post.id.lt(position.id())));
     }

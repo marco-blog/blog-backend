@@ -250,7 +250,9 @@ class OpenApiContractTest {
             "POST /api/v1/admin/external-blogs/{id}/approve",
             "POST /api/v1/admin/external-blogs/{id}/reject",
             "GET /api/v1/admin/external-blogs/{id}/posts",
-            "GET /media/external/{key}");
+            "GET /media/external/{key}",
+            // 007 US2 — 외부 글 방문(클릭 집계 후 원문으로 302)
+            "GET /api/v1/external-posts/{id}/visit");
 
     /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
@@ -289,7 +291,8 @@ class OpenApiContractTest {
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /media/external/{}", "GET /{}/rss", "GET /{}/atom",
             "GET /{}/category/{}/rss", "GET /sitemap.xml", "GET /sitemap/pages.xml", "GET /sitemap/posts-{}.xml",
-            "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file");
+            "GET /robots.txt", "GET /api/v1/blogs/{}/exports/{}/file",
+            "GET /api/v1/external-posts/{}/visit");
 
     /** 002~004가 001 응답·요청에 더한 필드(각 contracts/api.md "001 응답 확장"): 스키마 이름 → 필드. */
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.ofEntries(
@@ -317,7 +320,9 @@ class OpenApiContractTest {
             // 005 CAPTCHA(US2, 005 contracts "001~004 요청 확장")
             Map.entry("SignupRequest", List.of("captchaToken")),
             Map.entry("LoginRequest", List.of("captchaToken")),
-            Map.entry("GuestbookWriteRequest", List.of("captchaToken")));
+            Map.entry("GuestbookWriteRequest", List.of("captchaToken")),
+            // 007 US2 외부 카드(007 contracts "003 응답 확장")
+            Map.entry("PortalCardResponse", List.of("source", "externalBlog", "visitUrl")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 

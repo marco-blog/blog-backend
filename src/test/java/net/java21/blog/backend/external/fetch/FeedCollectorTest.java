@@ -18,6 +18,16 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.persistence.EntityManager;
 
+import com.querydsl.jpa.impl.JPAQueryFactory;
+import net.java21.blog.backend.external.classify.KeywordDictionary;
+import net.java21.blog.backend.external.classify.KeywordTopicClassifier;
+import net.java21.blog.backend.external.classify.TopicDecider;
+import net.java21.blog.backend.external.domain.ClassificationReview;
+import net.java21.blog.backend.external.domain.ReviewStatus;
+import net.java21.blog.backend.external.domain.TopicMappingRule;
+import net.java21.blog.backend.external.repository.TopicMappingRuleRepository;
+import net.java21.blog.backend.topic.repository.TopicQueryRepository;
+import org.springframework.core.io.ByteArrayResource;
 import net.java21.blog.backend.config.ExternalFeedProperties;
 import net.java21.blog.backend.external.domain.ExternalBlog;
 import net.java21.blog.backend.external.domain.ExternalBlogStatus;
@@ -78,11 +88,18 @@ class FeedCollectorTest {
     private PlatformTransactionManager transactionManager;
     @Autowired
     private QueryCounter queryCounter;
+    @Autowired
+    private TopicMappingRuleRepository ruleRepository;
+    @Autowired
+    private JPAQueryFactory queryFactory;
 
     private StubHttpServer server;
     private MutableClock clock;
     private ApplicationEventPublisher events;
     private ExternalThumbnailService thumbnails;
+    private SystemSettingsService settings;
+    private ExternalFeedProperties props;
+    private FeedStopNotifier stopNotifier;
     private FeedCollector collector;
     private ExternalFixtures x;
     private User member;
@@ -103,10 +120,10 @@ class FeedCollectorTest {
         other = f.topic(major, "science", 2);
         events = mock(ApplicationEventPublisher.class);
         thumbnails = mock(ExternalThumbnailService.class);
-        SystemSettingsService settings = mock(SystemSettingsService.class);
+        settings = mock(SystemSettingsService.class);
         when(settings.externalFetchInterval()).thenReturn(Duration.ofMinutes(30));
-        ExternalFeedProperties props = ExternalTestKit.properties("fetch-jitter", "0s");
-        FeedStopNotifier stopNotifier = new FeedStopNotifier(props,
+        props = ExternalTestKit.properties("fetch-jitter", "0s");
+        stopNotifier = new FeedStopNotifier(props,
                 new ExternalBlogNotifier(notificationRepository, userRepository));
         collector = new FeedCollector(blogRepository, ExternalTestKit.fetcher(server), new FeedParser(),
                 new ExternalPostUpserter(postRepository, em), new DefaultTopicAssigner(), stopNotifier, thumbnails,
@@ -417,5 +434,62 @@ class FeedCollectorTest {
         collector.collect(blog.getId());
         em.flush();
         assertThat(queryCounter.count()).isLessThanOrEqualTo(4);
+    }
+
+    /**
+     * 007 T046·T048: 실제 {@link TopicDecider}로 수집하면 규칙 일치는 RULE, 자신 있는 분류는 AUTO, 자신 없는 분류는 기본 주제(DEFAULT)에
+     * 두고 예측과 함께 검수 대기를 만든다.
+     */
+    @Test
+    void realDeciderAppliesRuleAutoAndDefaultWithReview() {
+        em.persist(new TopicMappingRule("physics", other, 0, member));
+        when(settings.autoClassifyMinConfidence()).thenReturn(0.7);
+        TopicQueryRepository topics = new TopicQueryRepository(queryFactory);
+        KeywordDictionary dictionary = new KeywordDictionary(topics, new ByteArrayResource("""
+                version: keyword-test
+                topics:
+                  it-internet: [spring, java]
+                  science: [quantum, biology]
+                """.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        FeedCollector real = new FeedCollector(blogRepository, ExternalTestKit.fetcher(server), new FeedParser(),
+                new ExternalPostUpserter(postRepository, em),
+                new TopicDecider(ruleRepository, topics, new KeywordTopicClassifier(dictionary), settings),
+                stopNotifier, thumbnails, settings, props, events, new TransactionTemplate(transactionManager), clock);
+        ExternalBlog blog = activeBlog();
+        String published = RFC_1123.format(NOW.minus(Duration.ofDays(1)));
+        feedBody.set("<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>R</title><link>"
+                + link("/") + "</link><description>d</description>"
+                + rssItem("r", "Ruled spring note", "physics", published)
+                + rssItem("a", "Quantum biology today", "quantum", published)
+                + rssItem("d", "Spring meets quantum", null, published)
+                + "</channel></rss>");
+        em.flush();
+        em.clear();
+
+        assertThat(real.collect(blog.getId())).isEqualTo(FeedCollector.Outcome.OK);
+
+        Map<String, ExternalPost> byGuid = new java.util.HashMap<>();
+        posts(blog).forEach(p -> byGuid.put(p.getTitle().substring(0, 1), p));
+        ExternalPost ruled = byGuid.get("R");
+        assertThat(ruled.getTopicSource()).isEqualTo(TopicSource.RULE);
+        assertThat(ruled.getTopic().getId()).isEqualTo(other.getId());
+        ExternalPost auto = byGuid.get("Q");
+        assertThat(auto.getTopicSource()).isEqualTo(TopicSource.AUTO);
+        assertThat(auto.getTopic().getId()).isEqualTo(other.getId());
+        assertThat(auto.getClassifierVersion()).isEqualTo("keyword-test");
+        ExternalPost unsure = byGuid.get("S");
+        assertThat(unsure.getTopicSource()).isEqualTo(TopicSource.DEFAULT);
+        assertThat(unsure.getTopic().getId()).isEqualTo(topic.getId());
+        assertThat(unsure.getClassifierConfidence()).isNotNull();
+        List<ClassificationReview> reviews = em.createQuery("select r from ClassificationReview r",
+                ClassificationReview.class).getResultList();
+        assertThat(reviews).extracting(r -> r.getExternalPost().getId()).containsExactly(unsure.getId());
+        assertThat(reviews.getFirst().getStatus()).isEqualTo(ReviewStatus.PENDING);
+    }
+
+    private static String rssItem(String guid, String title, String category, String published) {
+        return "<item><guid isPermaLink=\"false\">" + guid + "</guid><title>" + title + "</title><link>https://r.example/"
+                + guid + "</link><pubDate>" + published + "</pubDate>"
+                + (category == null ? "" : "<category>" + category + "</category>") + "<description>x</description></item>";
     }
 }

@@ -10,6 +10,8 @@ import java.util.List;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
 import net.java21.blog.backend.portal.service.PortalCriteria;
+import net.java21.blog.backend.portal.service.PortalKey;
+import net.java21.blog.backend.portal.service.PortalSourceType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -39,14 +41,41 @@ public class TopicPostQueryRepository {
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
-        return PageableExecutionUtils.getPage(content, pageable, () -> {
-            Long total = queryFactory.select(post.count())
-                    .from(post)
-                    .join(post.blog, blog)
-                    .join(blog.user, user)
-                    .where(PortalExposure.portalVisible(criteria), post.topic.id.in(topicIds))
-                    .fetchOne();
-            return total == null ? 0 : total;
-        });
+        return PageableExecutionUtils.getPage(content, pageable, () -> count(criteria, topicIds));
+    }
+
+    /** 주제의 포털 노출 글 수(쿼리 1회). */
+    public long count(PortalCriteria criteria, Collection<Long> topicIds) {
+        if (topicIds.isEmpty()) {
+            return 0;
+        }
+        Long total = queryFactory.select(post.count())
+                .from(post)
+                .join(post.blog, blog)
+                .join(blog.user, user)
+                .where(PortalExposure.portalVisible(criteria), post.topic.id.in(topicIds))
+                .fetchOne();
+        return total == null ? 0 : total;
+    }
+
+    /**
+     * 외부 글과 합치기 위한 가벼운 행(007 research E13): 주제의 포털 노출 글 id·발행 시각 {@code limit}개, 발행 최신순(같으면 id
+     * 내림차순). 쿼리 1회.
+     */
+    public List<PortalKey> findLatestKeys(PortalCriteria criteria, Collection<Long> topicIds, int limit) {
+        if (topicIds.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        return queryFactory.select(post.id, post.publishedAt)
+                .from(post)
+                .join(post.blog, blog)
+                .join(blog.user, user)
+                .where(PortalExposure.portalVisible(criteria), post.topic.id.in(topicIds))
+                .orderBy(post.publishedAt.desc(), post.id.desc())
+                .limit(limit)
+                .fetch()
+                .stream()
+                .map(t -> new PortalKey(PortalSourceType.INTERNAL, t.get(post.id), t.get(post.publishedAt)))
+                .toList();
     }
 }

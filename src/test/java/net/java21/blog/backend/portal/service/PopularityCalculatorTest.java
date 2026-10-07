@@ -151,6 +151,54 @@ class PopularityCalculatorTest {
                 .containsExactly(1L, 3L);
     }
 
+    private PopularityCalculator withExternal(ExternalPortalSource external, double weight) {
+        when(external.enabled()).thenReturn(true);
+        when(settings.externalScoreWeight()).thenReturn(weight);
+        return new PopularityCalculator(signals, settings, penaltyPolicy, PortalProperties.defaults(), external);
+    }
+
+    @Test
+    void externalScoreIsClicksTimesWeightTimesSameDecayInOneList() {
+        ExternalPortalSource external = org.mockito.Mockito.mock(ExternalPortalSource.class);
+        when(external.popularityCandidates(NOW, LocalDate.parse("2026-09-30"))).thenReturn(List.of(
+                new ExternalPortalSource.PopularityCandidate(7L, 70L, 11L, NOW.minus(Duration.ofHours(48)), 40),
+                new ExternalPortalSource.PopularityCandidate(8L, 70L, 11L, NOW, 0)));
+        stats.put(1L, new long[] {15, 0});
+        candidates(row(1, 100, NOW));
+        PopularityCalculator mixed = withExternal(external, 1.5);
+
+        PopularitySnapshot snapshot = mixed.calculate(CRITERIA);
+
+        assertThat(snapshot.entries()).extracting(PopularitySnapshot.Entry::source, PopularitySnapshot.Entry::postId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(PortalSourceType.EXTERNAL, 7L),
+                        org.assertj.core.groups.Tuple.tuple(PortalSourceType.INTERNAL, 1L));
+        assertThat(snapshot.entries().get(0).score()).isCloseTo(40 * 1.5 / 2, within(1e-9));
+        assertThat(snapshot.entries().get(0).capKey()).isEqualTo("E:70");
+        assertThat(snapshot.entries().get(1).capKey()).isEqualTo("P:100");
+        // 외부 블로그는 신고 감점 대상이 아니다
+        org.mockito.Mockito.verify(penaltyPolicy).penalties(List.of(100L), DEFAULT);
+    }
+
+    @Test
+    void zeroExternalWeightLeavesExternalPostsOut() {
+        ExternalPortalSource external = org.mockito.Mockito.mock(ExternalPortalSource.class);
+        PopularityCalculator mixed = withExternal(external, 0);
+
+        assertThat(mixed.calculate(CRITERIA).entries()).isEmpty();
+        org.mockito.Mockito.verify(external, org.mockito.Mockito.never()).popularityCandidates(any(), any());
+    }
+
+    @Test
+    void externalOnlyWorksWithoutInternalSignals() {
+        ExternalPortalSource external = org.mockito.Mockito.mock(ExternalPortalSource.class);
+        when(external.popularityCandidates(any(), any())).thenReturn(List.of(
+                new ExternalPortalSource.PopularityCandidate(7L, 70L, 11L, NOW, 2)));
+        PopularitySnapshot snapshot = withExternal(external, 1).calculate(CRITERIA);
+
+        assertThat(snapshot.forTopics(List.of(11L), PortalSourceFilter.EXTERNAL)).hasSize(1);
+        assertThat(snapshot.forTopics(List.of(11L), PortalSourceFilter.INTERNAL)).isEmpty();
+    }
+
     private void candidates(PopularityCandidateRow... rows) {
         when(signals.findCandidates(any(), anyCollection())).thenReturn(List.of(rows));
     }

@@ -26,10 +26,14 @@ public class PortalController {
         return ApiResponse.ok(portalService.home());
     }
 
-    /** 커서 다음의 최신 글 20편(같은 블로그 2편까지). 마지막 묶음이면 {@code nextCursor}가 응답에서 빠진다. */
+    /**
+     * 커서 다음의 최신 글 20편(같은 블로그 2편까지). 마지막 묶음이면 {@code nextCursor}가 응답에서 빠진다. 007 {@code source}:
+     * {@code all}(기본)·{@code internal}·{@code external}.
+     */
     @GetMapping("/api/v1/portal/latest")
-    ApiResponse<List<PortalCardResponse>> latest(@RequestParam(required = false) String cursor) {
-        LatestSection section = portalService.latest(cursor);
+    ApiResponse<List<PortalCardResponse>> latest(@RequestParam(required = false) String cursor,
+            @RequestParam(required = false) String source) {
+        LatestSection section = portalService.latest(cursor, source);
         return ApiResponse.cursor(section.items(), section.nextCursor());
     }
 }

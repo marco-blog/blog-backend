@@ -16,6 +16,21 @@ import org.springframework.data.repository.query.Param;
 /** 외부 글(007). 포털·목록 조회는 QueryDSL 리포지토리. */
 public interface ExternalPostRepository extends JpaRepository<ExternalPost, Long> {
 
+    /** 링크 점검 대상 한 줄(id·원문 링크). */
+    record LinkTarget(Long id, String link) {
+    }
+
+    /**
+     * 링크 점검 대상(research E12): ACTIVE 글 중 점검한 적이 없거나 {@code checkedBefore} 이전에 점검한 글, 오래 점검하지 않은 순
+     * (없음이 먼저, 같으면 id). 쿼리 1회.
+     */
+    @Query("select new net.java21.blog.backend.external.repository.ExternalPostRepository$LinkTarget(p.id, p.link)"
+            + " from ExternalPost p where p.status = :active"
+            + " and (p.linkCheckedAt is null or p.linkCheckedAt < :checkedBefore)"
+            + " order by case when p.linkCheckedAt is null then 0 else 1 end, p.linkCheckedAt asc, p.id asc")
+    List<LinkTarget> findLinkCheckTargets(@Param("active") ExternalPostStatus active,
+            @Param("checkedBefore") Instant checkedBefore, org.springframework.data.domain.Limit limit);
+
     /** 같은 글 찾기(research E5): guid 해시 IN 1회. */
     @Query("select p from ExternalPost p where p.externalBlog.id = :blogId and p.guidHash in :hashes")
     List<ExternalPost> findByGuidHashes(@Param("blogId") Long blogId, @Param("hashes") Collection<String> hashes);

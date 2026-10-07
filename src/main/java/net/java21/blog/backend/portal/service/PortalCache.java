@@ -42,7 +42,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * </ul>
  * 관리자 변경은 {@link #invalidateAll()}로 바로 반영한다(FR-094). 비우기 전에 시작한 계산 결과는 캐시에 넣지 않는다.
  * {@code cache-ttl=0s}면 캐시하지 않고 매번 계산한다(통합 테스트·E2E). 주요 키는 {@link PortalCacheWarmer}가 미리 채운다.
- * <p>항목 키: {@code HOME}, {@code LATEST:{cursor}}, {@code TOPIC:{id}:{sort}:{page}:{size}}, {@code POPULARITY},
+ * <p>항목 키: {@code HOME}, {@code LATEST:{source}:{cursor}}, {@code TOPIC:{id}:{sort}:{page}:{size}}, {@code POPULARITY},
  * {@code TOPIC_COUNTS}, {@code TOPIC_TREE}. 계산 함수는 키만으로 결과가 정해져야 한다(뒤에서 다시 부르므로 요청 시각 등을 붙잡지 않는다).
  */
 @Component
