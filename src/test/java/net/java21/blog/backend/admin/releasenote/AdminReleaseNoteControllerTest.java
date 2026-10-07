@@ -181,6 +181,38 @@ class AdminReleaseNoteControllerTest {
                 .andExpect(jsonPath("$.header.resultCode").value("RELEASE_NOTE_ONCE_PUBLISHED"));
     }
 
+    /** 006 T059: 006 편집 화면이 기대는 응답 — 목록 {@code langs}, 상세 모든 언어판, 수정본 {@code editedBy}·{@code status}, no-store. */
+    @Test
+    void consoleEditorContract() throws Exception {
+        when(service.list(eq(null), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
+                new AdminReleaseNoteSummary(11L, "1.2.0", ReleaseNoteStatus.PUBLISHED, LocalDate.of(2026, 10, 6),
+                        List.of("ko", "en", "ja", "zh-CN"), 2, T, T, T)),
+                PageRequest.of(0, 20), 1));
+        when(service.get(12L)).thenReturn(new AdminReleaseNoteResponse(12L, "1.3.0", LocalDate.of(2026, 10, 6),
+                Map.of("ko", new ContentWrite("새", "## 새"), "en", new ContentWrite("New", "## New"),
+                        "ja", new ContentWrite("新", "## 新"), "zh-CN", new ContentWrite("新", "## 新")),
+                ReleaseNoteStatus.DRAFT, 1, null, null, new AdminRef(ADMIN, "관리자"), new AdminRef(ADMIN, "관리자"), T,
+                T));
+        when(service.revisions(12L)).thenReturn(List.of(new AdminRevisionResponse(1, new AdminRef(ADMIN, "관리자"), T,
+                ReleaseNoteStatus.DRAFT, null, null, null)));
+
+        mvc.perform(admin(get("/api/v1/admin/release-notes")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.result[0].langs.length()").value(4))
+                .andExpect(jsonPath("$.result[0].langs[3]").value("zh-CN"));
+        mvc.perform(admin(get("/api/v1/admin/release-notes/12")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.result.contents.en.title").value("New"))
+                .andExpect(jsonPath("$.result.contents['zh-CN'].contentMarkdown").value("## 新"));
+        mvc.perform(admin(get("/api/v1/admin/release-notes/12/revisions")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.result[0].editedBy.userId").value(ADMIN))
+                .andExpect(jsonPath("$.result[0].status").value("DRAFT"));
+    }
+
     private MockHttpServletRequestBuilder admin(MockHttpServletRequestBuilder request) {
         return request.cookie(authCookies.user(ADMIN)).contentType(MediaType.APPLICATION_JSON);
     }

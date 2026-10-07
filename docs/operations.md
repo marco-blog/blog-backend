@@ -96,6 +96,8 @@
 | `blog.jobs.scheduled-publish-delay` | 30s | 예약 발행 작업 주기(앞 실행이 끝난 뒤 기준). 실제 발행 지연은 최대 이 값 + 처리 시간 |
 | `blog.jobs.export-poll-delay` | 30s | 대기 중인 백업을 만드는 작업 주기(한 번에 최대 10건을 차례로) |
 | `blog.release-notes.portal-card-days` | 14d | 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시부터, 003 FR-162) |
+| `blog.admin.dashboard-cache-ttl` | 5m | 관리 콘솔 대시보드 수치를 관리자 시간대별로 메모리에 두는 시간(006 FR-103). 0s면 매번 계산(E2E는 `BLOG_ADMIN_DASHBOARD_CACHE_TTL=0s`). 음수면 기동 실패 |
+| `blog.admin.audit-retention` | 365d | 관리자 작업 기록 보관 기간(006 FR-106). 30일보다 짧게 주면 기동 실패 |
 
 ## 3. 로그
 
@@ -170,6 +172,7 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 | 백업 생성 | `BlogExportJob` | `blog.jobs.export-poll-delay`(고정 지연) | 30초 | PENDING 백업을 RUNNING으로 바꿔 zip을 만들고 READY(완료 알림) 또는 FAILED로 둔다 (004 FR-145) |
 | 백업 정리 | `BlogExportCleanupJob` | `blog.jobs.export-cleanup-cron` | `0 10 * * * *`(매시 10분) | 만료(`blog.export.retention`, 7일)된 READY 백업의 파일을 지우고 EXPIRED로 바꾼다 |
 | 글 통계 정리 | `PostStatsPurgeJob` | `blog.jobs.post-stats-purge-cron` | `0 45 4 * * *`(매일 04:45) | `blog.posts.stats-retention`(90일) 지난 `post_daily_stats` 행 삭제 (003 research P4) |
+| 작업 기록 정리 | `AdminAuditPurgeJob` | `blog.jobs.audit-purge-cron` | `0 15 5 * * *`(매일 05:15) | `blog.admin.audit-retention`(365일) 지난 `admin_audit_logs` 행 삭제 (006 FR-106). 작업 기록을 지우는 유일한 경로 |
 
 포털 인기 점수·주제별 글 수는 정기 작업이 아니라 요청 때 계산해 `blog.portal.cache-ttl`(5분) 동안 메모리에 둔다(서버를 여러 대 두면
 서버마다 따로 계산한다).
@@ -247,3 +250,32 @@ cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 �
 
 권한은 요청마다 DB에서 다시 읽으므로, 지정된 회원은 다시 로그인하지 않아도 다음 요청부터 관리자 API를 쓸 수 있다
 (화면 메뉴는 접근 토큰의 role 힌트를 쓰므로 30분 안에 갱신된다).
+
+## 7. 관리자 권한 부여·회수(006)
+
+첫 최고 관리자(6절) 다음부터는 관리 콘솔 `/admin/admins`에서 최고 관리자(SUPER_ADMIN)가 권한을 바꾼다(`PUT /api/v1/admin/users/{id}/role`).
+
+- 일반 관리자(ADMIN)는 목록을 볼 수만 있다. 권한 변경 요청은 403 `FORBIDDEN`.
+- 자기 권한은 바꿀 수 없다(422 `CANNOT_CHANGE_OWN_ROLE`). 다른 최고 관리자가 바꿔야 하므로 **최고 관리자를 2명 이상 두기를 권장**한다.
+- 마지막 활성 최고 관리자는 낮출 수 없다(409 `LAST_SUPER_ADMIN`). 판단은 활성 최고 관리자 행을 잠근(`SELECT ... FOR UPDATE`) 트랜잭션 안에서
+  하므로 두 최고 관리자가 서로를 동시에 낮춰도 한 명은 남는다.
+- 정지·탈퇴 회원에게 관리자 이상을 줄 수 없다(409 `USER_NOT_ACTIVE`). 회수는 상태와 상관없이 된다.
+- 반영은 다음 관리자 API 요청부터다(요청마다 DB 권한 확인). 회수된 사람의 관리자 API는 바로 404가 된다.
+- 바꿀 때마다 작업 기록에 `ROLE_GRANT`·`ROLE_REVOKE`(전후 `role`)가 남는다. 같은 값이면 기록하지 않는다.
+
+모든 최고 관리자를 잃었다면(예: 탈퇴) 6절의 부트스트랩 환경 변수로 다시 지정한다(SUPER_ADMIN이 한 명도 없을 때만 동작).
+
+## 8. 작업 기록(006)
+
+- 관리자 변경 API는 모두 같은 트랜잭션에서 `admin_audit_logs`에 남는다(변경 전후 값은 바뀐 필드만, 개인정보 평문 없음). 수정·삭제 API는 없다.
+- 보관은 `blog.admin.audit-retention`(365일). 지난 행은 `AdminAuditPurgeJob`(5절)만 지운다.
+- 요청 IP는 암호화해 저장하고, 콘솔 상세 화면에서 **최고 관리자에게만** 복호화해 보여 준다(일반 관리자는 비어 있음).
+- 조회 기간은 최대 366일이다. 인덱스(`created_at`, `(admin_id, created_at)`, `(action, created_at)`, `(target_type, target_id)`)에 맞춘 조건만 쓴다.
+
+## 9. 관리 콘솔 대시보드 계산 비용(006)
+
+대시보드는 요청한 관리자 시간대의 오늘·7일 추이를 쿼리 6번으로 계산하고 `blog.admin.dashboard-cache-ttl`(5분) 동안 시간대별로 캐시한다.
+`users.created_at`, `posts.published_at`, `comments.created_at`에는 아직 인덱스가 없어(006 data-model "선택 인덱스" 4개
+`idx_users_created`·`idx_posts_published_at`·`idx_comments_status_created`·`idx_guestbook_entries_status_created`, 승인 대기)
+7일 범위 조건이 표 전체를 훑는다. 회원·글이 수십만 건을 넘어 대시보드가 느려지면 그 인덱스 추가를 검토한다.
+캐시 TTL을 줄이면 계산이 그만큼 자주 돈다(0s는 E2E·수동 검증용).

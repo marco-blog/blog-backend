@@ -211,7 +211,38 @@ class OpenApiContractTest {
             "GET /api/v1/admin/users",
             "GET /api/v1/admin/users/{id}",
             "POST /api/v1/admin/users/{id}/suspend",
-            "POST /api/v1/admin/users/{id}/unsuspend");
+            "POST /api/v1/admin/users/{id}/unsuspend",
+            // 006 (006 contracts/api.md) — 대시보드·콘텐츠 검색·예약어·서비스 설정·작업 기록·관리자 권한
+            "GET /api/v1/admin/dashboard",
+            "GET /api/v1/admin/contents/posts",
+            "GET /api/v1/admin/contents/comments",
+            "GET /api/v1/admin/contents/guestbook-entries",
+            "GET /api/v1/admin/reserved-handles",
+            "GET /api/v1/admin/service-settings",
+            "GET /api/v1/admin/audit-logs",
+            "GET /api/v1/admin/audit-logs/{id}",
+            "GET /api/v1/admin/audit-logs/actions",
+            "GET /api/v1/admin/admins",
+            "PUT /api/v1/admin/users/{id}/role");
+
+    /** 006 응답 스키마(006 contracts/api.md 타입): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> SCHEMAS_006 = Map.ofEntries(
+            Map.entry("AdminDashboardResponse", List.of("today", "totals", "pendingReports", "trend", "timeZone",
+                    "generatedAt")),
+            Map.entry("AdminPostRow", List.of("id", "title", "blog", "author", "status", "visibility", "publishedAt",
+                    "createdAt", "deletedAt", "commentCount")),
+            Map.entry("AdminCommentRow", List.of("id", "postId", "postTitle", "blogHandle", "parentId", "author",
+                    "guestName", "secret", "content", "status", "createdAt")),
+            Map.entry("AdminGuestbookRow", List.of("id", "blogHandle", "parentId", "author", "guestName", "secret",
+                    "content", "status", "createdAt")),
+            Map.entry("ServiceSettingsResponse", List.of("termsVersion", "blogs", "media", "admin")),
+            Map.entry("AuditLogEntryResponse", List.of("id", "admin", "action", "targetType", "targetId", "targetKey",
+                    "before", "after", "reason", "createdAt")),
+            Map.entry("AuditLogDetailResponse", List.of("id", "admin", "action", "targetType", "targetId",
+                    "targetKey", "before", "after", "reason", "createdAt", "requestIp")),
+            Map.entry("AuditActionListResponse", List.of("actions", "targetTypes")),
+            Map.entry("AdminMemberResponse", List.of("userId", "nickname", "role", "status", "createdAt")),
+            Map.entry("RoleChangeRequest", List.of("role")));
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
@@ -316,6 +347,19 @@ class OpenApiContractTest {
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
         assertThat(missing).as("문서에 없는 002~004 응답 확장 필드").isEmpty();
+    }
+
+    @Test
+    void schemasOf006AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        SCHEMAS_006.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 006 스키마 필드").isEmpty();
     }
 
     @Test
