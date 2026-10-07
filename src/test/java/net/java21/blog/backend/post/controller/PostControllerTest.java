@@ -77,9 +77,10 @@ class PostControllerTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final PostDetailResponse DETAIL = new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>", null,
             "본문", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2,
-            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null, 31L);
+            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null, 31L,
+            false);
     private static final PostSummaryResponse SUMMARY = new PostSummaryResponse(123L, "제목", "본문", null, null,
-            List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, null, null);
+            List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, false, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -140,6 +141,52 @@ class PostControllerTest {
                 .andExpect(status().isOk());
 
         verify(postService).blogPosts(eq("marco"), eq(new PostListFilter(12L, "Spring Boot")), any());
+    }
+
+    /** 004 T050: 월 조건(둘 다 있어야 하고 범위 안, 카테고리·태그와 함께 쓸 수 없음). */
+    @Test
+    void blogPostsByMonthValidatesYearAndMonth() throws Exception {
+        when(postService.blogPosts(eq("marco"), any(), any())).thenReturn(new PageImpl<>(List.of()));
+
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "2026").param("month", "10"))
+                .andExpect(status().isOk());
+        verify(postService).blogPosts(eq("marco"), eq(PostListFilter.ofMonth(java.time.YearMonth.of(2026, 10))),
+                any());
+
+        expectError(mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "2026")), 400, "VALIDATION_FAILED");
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("month", "10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("year"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("REQUIRED"));
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "2026").param("month", "13"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("month"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID"));
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "1969").param("month", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors.length()").value(2));
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "2026").param("month", "10")
+                        .param("category", "3"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("category"));
+        mvc.perform(get("/api/v1/blogs/marco/posts").param("year", "2026").param("month", "10")
+                        .param("tag", "spring"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("tag"));
+    }
+
+    /** 004 T050: 공지 목록은 비로그인도 페이지로. */
+    @Test
+    void noticesArePublicPages() throws Exception {
+        when(postService.notices(eq("marco"), any())).thenReturn(new PageImpl<>(List.of(SUMMARY),
+                org.springframework.data.domain.PageRequest.of(0, 5), 7));
+
+        mvc.perform(get("/api/v1/blogs/marco/notices").param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(7))
+                .andExpect(jsonPath("$.result[0].notice").value(false));
+        when(postService.notices(eq("ghost"), any())).thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "x"));
+        expectError(mvc.perform(get("/api/v1/blogs/ghost/notices")), 404, "BLOG_NOT_FOUND");
     }
 
     @Test
@@ -263,7 +310,7 @@ class PostControllerTest {
     void detailPassesLoggedInViewer() throws Exception {
         when(postService.detail(123L, 7L)).thenReturn(new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>",
                 null, "본문", null, null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2, true,
-                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true, null));
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true, null, false));
         mvc.perform(get("/api/v1/posts/123").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.likedByMe").value(true))

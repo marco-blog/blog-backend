@@ -46,7 +46,7 @@ public class RelatedPostQueryRepository {
                 .select(Projections.constructor(PostSummaryRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt))
+                        post.updatedAt, post.notice))
                 .from(post)
                 .join(post.blog, blog)
                 .join(blog.user, user)
@@ -56,7 +56,7 @@ public class RelatedPostQueryRepository {
                 .where(blog.id.eq(blogId), post.id.ne(postId), PostExposure.bodyVisible())
                 .groupBy(post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt)
+                        post.updatedAt, post.notice)
                 .having(score.gt(0L))
                 .orderBy(score.desc(), post.publishedAt.desc(), post.id.desc())
                 .limit(limit)

@@ -69,9 +69,17 @@ public class PostController {
     @GetMapping("/api/v1/blogs/{handle}/posts")
     ApiResponse<List<PostSummaryResponse>> blogPosts(@PathVariable String handle,
             @RequestParam(required = false) Long category, @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return ApiResponse.page(postService.blogPosts(handle, new PostListFilter(category, tag),
+        return ApiResponse.page(postService.blogPosts(handle, PostListFilter.of(category, tag, year, month),
                 BLOG_POSTS.resolve(page, size, null)));
+    }
+
+    /** 공지 목록(004 FR-059). 블로그 홈은 {@code size=5}로 부른다. */
+    @GetMapping("/api/v1/blogs/{handle}/notices")
+    ApiResponse<List<PostSummaryResponse>> notices(@PathVariable String handle,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return ApiResponse.page(postService.notices(handle, BLOG_POSTS.resolve(page, size, null)));
     }
 
     @PostMapping("/api/v1/blogs/{handle}/posts/drafts")

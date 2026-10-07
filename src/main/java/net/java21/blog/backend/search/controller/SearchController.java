@@ -26,7 +26,8 @@ public class SearchController {
 
     @GetMapping("/api/v1/search/posts")
     ApiResponse<List<SearchPostResponse>> searchPosts(@RequestParam(required = false) String q,
+            @RequestParam(required = false) String blog,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return ApiResponse.page(searchService.search(q, RESULTS.resolve(page, size, null)));
+        return ApiResponse.page(searchService.search(q, blog, RESULTS.resolve(page, size, null)));
     }
 }

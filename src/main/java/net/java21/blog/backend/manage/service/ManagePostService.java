@@ -13,6 +13,7 @@ import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.manage.dto.BulkAction;
 import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
@@ -92,6 +93,11 @@ public class ManagePostService {
             case DELETE -> {
                 requireOwned(blog, postIds);
                 yield new BulkPostResponse(repository.moveToTrash(blog.getId(), postIds, clock.instant()));
+            }
+            case NOTICE, UNNOTICE -> {
+                requireOwned(blog, postIds);
+                yield new BulkPostResponse(repository.changeNotice(blog.getId(), postIds,
+                        request.action() == BulkAction.NOTICE));
             }
         };
     }

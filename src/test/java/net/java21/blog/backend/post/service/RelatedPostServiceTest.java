@@ -126,6 +126,6 @@ class RelatedPostServiceTest {
 
     private static PostSummaryRow row(Long id) {
         return new PostSummaryRow(id, "글 " + id, "요약", null, 7L, "Spring", 1, 0, PostVisibility.PUBLIC,
-                PostStatus.PUBLISHED, NOW, NOW);
+                PostStatus.PUBLISHED, NOW, NOW, false);
     }
 }

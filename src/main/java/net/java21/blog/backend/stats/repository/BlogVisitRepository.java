@@ -13,7 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 /**
  * 블로그 방문 기록·조회(004 research B9). 쓰기는 엔티티를 읽어 바꾸지 않고 {@code INSERT ... ON DUPLICATE KEY UPDATE} 한 문장과
- * 블로그 전체 수 원자적 UPDATE 한 문장으로 한다(003 {@code post_daily_stats}와 같은 방식, H2 MySQL 모드 지원). 각 메서드는 쿼리 1회.
+ * 블로그 전체 수 원자적 UPDATE 한 문장으로 한다(같은 트랜잭션에서 {@link #incrementTotal}을 먼저 부른다: 교착 상태 방지)(003 {@code post_daily_stats}와 같은 방식, H2 MySQL 모드 지원). 각 메서드는 쿼리 1회.
  */
 public interface BlogVisitRepository extends JpaRepository<BlogDailyVisit, BlogDailyVisitId> {
 

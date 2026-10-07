@@ -206,9 +206,9 @@ class TagServiceTest {
     @Test
     void taggedPostsNormalizesNameAndFillsTagsAndHandle() {
         TaggedPostRow row = new TaggedPostRow(7L, "글", "요약", null, 3L, "Spring", 1, 0, PostVisibility.PUBLIC,
-                PostStatus.PUBLISHED, NOW, NOW, "marco");
+                PostStatus.PUBLISHED, NOW, NOW, "marco", false);
         TaggedPostRow untagged = new TaggedPostRow(8L, "글2", null, null, null, null, 0, 0, PostVisibility.PUBLIC,
-                PostStatus.PUBLISHED, NOW, NOW, "other");
+                PostStatus.PUBLISHED, NOW, NOW, "other", false);
         when(tagQueryRepository.findTaggedPosts("spring boot", PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(row, untagged), PageRequest.of(0, 20), 2));
         when(tagQueryRepository.findTagNames(List.of(7L, 8L))).thenReturn(Map.of(7L, List.of("spring boot")));

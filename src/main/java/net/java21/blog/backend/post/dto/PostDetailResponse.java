@@ -37,7 +37,8 @@ public record PostDetailResponse(
         Instant updatedAt,
         int likeCount,
         Boolean likedByMe,
-        Long topicId) {
+        Long topicId,
+        boolean notice) {
 
     public record Author(String nickname, String profileImageUrl) {
     }
@@ -52,6 +53,7 @@ public record PostDetailResponse(
                 post.getVisibility(), post.getStatus(), post.getViewCount(), post.getCommentCount(),
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
                 new Author(user.getNickname(), user.profileImageUrl()), prev, next,
-                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe, post.getTopicId());
+                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe, post.getTopicId(),
+                post.isNotice());
     }
 }

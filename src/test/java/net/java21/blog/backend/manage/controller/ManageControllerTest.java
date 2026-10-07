@@ -27,6 +27,7 @@ import net.java21.blog.backend.manage.dto.BulkPostRequest;
 import net.java21.blog.backend.manage.dto.BulkPostResponse;
 import net.java21.blog.backend.guestbook.dto.GuestbookEntryResponse;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
+import net.java21.blog.backend.stats.dto.VisitorCountsResponse;
 import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.dto.ManagePostFilter;
 import net.java21.blog.backend.manage.service.ManageCommentService;
@@ -56,10 +57,10 @@ class ManageControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final PostSummaryResponse TRASHED = new PostSummaryResponse(5L, "버린 글", "요약", null, null,
-            List.of(), 3, 0, PostVisibility.PRIVATE, PostStatus.DELETED, NOW, NOW, false, NOW,
+            List.of(), 3, 0, PostVisibility.PRIVATE, PostStatus.DELETED, NOW, NOW, false, false, NOW,
             Instant.parse("2026-11-05T04:24:19Z"));
     private static final PostSummaryResponse LIVE = new PostSummaryResponse(6L, "글", null, null, null, List.of(), 0,
-            0, PostVisibility.PUBLIC, PostStatus.DRAFT, null, NOW, true, null, null);
+            0, PostVisibility.PUBLIC, PostStatus.DRAFT, null, NOW, true, false, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -107,7 +108,8 @@ class ManageControllerTest {
     void dashboard() throws Exception {
         when(dashboardService.dashboard(1L, "marco")).thenReturn(new DashboardResponse(2, List.of(LIVE), 3,
                 List.of(COMMENT), 1, List.of(new GuestbookEntryResponse(9L, "비밀 인사", true, false,
-                        AuthorResponse.guest("손님"), NOW, NOW, List.of()))));
+                        AuthorResponse.guest("손님"), NOW, NOW, List.of())),
+                new VisitorCountsResponse(12, 30, 1520)));
 
         mvc.perform(get("/api/v1/blogs/marco/manage/dashboard").cookie(authCookies.user(1L)))
                 .andExpect(status().isOk())
@@ -121,7 +123,10 @@ class ManageControllerTest {
                 .andExpect(jsonPath("$.result.newGuestbook7d").value(1))
                 .andExpect(jsonPath("$.result.recentGuestbook[0].content").value("비밀 인사"))
                 .andExpect(jsonPath("$.result.recentGuestbook[0].author.guest").value(true))
-                .andExpect(jsonPath("$.result.recentGuestbook[0].author.userId").doesNotExist());
+                .andExpect(jsonPath("$.result.recentGuestbook[0].author.userId").doesNotExist())
+                .andExpect(jsonPath("$.result.visitors.today").value(12))
+                .andExpect(jsonPath("$.result.visitors.yesterday").value(30))
+                .andExpect(jsonPath("$.result.visitors.total").value(1520));
     }
 
     @Test

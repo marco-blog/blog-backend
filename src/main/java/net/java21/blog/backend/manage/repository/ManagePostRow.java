@@ -15,13 +15,13 @@ import net.java21.blog.backend.post.dto.PostSummaryResponse;
  */
 public record ManagePostRow(Long id, String title, String summary, String thumbnailUrl, Long categoryId,
         String categoryName, int viewCount, int commentCount, PostVisibility visibility, PostStatus status, Instant publishedAt, Instant updatedAt,
-        boolean hasDraft, Instant deletedAt) {
+        boolean hasDraft, Instant deletedAt, boolean notice) {
 
     /** 주인용 응답. 휴지통 글이면 {@code purgeAt} = {@code deletedAt} + 보관 기간(FR-084). */
     public PostSummaryResponse toResponse(Duration trashRetention, List<String> tags) {
         Instant purgeAt = deletedAt == null ? null : deletedAt.plus(trashRetention);
         return new PostSummaryResponse(id, title, summary, thumbnailUrl, CategoryRef.of(categoryId, categoryName),
                 tags == null ? List.of() : tags, viewCount, commentCount, visibility, status, publishedAt, updatedAt,
-                hasDraft, deletedAt, purgeAt);
+                hasDraft, notice, deletedAt, purgeAt);
     }
 }

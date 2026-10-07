@@ -61,6 +61,11 @@ public class TagQueryRepository {
 
     /** 블로그 태그 목록: 목록 노출 가능 글에 달린 태그와 글 수(많은 순, 같으면 이름순). 쿼리 1회. */
     public List<BlogTagResponse> findBlogTags(Long blogId) {
+        return findBlogTags(blogId, Integer.MAX_VALUE);
+    }
+
+    /** 블로그 태그 상위 {@code limit}개(004 사이드바 TAGS는 30개). 쿼리 1회. */
+    public List<BlogTagResponse> findBlogTags(Long blogId, int limit) {
         NumberExpression<Long> count = postTag.post.id.count();
         return queryFactory
                 .select(Projections.constructor(BlogTagResponse.class, tag.name, count))
@@ -72,6 +77,7 @@ public class TagQueryRepository {
                 .where(blog.id.eq(blogId), PostExposure.listable())
                 .groupBy(tag.name)
                 .orderBy(count.desc(), tag.name.asc())
+                .limit(limit)
                 .fetch();
     }
 
@@ -85,7 +91,7 @@ public class TagQueryRepository {
                 .select(Projections.constructor(TaggedPostRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt, blog.handle))
+                        post.updatedAt, blog.handle, post.notice))
                 .from(postTag)
                 .join(postTag.tag, tag)
                 .join(postTag.post, post)

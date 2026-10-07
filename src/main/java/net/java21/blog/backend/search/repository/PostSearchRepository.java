@@ -56,7 +56,15 @@ public class PostSearchRepository {
     }
 
     public Page<SearchPostRow> search(SearchQuery query, Pageable pageable) {
+        return search(query, null, pageable);
+    }
+
+    /** 004 블로그 내 검색(FR-061): {@code blogId}가 있으면 그 블로그 글만(본문·제목 검색 조건 모두에 적용). */
+    public Page<SearchPostRow> search(SearchQuery query, Long blogId, Pageable pageable) {
         BooleanExpression where = matches(query.booleanQuery());
+        if (blogId != null) {
+            where = blog.id.eq(blogId).and(where);
+        }
         List<SearchPostRow> rows = queryFactory
                 .select(Projections.constructor(SearchPostRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
