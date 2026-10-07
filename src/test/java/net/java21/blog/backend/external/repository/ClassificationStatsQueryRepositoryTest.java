@@ -16,6 +16,7 @@ import net.java21.blog.backend.external.domain.ExternalPost;
 import net.java21.blog.backend.external.domain.RemovedReason;
 import net.java21.blog.backend.external.domain.TopicSource;
 import net.java21.blog.backend.external.dto.ClassificationStatsResponse;
+import net.java21.blog.backend.portal.event.PortalChangedEvent;
 import net.java21.blog.backend.setting.service.SystemSettingsService;
 import net.java21.blog.backend.support.ExternalFixtures;
 import net.java21.blog.backend.support.JpaFixtures;
@@ -156,5 +157,15 @@ class ClassificationStatsQueryRepositoryTest {
         assertThat(queryCounter.count()).isZero();
         nanos[0] = Duration.ofMinutes(6).toNanos();
         assertThat(service.stats().generatedAt()).isEqualTo(NOW.plus(Duration.ofMinutes(4)));
+
+        // 수집 같은 다른 포털 변경은 캐시를 그대로, 검수 확정·주인 변경은 바로 비운다
+        clock.advance(Duration.ofMinutes(1));
+        service.onPortalChanged(new PortalChangedEvent("external-fetch"));
+        assertThat(service.stats().generatedAt()).isEqualTo(NOW.plus(Duration.ofMinutes(4)));
+        service.onPortalChanged(new PortalChangedEvent("external:review-confirm"));
+        assertThat(service.stats().generatedAt()).isEqualTo(NOW.plus(Duration.ofMinutes(5)));
+        clock.advance(Duration.ofMinutes(1));
+        service.onPortalChanged(new PortalChangedEvent("external:owner-topic"));
+        assertThat(service.stats().generatedAt()).isEqualTo(NOW.plus(Duration.ofMinutes(6)));
     }
 }

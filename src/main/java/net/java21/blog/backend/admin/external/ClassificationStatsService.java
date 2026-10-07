@@ -9,6 +9,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -18,19 +19,23 @@ import net.java21.blog.backend.external.classify.KeywordDictionary;
 import net.java21.blog.backend.external.domain.TopicSource;
 import net.java21.blog.backend.external.dto.ClassificationStatsResponse;
 import net.java21.blog.backend.external.repository.ClassificationStatsQueryRepository;
+import net.java21.blog.backend.portal.event.PortalChangedEvent;
 import net.java21.blog.backend.setting.service.SystemSettingsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * 분류 현황(007 FR-122, SC-019, research E11). 최근 30일 창으로 계산하고 5분 동안 같은 결과를 준다(Caffeine, {@code generatedAt}).
- * 쿼리는 계산 한 번에 4회.
+ * 쿼리는 계산 한 번에 4회. 사람이 주제를 정하면(검수 확정·주인 변경) 커밋 뒤 캐시를 비워 다음 조회가 바로 반영한다.
  */
 @Service
 public class ClassificationStatsService {
 
     public static final Duration WINDOW = Duration.ofDays(30);
     public static final Duration CACHE_TTL = Duration.ofMinutes(5);
+    static final Set<String> HUMAN_DECISIONS = Set.of("external:review-confirm",
+            "external:owner-topic");
 
     private final ClassificationStatsQueryRepository repository;
     private final SystemSettingsService settings;
@@ -56,6 +61,14 @@ public class ClassificationStatsService {
 
     public ClassificationStatsResponse stats() {
         return cache.get("stats", key -> compute());
+    }
+
+    /** 검수 확정·주인 주제 변경이 커밋되면 캐시를 비운다(수집·링크 점검 같은 다른 포털 변경은 5분 캐시를 그대로 쓴다). */
+    @TransactionalEventListener(fallbackExecution = true)
+    public void onPortalChanged(PortalChangedEvent event) {
+        if (HUMAN_DECISIONS.contains(event.reason())) {
+            cache.invalidateAll();
+        }
     }
 
     ClassificationStatsResponse compute() {
