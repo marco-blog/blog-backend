@@ -59,6 +59,7 @@ public class PostDraftService {
         Post post = postRepository.save(new Post(blog, nullToEmpty(request.title())));
         PostDraft draft = new PostDraft(post);
         draft.write(request.title(), request.contentMarkdown(), request.categoryId(), request.tags(), clock.instant());
+        draft.changeTopic(request.topicId());
         postDraftRepository.save(draft);
         mediaReferences.syncDraft(post.getId(), userId, request.contentMarkdown());
         return new SavedDraftResponse(post.getId(), draft.getSavedAt());
@@ -71,23 +72,24 @@ public class PostDraftService {
         PostDraft draft = postDraftRepository.findById(postId).orElseGet(() -> new PostDraft(post));
         Instant now = clock.instant();
         draft.write(request.title(), request.contentMarkdown(), request.categoryId(), request.tags(), now);
+        draft.changeTopic(request.topicId());
         postDraftRepository.save(draft);
         post.syncDraftTitle(request.title());
         mediaReferences.syncDraft(postId, userId, request.contentMarkdown());
         return new SavedDraftResponse(postId, now);
     }
 
-    /** 작성 화면 불러오기. 사본이 없으면 발행본 내용(카테고리·태그 포함)을 그대로 준다. */
+    /** 작성 화면 불러오기. 사본이 없으면 발행본 내용(카테고리·태그·주제 포함)을 그대로 준다. */
     @Transactional(readOnly = true)
     public DraftResponse get(long userId, Long postId) {
         Post post = postAccess.requireOwnedEditablePost(postId, userId);
         return postDraftRepository.findById(postId)
                 .map(d -> new DraftResponse(d.getTitle(), d.getContentMarkdown(), d.getCategoryId(), d.getTags(),
-                        d.getSavedAt()))
+                        d.getTopicId(), d.getSavedAt()))
                 .orElseGet(() -> new DraftResponse(post.getTitle(), post.getContentMarkdown(),
                         post.getCategory() == null ? null : post.getCategory().getId(),
                         tagQueryRepository.findTagNames(List.of(postId)).getOrDefault(postId, List.of()),
-                        post.getUpdatedAt()));
+                        post.getTopicId(), post.getUpdatedAt()));
     }
 
     /**

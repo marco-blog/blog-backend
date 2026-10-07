@@ -51,7 +51,7 @@ class BlogControllerTest {
 
     private static final BlogResponse MARCO = new BlogResponse("marco", "마르코의 블로그", null, null, true,
             new BlogResponse.Owner("마르코", null, "자바 개발자"), List.of(), 3, null, 20,
-            net.java21.blog.backend.blog.domain.FeedContentMode.FULL);
+            net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null);
 
     @Autowired
     private MockMvc mvc;
@@ -142,6 +142,8 @@ class BlogControllerTest {
                 .andExpect(jsonPath("$.result.subscribedByMe").value(nullValue()))
                 .andExpect(jsonPath("$.result.feedItemCount").value(20))
                 .andExpect(jsonPath("$.result.feedContentMode").value("FULL"))
+                .andExpect(jsonPath("$.result.portalEnabled").value(true))
+                .andExpect(jsonPath("$.result.defaultTopicId").value(nullValue()))
                 .andExpect(header().string("Cache-Control", "private, no-cache"));
     }
 
@@ -150,7 +152,7 @@ class BlogControllerTest {
     void getPassesViewerForSubscribedByMe() throws Exception {
         when(blogService.get("marco", 7L)).thenReturn(new BlogResponse("marco", "마르코의 블로그", null, null, true,
                 new BlogResponse.Owner("마르코", null, null), List.of(), 3, true, 20,
-                net.java21.blog.backend.blog.domain.FeedContentMode.FULL));
+                net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null));
 
         mvc.perform(get("/api/v1/blogs/marco").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
@@ -215,6 +217,33 @@ class BlogControllerTest {
         assertThat(request.getValue().hasFeedContentMode()).isTrue();
         assertThat(request.getValue().getFeedContentMode()).isEqualTo("SUMMARY");
         assertThat(request.getValue().hasTitle()).isFalse();
+    }
+
+    /** 003 T071: 포털 설정은 보낸 값만, null도 그대로 서비스에 넘긴다(검증은 서비스). */
+    @Test
+    void patchPassesPortalSettings() throws Exception {
+        when(blogService.update(eq(7L), eq("marco"), any(UpdateBlogRequest.class))).thenReturn(MARCO);
+
+        mvc.perform(patch("/api/v1/blogs/marco").cookie(authCookies.user(7L)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"portalEnabled\":false,\"defaultTopicId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.portalEnabled").exists());
+
+        ArgumentCaptor<UpdateBlogRequest> request = ArgumentCaptor.forClass(UpdateBlogRequest.class);
+        verify(blogService).update(eq(7L), eq("marco"), request.capture());
+        assertThat(request.getValue().hasPortalEnabled()).isTrue();
+        assertThat(request.getValue().getPortalEnabled()).isFalse();
+        assertThat(request.getValue().hasDefaultTopicId()).isTrue();
+        assertThat(request.getValue().getDefaultTopicId()).isNull();
+        assertThat(request.getValue().hasTitle()).isFalse();
+    }
+
+    @Test
+    void patchTopicErrors() throws Exception {
+        when(blogService.update(eq(7L), eq("marco"), any(UpdateBlogRequest.class)))
+                .thenThrow(new BusinessException(ErrorCode.TOPIC_NOT_SELECTABLE, "x"));
+        expectError(mvc.perform(patch("/api/v1/blogs/marco").cookie(authCookies.user(7L))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"defaultTopicId\":3}")), 422, "TOPIC_NOT_SELECTABLE");
     }
 
     @Test

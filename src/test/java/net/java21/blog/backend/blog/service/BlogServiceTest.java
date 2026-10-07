@@ -70,6 +70,8 @@ class BlogServiceTest {
     private MediaReferenceService mediaReferences;
     @Mock
     private net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository subscriptionRepository;
+    @Mock
+    private net.java21.blog.backend.topic.repository.TopicRepository topicRepository;
 
     private BlogService service;
     private User owner;
@@ -79,7 +81,9 @@ class BlogServiceTest {
         BlogAccess access = new BlogAccess(blogRepository);
         service = new BlogService(blogRepository, blogQueryRepository, userRepository, access, new HandlePolicy(),
                 passwordEncoder, new BlogsProperties(3), categoryQueryRepository, mediaReferences,
-                subscriptionRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                subscriptionRepository,
+                new net.java21.blog.backend.topic.service.TopicService(topicRepository, null, null, null, null, null, null),
+                Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -335,6 +339,85 @@ class BlogServiceTest {
         noMode.setFeedContentMode(null);
         assertFieldError(() -> service.update(1L, "marco", noMode),
                 new FieldError("feedContentMode", "REQUIRED", Map.of()));
+    }
+
+    // ---- 포털 설정(003 T071, FR-077·089) ----
+
+    @Test
+    void getCarriesPortalSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        blog.changePortalSettings(false, TestEntities.topic(31L, TestEntities.topic(3L, null, "knowledge"), "it"));
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        when(categoryQueryRepository.findTree(10L)).thenReturn(List.of());
+
+        BlogResponse response = service.get("marco", null);
+
+        assertThat(response.portalEnabled()).isFalse();
+        assertThat(response.defaultTopicId()).isEqualTo(31L);
+        assertThat(BlogResponse.of(TestEntities.blog(11L, owner, "new")).portalEnabled()).isTrue();
+    }
+
+    @Test
+    void patchChangesPortalSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        var major = TestEntities.topic(3L, null, "knowledge");
+        var minor = TestEntities.topic(31L, major, "it");
+        when(topicRepository.findWithParent(31L)).thenReturn(Optional.of(minor));
+
+        UpdateBlogRequest request = new UpdateBlogRequest();
+        request.setPortalEnabled(false);
+        request.setDefaultTopicId(31L);
+        BlogResponse response = service.update(1L, "marco", request);
+        assertThat(response.portalEnabled()).isFalse();
+        assertThat(response.defaultTopicId()).isEqualTo(31L);
+
+        // 보내지 않은 값은 그대로, 같은 값은 검사 없이 통과(나중에 숨겨진 주제 유지)
+        minor.hide();
+        when(topicRepository.getReferenceById(31L)).thenReturn(minor);
+        UpdateBlogRequest same = new UpdateBlogRequest();
+        same.setDefaultTopicId(31L);
+        assertThat(service.update(1L, "marco", same).portalEnabled()).isFalse();
+        UpdateBlogRequest enable = new UpdateBlogRequest();
+        enable.setPortalEnabled(true);
+        BlogResponse enabled = service.update(1L, "marco", enable);
+        assertThat(enabled.portalEnabled()).isTrue();
+        assertThat(enabled.defaultTopicId()).isEqualTo(31L);
+
+        UpdateBlogRequest clear = new UpdateBlogRequest();
+        clear.setDefaultTopicId(null);
+        assertThat(service.update(1L, "marco", clear).defaultTopicId()).isNull();
+    }
+
+    @Test
+    void patchRejectsInvalidPortalSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        var major = TestEntities.topic(3L, null, "knowledge");
+        var hidden = TestEntities.topic(32L, major, "mobile");
+        hidden.hide();
+        when(topicRepository.findWithParent(3L)).thenReturn(Optional.of(major));
+        when(topicRepository.findWithParent(32L)).thenReturn(Optional.of(hidden));
+        when(topicRepository.findWithParent(99L)).thenReturn(Optional.empty());
+
+        UpdateBlogRequest noFlag = new UpdateBlogRequest();
+        noFlag.setPortalEnabled(null);
+        assertFieldError(() -> service.update(1L, "marco", noFlag), new FieldError("portalEnabled", "REQUIRED", Map.of()));
+        UpdateBlogRequest majorTopic = new UpdateBlogRequest();
+        majorTopic.setDefaultTopicId(3L);
+        expect(() -> service.update(1L, "marco", majorTopic), ErrorCode.TOPIC_NOT_SELECTABLE);
+        UpdateBlogRequest hiddenTopic = new UpdateBlogRequest();
+        hiddenTopic.setDefaultTopicId(32L);
+        expect(() -> service.update(1L, "marco", hiddenTopic), ErrorCode.TOPIC_NOT_SELECTABLE);
+        UpdateBlogRequest missing = new UpdateBlogRequest();
+        missing.setDefaultTopicId(99L);
+        expect(() -> service.update(1L, "marco", missing), ErrorCode.TOPIC_NOT_FOUND);
+        assertThat(blog.isPortalEnabled()).isTrue();
+        assertThat(blog.getDefaultTopic()).isNull();
+
+        UpdateBlogRequest byOther = new UpdateBlogRequest();
+        byOther.setPortalEnabled(false);
+        expect(() -> service.update(2L, "marco", byOther), ErrorCode.FORBIDDEN);
     }
 
     @Test

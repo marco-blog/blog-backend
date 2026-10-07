@@ -1,6 +1,7 @@
 package net.java21.blog.backend.security;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 
+import net.java21.blog.backend.admin.AdminRoleLookup;
 import net.java21.blog.backend.support.AuthCookies;
 import net.java21.blog.backend.support.WebMvcTestSupport;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -36,6 +39,8 @@ class CacheHeadersWebMvcTest {
     private MockMvc mvc;
     @Autowired
     private AuthCookies authCookies;
+    @MockitoBean
+    private AdminRoleLookup roleLookup;
 
     @ParameterizedTest
     @ValueSource(strings = {"/api/v1/me", "/api/v1/me/blogs", "/api/v1/blogs/marco/manage/posts",
@@ -120,5 +125,22 @@ class CacheHeadersWebMvcTest {
         mvc.perform(get(path))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-cache"));
+    }
+
+    /** 003 T128: 릴리스 노트 확인 버전 저장과 003 관리자 API 응답(오류 404 포함)도 저장하지 않는다. */
+    @Test
+    void portalMemberAndAdminResponsesAreNotStored() throws Exception {
+        when(roleLookup.isActiveAdmin(5L)).thenReturn(true);
+        for (var request : List.of(post("/api/v1/me/release-notes/seen").cookie(authCookies.user(7L)),
+                get("/api/v1/admin/topics").cookie(authCookies.user(5L)),
+                put("/api/v1/admin/settings/portal.min-content-length").cookie(authCookies.user(5L)),
+                post("/api/v1/admin/release-notes").cookie(authCookies.user(5L)))) {
+            mvc.perform(request)
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+        }
+        mvc.perform(get("/api/v1/admin/topics").cookie(authCookies.user(7L)))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
     }
 }

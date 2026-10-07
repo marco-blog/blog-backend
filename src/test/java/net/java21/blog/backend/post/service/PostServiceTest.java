@@ -102,9 +102,23 @@ class PostServiceTest {
         assertThat(anonymous.author().nickname()).isEqualTo(owner.getNickname());
         assertThat(anonymous.tags()).isEmpty();
         assertThat(anonymous.category()).isNull();
+        assertThat(anonymous.topicId()).isNull();
 
         assertThat(service.detail(100L, STRANGER).contentMarkdown()).isNull();
         assertThat(service.detail(100L, OWNER).contentMarkdown()).isEqualTo("본문");
+    }
+
+    /** 003 T070: 글의 주제(소분류 id). */
+    @Test
+    void detailCarriesTopicId() {
+        publish(PostVisibility.PUBLIC);
+        post.assignTopic(net.java21.blog.backend.support.TestEntities.topic(31L,
+                net.java21.blog.backend.support.TestEntities.topic(3L, null, "knowledge"), "it-internet"));
+        stubFound();
+        when(postQueryRepository.findPrevious(10L, 100L, NOW)).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(10L, 100L, NOW)).thenReturn(Optional.empty());
+
+        assertThat(service.detail(100L, null).topicId()).isEqualTo(31L);
     }
 
     /**

@@ -78,6 +78,14 @@
 | `blog.media.temp-ttl` / `temp-quota` / `max-size` / `max-pixels` | 24h / 200MB / 10MB / 40000000 | 이미지 한도 |
 | `blog.media.allowed-types` | jpeg, png, gif, webp | 업로드 허용 형식(내용 기준) |
 | `blog.media.thumbnail.sizes` | `application.yml` 참고 | 허용 썸네일 크기 |
+| `blog.portal.cache-ttl` / `cache-max-size` | 5m / 2000 | 포털 목록·인기 점수·주제별 글 수 캐시(003 FR-090). 0s면 캐시하지 않음 |
+| `blog.portal.score-weights.*` | view 1, read-complete 5, like 10, comment 8, half-life-hours 48, report-penalty 0.5 | 인기 점수 가중치(003 research P4). 운영 설정 `portal.score-weights`가 있으면 그 값 |
+| `blog.portal.new-member-delay` | 24h | 가입 후 포털 노출까지 대기(003 FR-088). 운영 설정 `portal.new-member-delay` 우선 |
+| `blog.portal.min-content-length` | 200 | 포털 노출 최소 본문 길이(문자 수). 운영 설정 `portal.min-content-length` 우선 |
+| `blog.portal.topic-auto-hide-threshold` | 20 | 주제 탭 자동 숨김 기준(최근 30일 글 수). 운영 설정 `portal.topic-auto-hide-threshold` 우선 |
+| `blog.portal.popular-window` / `topic-count-window` | 7d / 30d | 인기 점수 기간, 주제별 글 수 기간 |
+| `blog.posts.stats-retention` | 90d | 글 일별 통계(`post_daily_stats`) 보관 기간(003) |
+| `blog.release-notes.portal-card-days` | 14d | 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시부터, 003 FR-162) |
 
 ## 3. 로그
 
@@ -135,6 +143,10 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 | 휴지통 비우기 | `TrashPurgeJob` | `blog.jobs.trash-purge-cron` | `0 30 3 * * *`(매일 03:30) | 휴지통 30일 지난 글 영구 삭제, 삭제 30일 지난 블로그의 카테고리 삭제·제목 비우기(주소는 재사용 방지로 남김) (FR-084·159) |
 | 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139) |
 | 알림 정리 | `NotificationPurgeJob` | `blog.jobs.notification-purge-cron` | `0 15 4 * * *`(매일 04:15) | `blog.notifications.retention`(90일) 지난 알림 삭제 (002 FR-033) |
+| 글 통계 정리 | `PostStatsPurgeJob` | `blog.jobs.post-stats-purge-cron` | `0 45 4 * * *`(매일 04:45) | `blog.posts.stats-retention`(90일) 지난 `post_daily_stats` 행 삭제 (003 research P4) |
+
+포털 인기 점수·주제별 글 수는 정기 작업이 아니라 요청 때 계산해 `blog.portal.cache-ttl`(5분) 동안 메모리에 둔다(서버를 여러 대 두면
+서버마다 따로 계산한다).
 
 cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 멈추려면 cron을 `-`로 준다(예: `BLOG_JOBS_TRASHPURGECRON=-`).
 
@@ -148,6 +160,53 @@ cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 �
   그래서 `java`처럼 `a`가 들어간 낱말은 검색되지 않는다(로컬 MySQL 8.4에서 확인). 이를 피하려면
   `innodb_ft_enable_stopword=OFF`(또는 빈 사용자 불용어 표 `innodb_ft_server_stopword_table`)로 설정하고 FULLTEXT 색인을 다시 만든다.
   스키마 변경이 아니라 서버 설정이다.
+
+## 5.2 포털(003)
+
+### 설정의 우선순위와 반영 시간
+
+포털 노출 조건·인기 점수 가중치는 다음 순서로 정한다.
+
+1. 관리자 콘솔 `/admin/portal/settings`에서 저장한 값(`system_settings` 표, 키 `portal.*`)
+2. 없으면(콘솔에서 "기본값으로") `application.yml`·환경 변수의 `blog.portal.*` 프로퍼티(2.3절)
+
+- 관리자 콘솔의 변경(포털 제외·추천·주제·운영 설정·릴리스 노트)은 커밋 직후 포털 캐시 전체를 비워 **다음 요청부터** 반영된다.
+- 글 발행·비공개·삭제, 회원 정지, 블로그의 "포털에 내 글 노출" 끄기는 **대략 `blog.portal.cache-ttl`(5분) 안에** 반영된다(FR-090). 정확히는 TTL이 지난 뒤 시작한 뒤 갱신이 끝날 때다(아래 "포털 캐시 갱신 방식").
+- 서버를 여러 대 두면 캐시 비우기는 변경을 받은 서버에만 즉시 적용되고 나머지는 5분 안에 반영된다.
+
+### 포털 캐시 갱신 방식(방문자가 다시 계산을 기다리지 않게)
+
+글이 많으면(10만 편 측정, T130) 빈 캐시에서 `/api/v1/portal`을 처음 계산하는 데 15초, 주제 페이지는 4초 안팎이 걸린다.
+색인 보강은 승인 대기 중이고, 그 전까지 `PortalCache`·`PortalCacheWarmer`가 방문자를 그 계산에서 떼어 놓는다.
+
+- **묵은 값 먼저**: 항목이 `cache-ttl`(5분)보다 오래되면 묵은 값을 바로 주고, 그 키의 갱신을 전용 풀(`portal-cache-*`, 2개)에서
+  한 번만 돌린다. 갱신이 끝나면 다음 요청부터 새 값이다. 글 상태 변화는 TTL 뒤 첫 요청이 시작한 갱신이 끝날 때 반영된다.
+  갱신이 실패하면(로그 `Portal cache refresh failed`) 묵은 값을 계속 주고 다음 요청이 다시 시도한다.
+- **미리 채우기**: 기동 직후와 그 뒤 TTL마다 메인 묶음·인기 점수·최신 글 첫 묶음·주제 트리를 채우거나 갱신한다. 그래서 첫 방문자도
+  메인에서 기다리지 않는다(기동 직후 수십 초 안에 온 요청은 진행 중인 계산을 함께 기다린다).
+- **한 번만 계산**: 비어 있는 키에 동시에 요청이 몰리면 한 요청만 계산하고 나머지는 그 결과를 함께 받는다.
+- **오래 안 찾은 항목**: TTL의 12배(기본 1시간) 동안 갱신되지 않은 항목(찾는 사람이 없던 주제 페이지 등)은 버리고, 다음 요청이
+  처음부터 계산한다. 주제 페이지는 키가 많아 미리 채우지 않는다.
+- **관리자 변경**: 캐시를 모두 비운 뒤 곧바로 미리 채우기를 시작한다(바로 반영이 우선, FR-094). 큰 데이터에서는 그 사이
+  메인 요청이 진행 중인 계산을 기다릴 수 있다(동시 요청이 몰려도 계산은 한 번).
+- `BLOG_PORTAL_CACHE_TTL=0s`(시험용)면 캐시·갱신 풀·미리 채우기 모두 쓰지 않고 요청마다 계산한다.
+
+### 주제 seed와 티스토리 목록 대조
+
+초기 주제는 `src/main/resources/portal/topics-seed.json`에 있고 `TopicSeeder`가 기동 때 **없는 slug만** 넣는다(이미 있는 주제의 이름·순서·
+숨김·고정은 덮어쓰지 않는다). 출시 전 티스토리 현행 주제 목록과 맞추는 절차:
+
+1. 티스토리 주제 목록(대분류·소분류 이름)을 seed 파일과 나란히 놓고 빠진 주제·이름 차이를 표로 만든다.
+2. 아직 배포 전이면 seed 파일만 고친다(slug는 소문자·숫자·`-`, 2~40자, 4개 언어 이름 모두 필수). 형식이 틀리면 기동이 멈추므로
+   로컬에서 `./mvnw test -Dtest=TopicSeederTest`로 먼저 확인한다.
+3. 이미 배포한 뒤라면 이름·순서·숨김은 관리자 콘솔 `/admin/topics`에서 고친다(작업 기록이 남는다). 새 주제는 콘솔에서 추가하거나
+   seed에 더하고 다시 배포한다. slug는 주소(`/topics/{slug}`)라 바꾸지 않는다.
+
+### 블로그 처음 발행 시각 보정(003 배포 때 한 번)
+
+포털 "새 블로그" 영역은 `blogs.first_published_at`을 쓴다. 003 이전에 발행한 블로그는 이 값이 비어 있으므로 003 배포 때
+`blog-docs/db/migrations/`의 보정 SQL(승인된 파일)을 한 번 실행한다. 실행 전에는 그 블로그들이 "새 블로그"에 나오지 않을 뿐 다른 기능에는
+영향이 없다.
 
 ## 6. 첫 최고 관리자(SUPER_ADMIN) 지정
 

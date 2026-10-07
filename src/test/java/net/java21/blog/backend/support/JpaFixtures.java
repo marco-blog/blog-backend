@@ -11,6 +11,11 @@ import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
+import net.java21.blog.backend.releasenote.domain.ReleaseNote;
+import net.java21.blog.backend.releasenote.domain.ReleaseNoteContent;
+import net.java21.blog.backend.releasenote.domain.ReleaseNoteRevision;
+import net.java21.blog.backend.releasenote.domain.RevisionContent;
+import net.java21.blog.backend.releasenote.domain.TocEntry;
 import net.java21.blog.backend.tag.domain.PostTag;
 import net.java21.blog.backend.tag.domain.Tag;
 import net.java21.blog.backend.topic.domain.Topic;
@@ -122,6 +127,29 @@ public class JpaFixtures {
         em.flush();
         em.createNativeQuery("UPDATE users SET created_at = :t WHERE id = :id")
                 .setParameter("t", createdAt).setParameter("id", user.getId()).executeUpdate();
+    }
+
+    /**
+     * 003 릴리스 노트: 언어판(제목 = "{lang} {version}", 본문 텍스트 = {@code text})과 수정본 1을 가진 노트. {@code publishedAt}이 있으면 게시.
+     */
+    public ReleaseNote releaseNote(User admin, String version, Instant publishedAt, String text, String... langs) {
+        String[] parts = version.split("\\.");
+        ReleaseNote note = new ReleaseNote(version, Integer.parseInt(parts[0]), Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2]), java.time.LocalDate.of(2026, 10, 6), admin);
+        em.persist(note);
+        java.util.Map<String, RevisionContent> contents = new java.util.LinkedHashMap<>();
+        for (String lang : langs) {
+            ReleaseNoteContent content = new ReleaseNoteContent(note, lang);
+            content.write(lang + " " + version, text, "<p>" + text + "</p>", text,
+                    List.of(new TocEntry(2, "제목", "제목")));
+            em.persist(content);
+            contents.put(lang, new RevisionContent(lang + " " + version, text));
+        }
+        em.persist(new ReleaseNoteRevision(note, admin, contents));
+        if (publishedAt != null) {
+            note.publish(publishedAt, admin);
+        }
+        return note;
     }
 
     public void flushAndClear() {

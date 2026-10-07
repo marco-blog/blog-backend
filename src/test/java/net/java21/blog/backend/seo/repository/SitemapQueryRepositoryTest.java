@@ -139,4 +139,21 @@ class SitemapQueryRepositoryTest {
         assertThat(paths).containsExactly("/topics/knowledge", "/topics/life", "/topics/life/pets",
                 "/topics/life/daily");
     }
+
+    /** 003 T112: 게시된 릴리스 노트만, 버전 내림차순(1.10.0 > 1.9.0), 쿼리 1회. */
+    @Test
+    void releaseNotesArePublishedOnlyNewestFirst() {
+        User admin = fx.user("관리자");
+        fx.releaseNote(admin, "1.9.0", Instant.parse("2026-09-01T00:00:00Z"), "본문", "ko");
+        fx.releaseNote(admin, "1.10.0", Instant.parse("2026-10-01T00:00:00Z"), "본문", "ko");
+        fx.releaseNote(admin, "2.0.0", null, "초안", "ko");
+        fx.flushAndClear();
+
+        queryCounter.reset();
+        List<SitemapReleaseNoteRow> notes = repository.findReleaseNotes();
+
+        assertThat(queryCounter.count()).isEqualTo(1);
+        assertThat(notes).extracting(SitemapReleaseNoteRow::version).containsExactly("1.10.0", "1.9.0");
+        assertThat(notes.get(0).updatedAt()).isNotNull();
+    }
 }

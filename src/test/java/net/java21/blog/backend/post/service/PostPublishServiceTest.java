@@ -38,6 +38,9 @@ import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import net.java21.blog.backend.tag.service.TagService;
+import net.java21.blog.backend.topic.domain.Topic;
+import net.java21.blog.backend.topic.repository.TopicRepository;
+import net.java21.blog.backend.topic.service.TopicService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,6 +71,8 @@ class PostPublishServiceTest {
     private TagService tagService;
     @Mock
     private MediaReferenceService mediaReferences;
+    @Mock
+    private TopicRepository topicRepository;
 
     private PostPublishService service;
     private Blog blog;
@@ -83,7 +88,8 @@ class PostPublishServiceTest {
                 org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock);
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
-                categoryAccess, tagService, mediaReferences, clock);
+                categoryAccess, tagService, mediaReferences,
+                new TopicService(topicRepository, null, null, null, null, null, null), clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
@@ -242,6 +248,97 @@ class PostPublishServiceTest {
         assertThatThrownBy(() -> TestEntities.post(1L, blog, "x").restore()).isInstanceOf(IllegalStateException.class);
     }
 
+    // ---- 주제(003 T069, FR-076, research P9) ----
+
+    private Topic major;
+    private Topic minor;
+
+    private void topics() {
+        major = TestEntities.topic(3L, null, "knowledge");
+        minor = TestEntities.topic(31L, major, "it-internet");
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void topicFromSettingsWinsOverDraft() {
+        topics();
+        draft("제목", "본문").changeTopic(99L);
+        when(topicRepository.findWithParent(31L)).thenReturn(Optional.of(minor));
+
+        PostDetailResponse detail = service.publish(1L, 100L, topicSettings(31L));
+
+        assertThat(post.getTopic()).isSameAs(minor);
+        assertThat(detail.topicId()).isEqualTo(31L);
+    }
+
+    @Test
+    void topicFallsBackToDraftThenToPublishedValue() {
+        topics();
+        draft("제목", "본문").changeTopic(31L);
+        when(topicRepository.findWithParent(31L)).thenReturn(Optional.of(minor));
+        service.publish(1L, 100L, topicSettings(null));
+        assertThat(post.getTopic()).isSameAs(minor);
+
+        // 사본이 없으면 지금 발행본의 주제를 그대로(검사 없이) 쓴다.
+        when(postDraftRepository.findById(100L)).thenReturn(Optional.empty());
+        when(topicRepository.getReferenceById(31L)).thenReturn(minor);
+        service.publish(1L, 100L, topicSettings(null));
+        assertThat(post.getTopicId()).isEqualTo(31L);
+    }
+
+    @Test
+    void draftWithoutTopicPublishesWithoutTopic() {
+        topics();
+        post.assignTopic(minor);
+        draft("제목", "본문");
+
+        service.publish(1L, 100L, topicSettings(null));
+
+        assertThat(post.getTopic()).isNull();
+    }
+
+    @Test
+    void majorOrHiddenTopicIsNotSelectableAndPostIsUnchanged() {
+        topics();
+        draft("제목", "본문");
+        Topic hidden = TestEntities.topic(32L, major, "mobile");
+        hidden.hide();
+        Topic hiddenParent = TestEntities.topic(4L, null, "sports");
+        hiddenParent.hide();
+        Topic underHidden = TestEntities.topic(41L, hiddenParent, "golf");
+        when(topicRepository.findWithParent(3L)).thenReturn(Optional.of(major));
+        when(topicRepository.findWithParent(32L)).thenReturn(Optional.of(hidden));
+        when(topicRepository.findWithParent(41L)).thenReturn(Optional.of(underHidden));
+        when(topicRepository.findWithParent(77L)).thenReturn(Optional.empty());
+
+        assertCode(() -> service.publish(1L, 100L, topicSettings(3L)), ErrorCode.TOPIC_NOT_SELECTABLE);
+        assertCode(() -> service.publish(1L, 100L, topicSettings(32L)), ErrorCode.TOPIC_NOT_SELECTABLE);
+        assertCode(() -> service.publish(1L, 100L, topicSettings(41L)), ErrorCode.TOPIC_NOT_SELECTABLE);
+        assertCode(() -> service.publish(1L, 100L, topicSettings(77L)), ErrorCode.TOPIC_NOT_FOUND);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        assertThat(post.getTopic()).isNull();
+        verify(postDraftRepository, never()).delete(any());
+    }
+
+    @Test
+    void republishWithSameLaterHiddenTopicPasses() {
+        topics();
+        minor.hide();
+        post.publish("t", "b", "<p>b</p>", "b", "b", null, PostVisibility.PUBLIC, true, NOW);
+        post.assignTopic(minor);
+        draft("제목", "본문").changeTopic(31L);
+        when(topicRepository.getReferenceById(31L)).thenReturn(minor);
+
+        service.publish(1L, 100L, topicSettings(31L));
+
+        assertThat(post.getTopic()).isSameAs(minor);
+    }
+
+    private static PublishSettingsRequest topicSettings(Long topicId) {
+        return new PublishSettingsRequest(PostVisibility.PUBLIC, null, null, null, null, topicId);
+    }
+
     private PostDraft draft(String title, String markdown) {
         PostDraft draft = new PostDraft(post);
         draft.write(title, markdown, null, null, NOW);
@@ -250,6 +347,6 @@ class PostPublishServiceTest {
     }
 
     private static PublishSettingsRequest settings(PostVisibility visibility, String thumbnailKey, Boolean comments) {
-        return new PublishSettingsRequest(visibility, thumbnailKey, comments, null, null);
+        return new PublishSettingsRequest(visibility, thumbnailKey, comments, null, null, null);
     }
 }

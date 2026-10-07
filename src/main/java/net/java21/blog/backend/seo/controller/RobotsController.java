@@ -21,9 +21,12 @@ public class RobotsController {
 
     static final MediaType TEXT_UTF8 = MediaType.parseMediaType("text/plain;charset=UTF-8");
 
-    /** 한 단어 최상위 화면(하위 경로 포함). 001 contracts/routes.md 예약 경로 중 로그인·개인 화면. */
+    /**
+     * 한 단어 최상위 화면(하위 경로 포함). 001 contracts/routes.md 예약 경로 중 로그인·개인 화면과 003 시스템 관리자 콘솔
+     * ({@code /admin}, 003 contracts/routes.md "사이트맵·robots").
+     */
     static final List<String> PRIVATE_SCREENS = List.of("login", "signup", "logout", "settings", "write", "manage",
-            "feed", "notifications", "search", "locale");
+            "feed", "notifications", "search", "locale", "admin");
 
     private final SiteProperties site;
 

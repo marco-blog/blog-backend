@@ -94,6 +94,18 @@ class MeControllerTest {
                 .andExpect(jsonPath("$.result.emailHash").doesNotExist());
     }
 
+    /** 003 T110: 배너 조건을 만족하면 {@code unseenReleaseNote}에 {@code { version, title }}. */
+    @Test
+    void carriesUnseenReleaseNote() throws Exception {
+        when(meQueryService.me(7L)).thenReturn(new MeResponse(7L, "marco@example.com", "마르코", null, null, "USER",
+                "ko", "Asia/Seoul", List.of(), new MeResponse.UnseenReleaseNote("1.3.0", "새 기능"), 0L));
+
+        mvc.perform(get("/api/v1/me").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.unseenReleaseNote.version").value("1.3.0"))
+                .andExpect(jsonPath("$.result.unseenReleaseNote.title").value("새 기능"));
+    }
+
     @Test
     void needsLogin() throws Exception {
         mvc.perform(get("/api/v1/me"))

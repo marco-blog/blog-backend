@@ -2,6 +2,7 @@ package net.java21.blog.backend.seo.repository;
 
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
 import static net.java21.blog.backend.post.domain.QPost.post;
+import static net.java21.blog.backend.releasenote.domain.QReleaseNote.releaseNote;
 import static net.java21.blog.backend.topic.domain.QTopic.topic;
 import static net.java21.blog.backend.user.domain.QUser.user;
 
@@ -13,6 +14,7 @@ import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
 import net.java21.blog.backend.post.repository.PostExposure;
+import net.java21.blog.backend.releasenote.domain.ReleaseNoteStatus;
 import net.java21.blog.backend.topic.domain.QTopic;
 import org.springframework.stereotype.Repository;
 
@@ -97,5 +99,17 @@ public class SitemapQueryRepository {
                     return parentSlug == null ? "/topics/" + slug : "/topics/" + parentSlug + "/" + slug;
                 })
                 .toList();
+    }
+
+    /** 게시된 릴리스 노트의 버전과 수정 시각(003 FR-164), 버전 내림차순. 초안은 없다. */
+    public List<SitemapReleaseNoteRow> findReleaseNotes() {
+        return queryFactory
+                .select(Projections.constructor(SitemapReleaseNoteRow.class, releaseNote.version,
+                        releaseNote.updatedAt))
+                .from(releaseNote)
+                .where(releaseNote.status.eq(ReleaseNoteStatus.PUBLISHED))
+                .orderBy(releaseNote.versionMajor.desc(), releaseNote.versionMinor.desc(),
+                        releaseNote.versionPatch.desc())
+                .fetch();
     }
 }

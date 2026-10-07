@@ -77,7 +77,7 @@ class PostControllerTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final PostDetailResponse DETAIL = new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>", null,
             "본문", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2,
-            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null);
+            true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null, 31L);
     private static final PostSummaryResponse SUMMARY = new PostSummaryResponse(123L, "제목", "본문", null, null,
             List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, null, null);
 
@@ -163,14 +163,15 @@ class PostControllerTest {
 
         mvc.perform(post("/api/v1/blogs/marco/posts/drafts").cookie(authCookies.user(7L))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"\",\"contentMarkdown\":\"본문\",\"categoryId\":12,\"tags\":[\"spring\"]}"))
+                        .content("{\"title\":\"\",\"contentMarkdown\":\"본문\",\"categoryId\":12,\"tags\":[\"spring\"],"
+                                + "\"topicId\":31}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/posts/123/draft"))
                 .andExpect(jsonPath("$.result.id").value(123))
                 .andExpect(jsonPath("$.result.savedAt").value("2026-10-06T04:24:19Z"));
         ArgumentCaptor<DraftWriteRequest> request = ArgumentCaptor.forClass(DraftWriteRequest.class);
         verify(postDraftService).create(eq(7L), eq("marco"), request.capture());
-        assertThat(request.getValue()).isEqualTo(new DraftWriteRequest("", "본문", 12L, List.of("spring")));
+        assertThat(request.getValue()).isEqualTo(new DraftWriteRequest("", "본문", 12L, List.of("spring"), 31L));
     }
 
     @Test
@@ -262,7 +263,7 @@ class PostControllerTest {
     void detailPassesLoggedInViewer() throws Exception {
         when(postService.detail(123L, 7L)).thenReturn(new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>",
                 null, "본문", null, null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2, true,
-                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true));
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true, null));
         mvc.perform(get("/api/v1/posts/123").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.likedByMe").value(true))
@@ -281,7 +282,7 @@ class PostControllerTest {
     @Test
     void getDraftReturnsDraftWriteWithSavedAt() throws Exception {
         when(postDraftService.get(7L, 123L))
-                .thenReturn(new DraftResponse("제목", "본문", 12L, List.of("spring"), NOW));
+                .thenReturn(new DraftResponse("제목", "본문", 12L, List.of("spring"), 31L, NOW));
 
         mvc.perform(get("/api/v1/posts/123/draft").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
@@ -289,6 +290,7 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.result.contentMarkdown").value("본문"))
                 .andExpect(jsonPath("$.result.categoryId").value(12))
                 .andExpect(jsonPath("$.result.tags[0]").value("spring"))
+                .andExpect(jsonPath("$.result.topicId").value(31))
                 .andExpect(jsonPath("$.result.savedAt").value("2026-10-06T04:24:19Z"));
     }
 
@@ -337,13 +339,15 @@ class PostControllerTest {
 
         mvc.perform(post("/api/v1/posts/123/publish").cookie(authCookies.user(7L)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"visibility\":\"PUBLIC\",\"thumbnailMediaKey\":\"k3Jd9fQ2xLmA7pZ0bR5tYw\","
-                                + "\"commentEnabled\":true,\"categoryId\":12,\"tags\":[\"spring\"]}"))
+                                + "\"commentEnabled\":true,\"categoryId\":12,\"tags\":[\"spring\"],\"topicId\":31}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.id").value(123))
+                .andExpect(jsonPath("$.result.topicId").value(31))
                 .andExpect(jsonPath("$.result.status").value("PUBLISHED"));
         ArgumentCaptor<PublishSettingsRequest> request = ArgumentCaptor.forClass(PublishSettingsRequest.class);
         verify(postPublishService).publish(eq(7L), eq(123L), request.capture());
         assertThat(request.getValue().visibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(request.getValue().topicId()).isEqualTo(31L);
     }
 
     @Test

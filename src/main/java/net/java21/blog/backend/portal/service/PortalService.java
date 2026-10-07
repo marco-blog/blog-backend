@@ -55,7 +55,7 @@ public class PortalService {
             Instant now = criteria.now();
             List<PortalCardResponse> curations = toCards(
                     cards.findByIds(sections.findActiveCurationPostIds(criteria, now, CURATION_LIMIT), criteria));
-            List<PortalCardResponse> popular = toCards(cards.findByIds(popularIds(criteria), criteria));
+            List<PortalCardResponse> popular = toCards(cards.findByIds(popularIds(), criteria));
             LatestSection latest = latestSection(criteria, null);
             List<PopularTagResponse> tags = sections
                     .findPopularTags(criteria, now.minus(properties.popularWindow()), POPULAR_TAG_LIMIT)
@@ -81,8 +81,9 @@ public class PortalService {
         return cache.get("POPULARITY", () -> popularityCalculator.calculate(criteriaFactory.now()));
     }
 
-    private List<Long> popularIds(PortalCriteria criteria) {
-        PopularitySnapshot snapshot = cache.get("POPULARITY", () -> popularityCalculator.calculate(criteria));
+    private List<Long> popularIds() {
+        // 캐시가 뒤에서 다시 부르는 계산 함수는 요청의 기준 시각(criteria)을 붙잡지 않는다(popularity()와 같은 함수).
+        PopularitySnapshot snapshot = popularity();
         return PerBlogCap.apply(snapshot.entries(), PopularitySnapshot.Entry::blogId, PerBlogCap.PER_BLOG,
                 POPULAR_LIMIT).items().stream().map(PopularitySnapshot.Entry::postId).toList();
     }

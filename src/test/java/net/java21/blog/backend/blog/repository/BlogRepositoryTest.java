@@ -25,6 +25,7 @@ import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.QueryCounter;
+import net.java21.blog.backend.topic.service.TopicService;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.hibernate.Hibernate;
@@ -64,6 +65,8 @@ class BlogRepositoryTest {
     private QueryCounter queryCounter;
     @MockitoBean
     private MediaReferenceService mediaReferences;
+    @MockitoBean
+    private TopicService topicService;
 
     private User marco;
     private User other;
