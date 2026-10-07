@@ -177,6 +177,27 @@ class PostSearchRepositoryTest {
         assertThat(second.getContent()).extracting(SearchPostRow::id).containsExactly(ids[2], ids[1]);
     }
 
+    @Test
+    void blogFilterKeepsOnlyThatBlogsPostsAndTheExposureRules() {
+        long[] ids = new long[2];
+        inTransaction(() -> {
+            Blog mine = blog(user(UserStatus.ACTIVE), "내 블로그");
+            ids[0] = mine.getId();
+            ids[1] = post(mine, "내 글 " + word, "본문", PostVisibility.PUBLIC, 1).getId();
+            post(mine, "내 비공개 " + word, "본문", PostVisibility.PRIVATE, 2);
+            Post tagged = post(blog(user(UserStatus.ACTIVE), "남의 블로그"), "남의 글", "본문", PostVisibility.PUBLIC, 3);
+            tag(tagged, word);
+        });
+
+        queryCounter.reset();
+        Page<SearchPostRow> page = repository.search(parser.parse(word), ids[0], PageRequest.of(0, 20));
+
+        assertThat(queryCounter.count()).isEqualTo(2);
+        assertThat(page.getContent()).extracting(SearchPostRow::id).containsExactly(ids[1]);
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(repository.search(parser.parse(word), PageRequest.of(0, 20)).getTotalElements()).isEqualTo(2);
+    }
+
     private void inTransaction(Runnable work) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             work.run();

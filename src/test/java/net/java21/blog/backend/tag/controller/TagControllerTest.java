@@ -49,8 +49,8 @@ class TagControllerTest {
     @Test
     void taggedPostsArePagedSummariesWithBlogHandle() throws Exception {
         PostSummaryResponse summary = new PostSummaryResponse(7L, "글", "요약", null, new CategoryRef(3L, "Spring"),
-                List.of("spring boot"), 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, null,
-                null);
+                List.of("spring boot"), 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, false,
+                null, null);
         when(tagService.taggedPosts(eq("spring boot"), any()))
                 .thenReturn(new PageImpl<>(List.of(new TaggedPostSummaryResponse(summary, "marco")),
                         PageRequest.of(1, 20), 21));

@@ -6,9 +6,11 @@ import java.util.Map;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.guestbook.service.GuestbookService;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.manage.repository.ManagePostRow;
+import net.java21.blog.backend.stats.service.VisitorStatsService;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,18 +30,23 @@ public class ManageDashboardService {
     private final TagQueryRepository tagQueryRepository;
     private final JobsProperties jobsProperties;
     private final ManageCommentService commentService;
+    private final GuestbookService guestbookService;
+    private final VisitorStatsService visitorStats;
 
     public ManageDashboardService(BlogAccess blogAccess, ManagePostQueryRepository repository,
             TagQueryRepository tagQueryRepository, JobsProperties jobsProperties,
-            ManageCommentService commentService) {
+            ManageCommentService commentService, GuestbookService guestbookService,
+            VisitorStatsService visitorStats) {
         this.blogAccess = blogAccess;
         this.repository = repository;
         this.tagQueryRepository = tagQueryRepository;
         this.jobsProperties = jobsProperties;
         this.commentService = commentService;
+        this.guestbookService = guestbookService;
+        this.visitorStats = visitorStats;
     }
 
-    /** 쿼리 6회(블로그, 임시저장 수, 최근 글, 태그 일괄 조회, 새 댓글 수, 최근 댓글). */
+    /** 쿼리 9회(블로그, 임시저장 수, 최근 글, 태그 일괄 조회, 새 댓글 수, 최근 댓글, 새 방명록 수, 최근 방명록, 어제·오늘 방문). */
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(long userId, String handle) {
         Blog blog = blogAccess.requireOwnedActiveBlog(handle, userId);
@@ -50,6 +57,8 @@ public class ManageDashboardService {
                 .map(row -> row.toResponse(jobsProperties.trashRetention(), tags.get(row.id())))
                 .toList();
         ManageCommentService.CommentStats comments = commentService.stats(blog.getId(), RECENT_SIZE);
-        return new DashboardResponse(draftCount, recentPosts, comments.newComments7d(), comments.recentComments());
+        GuestbookService.GuestbookStats guestbook = guestbookService.stats(blog.getId(), RECENT_SIZE);
+        return new DashboardResponse(draftCount, recentPosts, comments.newComments7d(), comments.recentComments(),
+                guestbook.newGuestbook7d(), guestbook.recentGuestbook(), visitorStats.counts(blog));
     }
 }

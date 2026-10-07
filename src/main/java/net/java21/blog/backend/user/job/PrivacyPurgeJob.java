@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 
 import net.java21.blog.backend.common.job.JobsProperties;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
+import net.java21.blog.backend.guest.GuestProperties;
 import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
 import net.java21.blog.backend.user.PrivacyProperties;
@@ -31,6 +32,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       (002 data-model notifications).</li>
  *   <li>{@code blog.privacy.login-history-retention(90일)}이 지난 로그인 기록을 지운다.</li>
  *   <li>만료된 비밀번호 재설정 토큰과 절대 만료가 지난 리프레시 토큰을 지운다.</li>
+ *   <li>004: {@code blog.guest.ip-retention(90일)}이 지난 비회원 댓글·방명록의 IP({@code guest_ip_enc})만 비운다
+ *       (내용·이름·비밀번호 해시는 그대로, 001 FR-134, research B6).</li>
  * </ol>
  * {@code blog.jobs.purge-batch-size}건씩 트랜잭션을 나눠 처리하고 건수를 로그에 남긴다. 서버 1대 전제라 분산 락은 없다.
  */
@@ -52,24 +55,27 @@ public class PrivacyPurgeJob {
     private final MediaReferenceService mediaReferences;
     /** 받은 알림 삭제. 없으면(알림을 다루지 않는 슬라이스 테스트) 건너뛴다. */
     private final NotificationQueryRepository notifications;
+    private final GuestProperties guest;
 
     public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
             PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
             JobsProperties jobs, Clock clock) {
-        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, null, null);
+        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, null, null,
+                GuestProperties.defaults());
     }
 
     public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
             PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
             JobsProperties jobs, Clock clock, MediaReferenceService mediaReferences) {
-        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, mediaReferences, null);
+        this(repository, loginHistory, hasher, transactionTemplate, privacy, jobs, clock, mediaReferences, null,
+                GuestProperties.defaults());
     }
 
     @Autowired
     public PrivacyPurgeJob(PrivacyPurgeRepository repository, LoginHistoryQueryRepository loginHistory,
             PersonalDataHasher hasher, TransactionTemplate transactionTemplate, PrivacyProperties privacy,
             JobsProperties jobs, Clock clock, MediaReferenceService mediaReferences,
-            NotificationQueryRepository notifications) {
+            NotificationQueryRepository notifications, GuestProperties guest) {
         this.repository = repository;
         this.loginHistory = loginHistory;
         this.hasher = hasher;
@@ -79,10 +85,11 @@ public class PrivacyPurgeJob {
         this.clock = clock;
         this.mediaReferences = mediaReferences;
         this.notifications = notifications;
+        this.guest = guest;
     }
 
-    /** 처리 결과(파기한 회원 수, 지운 로그인 기록·재설정 토큰·리프레시 토큰 수). */
-    public record Result(long users, long loginHistory, long resetTokens, long refreshTokens) {
+    /** 처리 결과(파기한 회원 수, 지운 로그인 기록·재설정 토큰·리프레시 토큰 수, IP를 비운 비회원 댓글·방명록 수). */
+    public record Result(long users, long loginHistory, long resetTokens, long refreshTokens, long guestIps) {
     }
 
     @Scheduled(cron = "${blog.jobs.privacy-purge-cron:0 0 4 * * *}")
@@ -103,9 +110,14 @@ public class PrivacyPurgeJob {
                 repository::deleteResetTokens);
         long refreshTokens = inBatches(() -> repository.findExpiredRefreshTokenIds(now, batch),
                 repository::deleteRefreshTokens);
-        log.info("Privacy purge finished: users={}, loginHistory={}, resetTokens={}, refreshTokens={}",
-                users, history, resetTokens, refreshTokens);
-        return new Result(users, history, resetTokens, refreshTokens);
+        Instant guestIpCutoff = now.minus(guest.ipRetention());
+        long guestIps = inBatches(() -> repository.findGuestIpCommentIds(guestIpCutoff, batch),
+                repository::clearCommentGuestIp)
+                + inBatches(() -> repository.findGuestIpGuestbookIds(guestIpCutoff, batch),
+                        repository::clearGuestbookGuestIp);
+        log.info("Privacy purge finished: users={}, loginHistory={}, resetTokens={}, refreshTokens={}, guestIps={}",
+                users, history, resetTokens, refreshTokens, guestIps);
+        return new Result(users, history, resetTokens, refreshTokens, guestIps);
     }
 
     private long purgeUsers(List<Long> ids) {

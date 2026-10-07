@@ -14,6 +14,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
+import net.java21.blog.backend.stats.BlogCalendar;
+import net.java21.blog.backend.stats.StatsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
@@ -78,7 +80,8 @@ class PostServiceTest {
     void setUp() {
         service = new PostService(postRepository, postDraftRepository, postQueryRepository,
                 new PostAccess(postRepository), new BlogAccess(blogRepository), new CategoryAccess(categoryRepository),
-                tagQueryRepository, postLikeRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                tagQueryRepository, postLikeRepository, Clock.fixed(NOW, ZoneOffset.UTC),
+                new BlogCalendar(StatsProperties.defaults(), Clock.fixed(NOW, ZoneOffset.UTC)));
         owner = TestEntities.user(OWNER);
         blog = TestEntities.blog(10L, owner, "marco");
         post = TestEntities.post(100L, blog, "제목");
@@ -225,7 +228,7 @@ class PostServiceTest {
     void blogPostsUsesVisibleBlogAndMapsRows() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
         PostSummaryRow row = new PostSummaryRow(100L, "제목", "요약", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, null, 3,
-                1, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW);
+                1, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false);
         when(postQueryRepository.findListablePosts(10L, PostListFilter.NONE, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 

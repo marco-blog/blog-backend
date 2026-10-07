@@ -14,10 +14,15 @@ import java.util.Map;
 
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
+import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.guestbook.dto.GuestbookEntryResponse;
+import net.java21.blog.backend.guestbook.service.GuestbookService;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
+import net.java21.blog.backend.stats.dto.VisitorCountsResponse;
+import net.java21.blog.backend.stats.service.VisitorStatsService;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.manage.repository.ManagePostRow;
 import net.java21.blog.backend.post.domain.PostStatus;
@@ -43,6 +48,10 @@ class ManageDashboardServiceTest {
     private TagQueryRepository tagQueryRepository;
     @Mock
     private ManageCommentService commentService;
+    @Mock
+    private GuestbookService guestbookService;
+    @Mock
+    private VisitorStatsService visitorStats;
 
     @Test
     void draftCountAndFiveRecentPosts() {
@@ -51,8 +60,12 @@ class ManageDashboardServiceTest {
         when(repository.countDrafts(10L)).thenReturn(2L);
         when(repository.findRecentPosts(10L, ManageDashboardService.RECENT_SIZE)).thenReturn(List.of(
                 new ManagePostRow(3L, "최근 글", "요약", null, 7L, "Spring", 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW,
-                        NOW, false, null)));
+                        NOW, false, null, false)));
         when(commentService.stats(10L, 5)).thenReturn(new ManageCommentService.CommentStats(1, List.of()));
+        GuestbookEntryResponse secret = new GuestbookEntryResponse(9L, "비밀 인사", true, false,
+                AuthorResponse.guest("손님"), NOW, NOW, List.of());
+        when(guestbookService.stats(10L, 5)).thenReturn(new GuestbookService.GuestbookStats(2, List.of(secret)));
+        when(visitorStats.counts(blog)).thenReturn(new VisitorCountsResponse(12, 30, 1520));
 
         when(tagQueryRepository.findTagNames(List.of(3L))).thenReturn(Map.of(3L, List.of("spring")));
 
@@ -67,6 +80,10 @@ class ManageDashboardServiceTest {
                 .satisfies(p -> assertThat(p.category().name()).isEqualTo("Spring"));
         assertThat(dashboard.newComments7d()).isEqualTo(1);
         assertThat(dashboard.recentComments()).isEmpty();
+        assertThat(dashboard.newGuestbook7d()).isEqualTo(2);
+        assertThat(dashboard.recentGuestbook()).singleElement()
+                .satisfies(e -> assertThat(e.content()).isEqualTo("비밀 인사"));
+        assertThat(dashboard.visitors()).isEqualTo(new VisitorCountsResponse(12, 30, 1520));
     }
 
     @Test
@@ -80,6 +97,7 @@ class ManageDashboardServiceTest {
 
     private ManageDashboardService service() {
         return new ManageDashboardService(blogAccess, repository, tagQueryRepository,
-                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), commentService);
+                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), commentService, guestbookService,
+                visitorStats);
     }
 }

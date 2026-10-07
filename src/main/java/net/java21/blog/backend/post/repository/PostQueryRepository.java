@@ -47,9 +47,19 @@ public class PostQueryRepository {
      * 블로그 글 목록(홈·카테고리별·태그별): 목록 노출 가능 글만, 발행 최신순(FR-011, FR-018, FR-026). 쿼리 2회(목록, 전체 수).
      * 주인이 요청해도 같다(주인의 전체 목록은 블로그 관리 화면). 카테고리 조건은 상위 카테고리면 하위 카테고리 글을 포함하고
      * (tasks.md 결정 4), 태그 조건은 정규화한 이름이 같은 태그가 달린 글이다. 카테고리는 LEFT JOIN으로 함께 읽는다.
+     * 004: 조건이 없는 홈 목록은 공지 글을 빼고(FR-059), 월 조건은 발행 시각 [from, to) 범위다(research B12).
      */
     public Page<PostSummaryRow> findListablePosts(Long blogId, PostListFilter filter, Pageable pageable) {
         BooleanExpression where = blog.id.eq(blogId).and(PostExposure.listable());
+        if (filter.isHome()) {
+            where = where.and(post.notice.isFalse());
+        }
+        if (filter.publishedFrom() != null) {
+            where = where.and(post.publishedAt.goe(filter.publishedFrom()));
+        }
+        if (filter.publishedTo() != null) {
+            where = where.and(post.publishedAt.lt(filter.publishedTo()));
+        }
         if (filter.categoryId() != null) {
             where = where.and(category.id.eq(filter.categoryId()).or(category.parent.id.eq(filter.categoryId())));
         }
@@ -59,11 +69,20 @@ public class PostQueryRepository {
                     .where(postTag.post.id.eq(post.id), postTag.tag.name.eq(filter.tag()))
                     .exists());
         }
+        return page(where, pageable);
+    }
+
+    /** 블로그의 공지 글(004 FR-059): 목록 노출 가능 + 공지, 발행 최신순. 쿼리 2회(목록, 전체 수). */
+    public Page<PostSummaryRow> findNotices(Long blogId, Pageable pageable) {
+        return page(blog.id.eq(blogId).and(PostExposure.listable()).and(post.notice.isTrue()), pageable);
+    }
+
+    private Page<PostSummaryRow> page(BooleanExpression where, Pageable pageable) {
         List<PostSummaryRow> rows = queryFactory
                 .select(Projections.constructor(PostSummaryRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt))
+                        post.updatedAt, post.notice))
                 .from(post)
                 .join(post.blog, blog)
                 .join(blog.user, user)

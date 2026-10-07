@@ -18,6 +18,7 @@ import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.category.domain.Category;
 import net.java21.blog.backend.common.domain.BaseTimeEntity;
 import net.java21.blog.backend.topic.domain.Topic;
+import org.hibernate.annotations.Check;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -27,12 +28,15 @@ import org.hibernate.type.SqlTypes;
  * DRAFT/PUBLISHED → DELETED(휴지통, 직전 상태 보관), DELETED → 직전 상태(복구, FR-084).
  * 작성 중 내용은 {@link PostDraft}에 두고 발행 때 이 행에 반영한다(FR-108).
  * 카테고리는 LAZY 연관이며 목록 조회는 DTO projection으로 읽는다(N+1 없음). 002의 좋아요 수({@code like_count})는 읽기 전용으로 매핑하고
- * (좋아요·취소의 원자적 UPDATE로만 바뀐다). 003의 주제({@code topic_id}, 소분류)는 LAZY 연관으로 매핑하고, 004~005가 더한 컬럼
- * (password_hash 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * (좋아요·취소의 원자적 UPDATE로만 바뀐다). 003의 주제({@code topic_id}, 소분류)는 LAZY 연관으로 매핑한다.
+ * 004의 보호 글 비밀번호({@code password_hash}), 예약 시각({@code scheduled_at}), 공지({@code notice})를 매핑하고 스키마의
+ * {@code ck_posts_protected_password}를 {@link Check}로도 적어 H2 테스트에서도 같은 제약이 걸린다(004 research B2).
+ * 005가 더한 컬럼({@code status_before_hidden})은 NULL 허용이므로 매핑하지 않는다.
  * 노출 판단은 {@code PostExposure} 한 곳에서 한다.
  */
 @Entity
 @Table(name = "posts")
+@Check(name = "ck_posts_protected_password", constraints = "(visibility = 'PROTECTED') = (password_hash IS NOT NULL)")
 public class Post extends BaseTimeEntity {
 
     @Id
@@ -106,6 +110,18 @@ public class Post extends BaseTimeEntity {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /** 보호 글 비밀번호 BCrypt(004 FR-062). 공개 범위가 PROTECTED일 때만 값이 있다. 어떤 응답에도 넣지 않는다. */
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
+    /** 예약 발행 시각(004 FR-064). SCHEDULED일 때 값이 있다. */
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
+
+    /** 공지 글(004 FR-059). 블로그 홈 목록에서 빠지고 공지 영역에 따로 보인다. */
+    @Column(nullable = false)
+    private boolean notice;
+
     protected Post() {
     }
 
@@ -156,6 +172,11 @@ public class Post extends BaseTimeEntity {
         if (publishedAt == null) {
             this.publishedAt = now;
         }
+    }
+
+    /** 공지 지정·해제(004 FR-059). */
+    public void changeNotice(boolean notice) {
+        this.notice = notice;
     }
 
     /** 카테고리 지정(발행, FR-024). null이면 미분류. */
@@ -269,5 +290,17 @@ public class Post extends BaseTimeEntity {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public Instant getScheduledAt() {
+        return scheduledAt;
+    }
+
+    public boolean isNotice() {
+        return notice;
     }
 }

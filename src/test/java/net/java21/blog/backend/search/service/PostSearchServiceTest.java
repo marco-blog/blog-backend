@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -13,7 +14,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import net.java21.blog.backend.blog.service.BlogAccess;
 import net.java21.blog.backend.common.error.BusinessException;
+import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
@@ -46,26 +49,28 @@ class PostSearchServiceTest {
     private PostSearchRepository searchRepository;
     @Mock
     private TagQueryRepository tagQueryRepository;
+    @Mock
+    private BlogAccess blogAccess;
 
     private PostSearchService service;
 
     @BeforeEach
     void setUp() {
         service = new PostSearchService(new SearchQueryParser(new SearchProperties(5, 2)), searchRepository,
-                tagQueryRepository);
+                tagQueryRepository, blogAccess);
     }
 
     @Test
     void searchesWithParsedQueryAndLoadsTagsOnce() {
         Pageable pageable = PageRequest.of(0, 2);
-        when(searchRepository.search(any(), eq(pageable))).thenReturn(new PageImpl<>(
+        when(searchRepository.search(any(), isNull(), eq(pageable))).thenReturn(new PageImpl<>(
                 List.of(row(1L, PostVisibility.PUBLIC), row(2L, PostVisibility.PUBLIC)), pageable, 7));
         when(tagQueryRepository.findTagNames(List.of(1L, 2L))).thenReturn(Map.of(1L, List.of("java", "spring")));
 
         Page<SearchPostResponse> page = service.search(" 스프링 부트 ", pageable);
 
         ArgumentCaptor<SearchQuery> query = ArgumentCaptor.forClass(SearchQuery.class);
-        verify(searchRepository).search(query.capture(), eq(pageable));
+        verify(searchRepository).search(query.capture(), isNull(), eq(pageable));
         assertThat(query.getValue().booleanQuery()).isEqualTo("+\"스프링\" +\"부트\"");
         verify(tagQueryRepository, times(1)).findTagNames(any());
         assertThat(page.getTotalElements()).isEqualTo(7);
@@ -83,7 +88,7 @@ class PostSearchServiceTest {
     @Test
     void rowsWithoutVisibleBodyShowOnlyTheTitle() {
         Pageable pageable = PageRequest.of(0, 20);
-        when(searchRepository.search(any(), eq(pageable)))
+        when(searchRepository.search(any(), isNull(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(row(3L, PostVisibility.PRIVATE)), pageable, 1));
 
         SearchPostResponse response = service.search("스프링", pageable).getContent().getFirst();
@@ -99,6 +104,26 @@ class PostSearchServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
         verifyNoInteractions(searchRepository, tagQueryRepository);
+    }
+
+    @Test
+    void blogSearchLimitsToThatBlogAndUnknownBlogIs404() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(blogAccess.requireVisibleBlog("marco"))
+                .thenReturn(TestEntities.blog(10L, TestEntities.user(1L), "marco"));
+        when(searchRepository.search(any(), eq(10L), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(row(4L, PostVisibility.PUBLIC)), pageable, 1));
+
+        assertThat(service.search("스프링", "marco", pageable).getContent()).extracting(SearchPostResponse::id)
+                .containsExactly(4L);
+        when(searchRepository.search(any(), isNull(), eq(pageable))).thenReturn(new PageImpl<>(List.of(), pageable, 0));
+        assertThat(service.search("스프링", " ", pageable).getContent()).isEmpty();
+
+        when(blogAccess.requireVisibleBlog("ghost"))
+                .thenThrow(new BusinessException(ErrorCode.BLOG_NOT_FOUND, "Blog not found"));
+        assertThatThrownBy(() -> service.search("스프링", "ghost", pageable))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.BLOG_NOT_FOUND));
     }
 
     private static SearchPostRow row(Long id, PostVisibility visibility) {

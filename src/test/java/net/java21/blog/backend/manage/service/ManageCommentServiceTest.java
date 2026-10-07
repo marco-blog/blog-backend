@@ -19,7 +19,9 @@ import net.java21.blog.backend.comment.repository.CommentQueryRepository;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.guestbook.service.GuestbookService;
 import net.java21.blog.backend.manage.dto.DashboardResponse;
+import net.java21.blog.backend.stats.service.VisitorStatsService;
 import net.java21.blog.backend.manage.dto.ManageCommentResponse;
 import net.java21.blog.backend.manage.repository.ManagePostQueryRepository;
 import net.java21.blog.backend.support.MutableClock;
@@ -52,6 +54,10 @@ class ManageCommentServiceTest {
     private CommentQueryRepository repository;
     @Mock
     private ManagePostQueryRepository postRepository;
+    @Mock
+    private GuestbookService guestbookService;
+    @Mock
+    private VisitorStatsService visitorStats;
 
     private final Blog blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
 
@@ -99,6 +105,7 @@ class ManageCommentServiceTest {
 
     @Test
     void dashboardCarriesCommentNumbers() {
+        when(guestbookService.stats(10L, 5)).thenReturn(new GuestbookService.GuestbookStats(0, List.of()));
         when(blogAccess.requireOwnedActiveBlog("marco", 1L)).thenReturn(blog);
         when(postRepository.countDrafts(10L)).thenReturn(0L);
         when(postRepository.findRecentPosts(10L, 5)).thenReturn(List.of());
@@ -106,7 +113,9 @@ class ManageCommentServiceTest {
         when(repository.findRecentBlogComments(10L, 5)).thenReturn(List.of(ROW));
 
         DashboardResponse dashboard = new ManageDashboardService(blogAccess, postRepository, tagQueryRepository,
-                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), service()).dashboard(1L, "marco");
+                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), service(), guestbookService,
+                visitorStats)
+                .dashboard(1L, "marco");
 
         assertThat(dashboard.newComments7d()).isEqualTo(4);
         assertThat(dashboard.recentComments()).singleElement()

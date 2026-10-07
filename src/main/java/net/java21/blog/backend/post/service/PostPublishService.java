@@ -97,6 +97,9 @@ public class PostPublishService {
         Instant now = clock.instant();
         post.publish(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
                 settings.visibility(), commentEnabled, now);
+        if (settings.notice() != null) {
+            post.changeNotice(settings.notice());
+        }
         // 003 FR-087 "새로 시작한 블로그": 블로그의 첫 발행(비공개 발행 포함)만 남긴다. 004 예약 발행도 같은 메서드를 부른다.
         post.getBlog().markFirstPublished(now);
         if (draft != null) {

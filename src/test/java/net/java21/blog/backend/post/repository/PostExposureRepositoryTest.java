@@ -1,5 +1,8 @@
 package net.java21.blog.backend.post.repository;
 
+import net.java21.blog.backend.stats.BlogCalendar;
+import net.java21.blog.backend.stats.StatsProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
 import static net.java21.blog.backend.post.domain.QPost.post;
 import static net.java21.blog.backend.user.domain.QUser.user;
@@ -51,8 +54,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 class PostExposureRepositoryTest {
 
     @TestConfiguration(proxyBeanMethods = false)
+    @EnableConfigurationProperties(StatsProperties.class)
     @Import({PostQueryRepository.class, PostService.class, PostAccess.class, BlogAccess.class, CategoryAccess.class,
-            TagQueryRepository.class})
+            TagQueryRepository.class, BlogCalendar.class})
     static class Services {
     }
 

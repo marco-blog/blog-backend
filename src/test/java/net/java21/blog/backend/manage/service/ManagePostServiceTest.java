@@ -76,7 +76,7 @@ class ManagePostServiceTest {
         ManagePostFilter trash = new ManagePostFilter(PostStatus.DELETED, null, null, null);
         Instant deletedAt = NOW.minus(Duration.ofDays(2));
         ManagePostRow row = new ManagePostRow(5L, "버린 글", "요약", null, 7L, "Spring", 3, 0, PostVisibility.PRIVATE,
-                PostStatus.DELETED, NOW.minus(Duration.ofDays(9)), deletedAt, false, deletedAt);
+                PostStatus.DELETED, NOW.minus(Duration.ofDays(9)), deletedAt, false, deletedAt, false);
         when(repository.findPosts(eq(10L), eq(trash), eq(NOW.minus(Duration.ofDays(30))), any()))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
         when(tagQueryRepository.findTagNames(List.of(5L))).thenReturn(Map.of(5L, List.of("jpa", "spring")));
@@ -96,7 +96,7 @@ class ManagePostServiceTest {
     void liveListHasNoPurgeAt() {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
         ManagePostRow row = new ManagePostRow(5L, "글", null, null, null, null, 0, 0, PostVisibility.PUBLIC,
-                PostStatus.DRAFT, null, NOW, true, null);
+                PostStatus.DRAFT, null, NOW, true, null, false);
         when(repository.findPosts(eq(10L), eq(ManagePostFilter.ALL), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(row)));
 
@@ -157,6 +157,20 @@ class ManagePostServiceTest {
 
         assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L), BulkAction.DELETE, null, null))
                 .updated()).isEqualTo(1);
+    }
+
+    /** 004 T050: 공지 지정·해제(휴지통 글은 저장소 쿼리가 건너뜀). */
+    @Test
+    void noticeAndUnnoticeChangeOwnedPosts() {
+        when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
+        when(repository.countOwned(10L, List.of(4L, 5L))).thenReturn(2L);
+        when(repository.changeNotice(10L, List.of(4L, 5L), true)).thenReturn(1L);
+        when(repository.changeNotice(10L, List.of(4L, 5L), false)).thenReturn(2L);
+
+        assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L, 4L), BulkAction.NOTICE, null,
+                null)).updated()).isEqualTo(1);
+        assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L), BulkAction.UNNOTICE, null,
+                null)).updated()).isEqualTo(2);
     }
 
     @Test

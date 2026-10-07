@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
+import net.java21.blog.backend.stats.BlogCalendar;
+import net.java21.blog.backend.stats.StatsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
@@ -109,7 +111,8 @@ class PostCategoryTagServiceTest {
         CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access, blogAccess,
                 categoryAccess, tagQueryRepository,
-                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock);
+                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock,
+                new BlogCalendar(StatsProperties.defaults(), clock));
         publishService = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
@@ -224,7 +227,7 @@ class PostCategoryTagServiceTest {
     void blogPostsChecksCategoryNormalizesTagAndFillsTags() {
         var row = new PostSummaryRow(100L, "제목", "요약", null, 12L,
                 "Spring", 0, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED,
-                NOW, NOW);
+                NOW, NOW, false);
         when(postQueryRepository.findListablePosts(10L, new PostListFilter(12L, "spring boot"), PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(row)));
         when(tagQueryRepository.findTagNames(List.of(100L))).thenReturn(Map.of(100L, List.of("spring boot")));
@@ -239,6 +242,32 @@ class PostCategoryTagServiceTest {
         when(postQueryRepository.findListablePosts(10L, PostListFilter.NONE, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of()));
         assertThat(postService.blogPosts("marco", new PostListFilter(null, "  "), PageRequest.of(0, 20))).isEmpty();
+    }
+
+    /** 004 T050·T065: 월 조건은 기준 시간대(Asia/Seoul)의 [그 달 1일, 다음 달 1일) 범위로 넘긴다. */
+    @Test
+    void monthFilterBecomesServiceTimeZoneRange() {
+        java.time.YearMonth october = java.time.YearMonth.of(2026, 10);
+        PostListFilter expected = PostListFilter.ofMonth(october).withRange(Instant.parse("2026-09-30T15:00:00Z"),
+                Instant.parse("2026-10-31T15:00:00Z"));
+        when(postQueryRepository.findListablePosts(10L, expected, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThat(postService.blogPosts("marco", PostListFilter.ofMonth(october), PageRequest.of(0, 20))).isEmpty();
+    }
+
+    /** 004 T050: 공지 목록도 태그를 한 번에 채운다. */
+    @Test
+    void noticesFillTags() {
+        var row = new PostSummaryRow(100L, "공지", "요약", null, null, null, 0, 0, PostVisibility.PUBLIC,
+                PostStatus.PUBLISHED, NOW, NOW, true);
+        when(postQueryRepository.findNotices(10L, PageRequest.of(0, 5))).thenReturn(new PageImpl<>(List.of(row)));
+        when(tagQueryRepository.findTagNames(List.of(100L))).thenReturn(Map.of(100L, List.of("공지")));
+
+        PostSummaryResponse item = postService.notices("marco", PageRequest.of(0, 5)).getContent().getFirst();
+
+        assertThat(item.notice()).isTrue();
+        assertThat(item.tags()).containsExactly("공지");
     }
 
     @Test

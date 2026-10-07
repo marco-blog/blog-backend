@@ -10,7 +10,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
 
 /**
  * 글 목록 한 줄(contracts/api.md {@code PostSummary}). {@code deletedAt}·{@code purgeAt}은 휴지통 글에만 있다.
- * 카테고리는 미분류면 null, 태그는 이름순.
+ * 카테고리는 미분류면 null, 태그는 이름순. {@code notice}는 공지 글(004 FR-059).
  */
 public record PostSummaryResponse(
         Long id,
@@ -26,6 +26,7 @@ public record PostSummaryResponse(
         Instant publishedAt,
         Instant updatedAt,
         boolean hasDraft,
+        boolean notice,
         @JsonInclude(JsonInclude.Include.NON_NULL) Instant deletedAt,
         @JsonInclude(JsonInclude.Include.NON_NULL) Instant purgeAt) {
 }

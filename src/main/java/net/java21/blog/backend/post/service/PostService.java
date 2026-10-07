@@ -21,6 +21,7 @@ import net.java21.blog.backend.post.repository.PostExposure;
 import net.java21.blog.backend.post.repository.PostQueryRepository;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.post.repository.PostSummaryRow;
+import net.java21.blog.backend.stats.BlogCalendar;
 import net.java21.blog.backend.tag.domain.TagNormalizer;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
 import org.springframework.data.domain.Page;
@@ -44,11 +45,12 @@ public class PostService {
     private final TagQueryRepository tagQueryRepository;
     private final PostLikeRepository postLikeRepository;
     private final Clock clock;
+    private final BlogCalendar calendar;
 
     public PostService(PostRepository postRepository, PostDraftRepository postDraftRepository,
             PostQueryRepository postQueryRepository, PostAccess postAccess, BlogAccess blogAccess,
             CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository,
-            PostLikeRepository postLikeRepository, Clock clock) {
+            PostLikeRepository postLikeRepository, Clock clock, BlogCalendar calendar) {
         this.postRepository = postRepository;
         this.postDraftRepository = postDraftRepository;
         this.postQueryRepository = postQueryRepository;
@@ -58,6 +60,7 @@ public class PostService {
         this.tagQueryRepository = tagQueryRepository;
         this.postLikeRepository = postLikeRepository;
         this.clock = clock;
+        this.calendar = calendar;
     }
 
     /**
@@ -72,8 +75,23 @@ public class PostService {
             categoryAccess.requireInBlog(blog.getId(), filter.categoryId());
         }
         String tag = filter.tag() == null ? null : TagNormalizer.normalize(filter.tag());
-        PostListFilter normalized = new PostListFilter(filter.categoryId(), tag == null || tag.isEmpty() ? null : tag);
-        Page<PostSummaryRow> rows = postQueryRepository.findListablePosts(blog.getId(), normalized, pageable);
+        PostListFilter normalized = new PostListFilter(filter.categoryId(), tag == null || tag.isEmpty() ? null : tag,
+                filter.month(), null, null);
+        if (filter.month() != null) {
+            BlogCalendar.Range range = calendar.monthRange(filter.month());
+            normalized = normalized.withRange(range.from(), range.to());
+        }
+        return withTags(postQueryRepository.findListablePosts(blog.getId(), normalized, pageable));
+    }
+
+    /** 블로그 공지 목록(004 FR-059): 목록 노출 가능 공지, 발행 최신순. 쿼리 4회(블로그, 목록, 전체 수, 태그). */
+    @Transactional(readOnly = true)
+    public Page<PostSummaryResponse> notices(String handle, Pageable pageable) {
+        Blog blog = blogAccess.requireVisibleBlog(handle);
+        return withTags(postQueryRepository.findNotices(blog.getId(), pageable));
+    }
+
+    private Page<PostSummaryResponse> withTags(Page<PostSummaryRow> rows) {
         Map<Long, List<String>> tags = tagQueryRepository.findTagNames(
                 rows.getContent().stream().map(PostSummaryRow::id).toList());
         return rows.map(row -> row.toPublicResponse(tags.get(row.id())));
@@ -127,7 +145,8 @@ public class PostService {
         return new PostSummaryResponse(post.getId(), post.getTitle(), post.getSummary(), post.getThumbnailUrl(),
                 CategoryRef.of(post.getCategory()), tagNames(postId), post.getViewCount(), post.getCommentCount(),
                 post.getVisibility(), post.getStatus(),
-                post.getPublishedAt(), post.getUpdatedAt(), postDraftRepository.existsById(postId), null, null);
+                post.getPublishedAt(), post.getUpdatedAt(), postDraftRepository.existsById(postId),
+                post.isNotice(), null, null);
     }
 
     /** 글 하나의 태그 이름(이름순). 쿼리 1회. */

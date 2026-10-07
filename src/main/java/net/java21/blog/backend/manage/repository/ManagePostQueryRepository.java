@@ -97,6 +97,17 @@ public class ManagePostQueryRepository {
     }
 
     /**
+     * 이 블로그 글의 공지 여부를 한 번에 바꾼다(004 FR-059). 휴지통 글은 건너뛴다. 공지 지정은 글 수정이 아니므로
+     * {@code updated_at}을 바꾸지 않는다. 바뀐 행 수(이미 같은 값인 글 포함, 휴지통 제외).
+     */
+    public long changeNotice(Long blogId, Collection<Long> postIds, boolean notice) {
+        return queryFactory.update(post)
+                .set(post.notice, notice)
+                .where(post.blog.id.eq(blogId), post.id.in(postIds), post.status.ne(PostStatus.DELETED))
+                .execute();
+    }
+
+    /**
      * 이 블로그 글을 한 번에 휴지통으로(FR-084). 직전 상태를 {@code status_before_delete}에 남기므로 그 대입을 상태 변경보다 먼저 쓴다
      * (MySQL 단일 테이블 UPDATE는 SET을 왼쪽부터 평가한다). 이미 휴지통인 글은 그대로 둔다. 바뀐 행 수.
      */
@@ -143,7 +154,7 @@ public class ManagePostQueryRepository {
                 .select(Projections.constructor(ManagePostRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt, hasDraft, post.deletedAt))
+                        post.updatedAt, hasDraft, post.deletedAt, post.notice))
                 .from(post)
                 .leftJoin(post.category, category)
                 .leftJoin(postDraft).on(postDraft.postId.eq(post.id));

@@ -7,7 +7,7 @@ import java.util.List;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.service.BlogAccess;
-import net.java21.blog.backend.comment.dto.CommentAuthor;
+import net.java21.blog.backend.common.dto.AuthorResponse;
 import net.java21.blog.backend.comment.repository.BlogCommentRow;
 import net.java21.blog.backend.comment.repository.CommentQueryRepository;
 import net.java21.blog.backend.manage.dto.ManageCommentResponse;
@@ -58,7 +58,7 @@ public class ManageCommentService {
     }
 
     private static ManageCommentResponse toResponse(BlogCommentRow row) {
-        CommentAuthor author = row.userId() == null ? null : new CommentAuthor(row.userId(), row.nickname(),
+        AuthorResponse author = row.userId() == null ? null : AuthorResponse.member(row.userId(), row.nickname(),
                 Media.urlOf(row.profileMediaKey()));
         return new ManageCommentResponse(row.id(), row.content(), author, false, row.createdAt(), row.updatedAt(),
                 row.postId(), row.postTitle());

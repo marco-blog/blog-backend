@@ -7,5 +7,9 @@ public enum BulkAction {
     /** 카테고리 이동({@code categoryId}, 생략하면 미분류, T180) */
     MOVE_CATEGORY,
     /** 휴지통으로(FR-084) */
-    DELETE
+    DELETE,
+    /** 공지로 지정(004 FR-059). 휴지통 글은 건너뛴다 */
+    NOTICE,
+    /** 공지 해제(004 FR-059). 휴지통 글은 건너뛴다 */
+    UNNOTICE
 }

@@ -75,7 +75,10 @@ public class SecurityConfig {
     /** {@link #PUBLIC_GET} 아래에 있지만 주인만 쓰는 GET 경로(로그인 필요). 공개 규칙보다 먼저 검사한다. */
     static final String[] AUTHENTICATED_GET = {
             "/api/v1/blogs/*/posts/drafts/**",
-            "/api/v1/blogs/*/manage/**"
+            "/api/v1/blogs/*/manage/**",
+            // 004 내보내기·차단 목록(004 contracts/api.md): 주인만
+            "/api/v1/blogs/*/exports/**",
+            "/api/v1/blogs/*/blocks"
     };
 
     /**
@@ -91,7 +94,26 @@ public class SecurityConfig {
             "/api/v1/auth/password-reset/confirm",
             "/api/v1/posts/*/views",
             // 003 끝까지 읽음(FR-086): 방문자 브라우저가 보낸다
-            "/api/v1/posts/*/read-complete"
+            "/api/v1/posts/*/read-complete",
+            // 004 방문 기록·방명록·보호 글 열기·댓글(비회원 허용 여부는 서비스가 판단)·비밀 글 열기
+            "/api/v1/blogs/*/visits",
+            "/api/v1/blogs/*/guestbook",
+            "/api/v1/posts/*/unlock",
+            "/api/v1/posts/*/comments",
+            "/api/v1/comments/*/unlock",
+            "/api/v1/guestbook-entries/*/unlock"
+    };
+
+    /** 004 비회원도 비밀번호로 고치는 PATCH 경로(Origin 검사는 받는다). 회원·비회원 판단은 서비스가 한다. */
+    static final String[] PUBLIC_PATCH = {
+            "/api/v1/comments/*",
+            "/api/v1/guestbook-entries/*"
+    };
+
+    /** 004 비회원도 비밀번호로 지우는 DELETE 경로(Origin 검사는 받는다). 회원·비회원 판단은 서비스가 한다. */
+    static final String[] PUBLIC_DELETE = {
+            "/api/v1/comments/*",
+            "/api/v1/guestbook-entries/*"
     };
 
     @Bean
@@ -120,6 +142,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, AUTHENTICATED_GET).authenticated()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
+                        .requestMatchers(HttpMethod.PATCH, PUBLIC_PATCH).permitAll()
+                        .requestMatchers(HttpMethod.DELETE, PUBLIC_DELETE).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, ex) ->

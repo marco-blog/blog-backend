@@ -2,10 +2,7 @@ package net.java21.blog.backend.post.controller;
 
 import java.net.URI;
 import java.util.List;
-import java.util.UUID;
-import java.util.regex.Pattern;
 
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -13,7 +10,7 @@ import jakarta.validation.Valid;
 import net.java21.blog.backend.common.api.ApiResponse;
 import net.java21.blog.backend.common.api.PageRequests;
 import net.java21.blog.backend.common.web.CacheHeaders;
-import net.java21.blog.backend.post.PostsProperties;
+import net.java21.blog.backend.common.web.VisitorKeyResolver;
 import net.java21.blog.backend.post.dto.DraftResponse;
 import net.java21.blog.backend.post.dto.DraftWriteRequest;
 import net.java21.blog.backend.post.dto.LatestDraftResponse;
@@ -32,7 +29,6 @@ import net.java21.blog.backend.security.AuthUser;
 import net.java21.blog.backend.security.CurrentUser;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,19 +46,16 @@ public class PostController {
     /** 블로그 글 목록은 발행 최신순 고정(정렬 파라미터 없음). */
     private static final PageRequests BLOG_POSTS = PageRequests.sortableBy(Sort.by(Sort.Direction.DESC, "publishedAt"));
 
-    /** 방문자 쿠키 값: front가 발급하는 UUID 등 짧은 토큰만 받는다. */
-    private static final Pattern VISITOR_ID = Pattern.compile("[A-Za-z0-9-]{8,64}");
-
     private final PostService postService;
     private final PostDraftService postDraftService;
     private final PostPublishService postPublishService;
     private final ViewCountService viewCountService;
-    private final PostsProperties postsProperties;
+    private final VisitorKeyResolver visitorKeys;
     private final RelatedPostService relatedPostService;
     private final ReadCompleteService readCompleteService;
 
     public PostController(PostService postService, PostDraftService postDraftService,
-            PostPublishService postPublishService, ViewCountService viewCountService, PostsProperties postsProperties,
+            PostPublishService postPublishService, ViewCountService viewCountService, VisitorKeyResolver visitorKeys,
             RelatedPostService relatedPostService, ReadCompleteService readCompleteService) {
         this.postService = postService;
         this.readCompleteService = readCompleteService;
@@ -70,15 +63,23 @@ public class PostController {
         this.postDraftService = postDraftService;
         this.postPublishService = postPublishService;
         this.viewCountService = viewCountService;
-        this.postsProperties = postsProperties;
+        this.visitorKeys = visitorKeys;
     }
 
     @GetMapping("/api/v1/blogs/{handle}/posts")
     ApiResponse<List<PostSummaryResponse>> blogPosts(@PathVariable String handle,
             @RequestParam(required = false) Long category, @RequestParam(required = false) String tag,
+            @RequestParam(required = false) Integer year, @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return ApiResponse.page(postService.blogPosts(handle, new PostListFilter(category, tag),
+        return ApiResponse.page(postService.blogPosts(handle, PostListFilter.of(category, tag, year, month),
                 BLOG_POSTS.resolve(page, size, null)));
+    }
+
+    /** 공지 목록(004 FR-059). 블로그 홈은 {@code size=5}로 부른다. */
+    @GetMapping("/api/v1/blogs/{handle}/notices")
+    ApiResponse<List<PostSummaryResponse>> notices(@PathVariable String handle,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return ApiResponse.page(postService.notices(handle, BLOG_POSTS.resolve(page, size, null)));
     }
 
     @PostMapping("/api/v1/blogs/{handle}/posts/drafts")
@@ -152,7 +153,7 @@ public class PostController {
     ApiResponse<Void> view(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
             HttpServletRequest request, HttpServletResponse response) {
         Long viewerId = viewer == null ? null : viewer.userId();
-        viewCountService.record(id, viewerId, visitorKey(viewerId, request, response));
+        viewCountService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response));
         return ApiResponse.ok();
     }
 
@@ -164,44 +165,7 @@ public class PostController {
     ApiResponse<Void> readComplete(@CurrentUser(required = false) AuthUser viewer, @PathVariable Long id,
             HttpServletRequest request, HttpServletResponse response) {
         Long viewerId = viewer == null ? null : viewer.userId();
-        readCompleteService.record(id, viewerId, visitorKey(viewerId, request, response));
+        readCompleteService.record(id, viewerId, visitorKeys.resolve(viewerId, request, response));
         return ApiResponse.ok();
-    }
-
-    /** 중복 판단 키: 회원이면 {@code u:{id}}, 아니면 방문자 쿠키 {@code v:{id}}(없으면 새로 만들어 내려준다). */
-    private String visitorKey(Long viewerId, HttpServletRequest request, HttpServletResponse response) {
-        String visitorKey;
-        if (viewerId != null) {
-            visitorKey = "u:" + viewerId;
-        } else {
-            String visitorId = visitorCookie(request);
-            if (visitorId == null) {
-                visitorId = UUID.randomUUID().toString();
-                ResponseCookie cookie = ResponseCookie.from(postsProperties.visitorCookie(), visitorId)
-                        .path("/")
-                        .httpOnly(true)
-                        .secure(true)
-                        .sameSite("Lax")
-                        .maxAge(postsProperties.visitorCookieMaxAge())
-                        .build();
-                response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-            }
-            visitorKey = "v:" + visitorId;
-        }
-        return visitorKey;
-    }
-
-    /** 요청의 방문자 쿠키 값. 없거나 형식이 맞지 않으면 null. */
-    private String visitorCookie(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (postsProperties.visitorCookie().equals(cookie.getName())
-                        && VISITOR_ID.matcher(cookie.getValue()).matches()) {
-                    return cookie.getValue();
-                }
-            }
-        }
-        return null;
     }
 }

@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 
+import net.java21.blog.backend.stats.BlogCalendar;
+import net.java21.blog.backend.stats.StatsProperties;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.blog.repository.BlogRepository;
 import net.java21.blog.backend.blog.service.BlogAccess;
@@ -85,7 +87,8 @@ class PostPublishServiceTest {
         CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         PostService postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access,
                 new BlogAccess(blogRepository), categoryAccess, tagQueryRepository,
-                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock);
+                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock,
+                new BlogCalendar(StatsProperties.defaults(), clock));
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
@@ -161,6 +164,27 @@ class PostPublishServiceTest {
         service.publish(1L, 100L, settings(PostVisibility.PRIVATE, null, null));
 
         assertThat(blog.getFirstPublishedAt()).isEqualTo(NOW);
+    }
+
+    /** 004 T050: 공지 true·false·null(유지), 새 글 기본 false. */
+    @Test
+    void noticeIsSetClearedOrKept() {
+        when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        assertThat(post.isNotice()).isFalse();
+
+        draft("제목", "본문");
+        service.publish(1L, 100L, notice(true));
+        assertThat(post.isNotice()).isTrue();
+        draft("제목", "본문");
+        assertThat(service.publish(1L, 100L, notice(null)).notice()).isTrue();
+        draft("제목", "본문");
+        service.publish(1L, 100L, notice(false));
+        assertThat(post.isNotice()).isFalse();
+    }
+
+    private static PublishSettingsRequest notice(Boolean notice) {
+        return new PublishSettingsRequest(PostVisibility.PUBLIC, null, null, null, null, null, notice);
     }
 
     /** 003 T039: 이미 값이 있으면(두 번째 글·수정 발행) 그대로 둔다. */

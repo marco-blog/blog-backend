@@ -13,6 +13,7 @@ import net.java21.blog.backend.blog.domain.Blog;
  * 서비스가 400 {@code INVALID}(params.allowed)를 준다. 모르는 값도 서비스에서 같은 오류로 답하려고 공개 형태는 문자열로 받는다.
  * 포털 설정(003 FR-077·089): {@code portalEnabled}는 지울 수 없고(null이면 400 {@code REQUIRED}), {@code defaultTopicId}는
  * null이면 지우며 값이면 고를 수 있는 소분류여야 한다(지금 값과 같으면 검사하지 않음).
+ * 004 방명록·비회원 쓰기 설정(FR-058, FR-066): {@code guestbookEnabled}·{@code guestWriteEnabled}는 지울 수 없다(null이면 400 {@code REQUIRED}).
  */
 public class UpdateBlogRequest {
 
@@ -32,6 +33,10 @@ public class UpdateBlogRequest {
     private boolean portalEnabledPresent;
     private Long defaultTopicId;
     private boolean defaultTopicIdPresent;
+    private Boolean guestbookEnabled;
+    private boolean guestbookEnabledPresent;
+    private Boolean guestWriteEnabled;
+    private boolean guestWriteEnabledPresent;
 
     public UpdateBlogRequest() {
     }
@@ -140,5 +145,31 @@ public class UpdateBlogRequest {
 
     public boolean hasDefaultTopicId() {
         return defaultTopicIdPresent;
+    }
+
+    public Boolean getGuestbookEnabled() {
+        return guestbookEnabled;
+    }
+
+    public void setGuestbookEnabled(Boolean guestbookEnabled) {
+        this.guestbookEnabled = guestbookEnabled;
+        this.guestbookEnabledPresent = true;
+    }
+
+    public boolean hasGuestbookEnabled() {
+        return guestbookEnabledPresent;
+    }
+
+    public Boolean getGuestWriteEnabled() {
+        return guestWriteEnabled;
+    }
+
+    public void setGuestWriteEnabled(Boolean guestWriteEnabled) {
+        this.guestWriteEnabled = guestWriteEnabled;
+        this.guestWriteEnabledPresent = true;
+    }
+
+    public boolean hasGuestWriteEnabled() {
+        return guestWriteEnabledPresent;
     }
 }

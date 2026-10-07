@@ -40,6 +40,9 @@ blog:
     upload-dir: ${BLOG_MEDIA_UPLOAD_DIR:${java.io.tmpdir}/blog-media/upload}
     temp-dir: ${BLOG_MEDIA_TEMP_DIR:${java.io.tmpdir}/blog-media/temp}
     thumbnail-dir: ${BLOG_MEDIA_THUMBNAIL_DIR:${java.io.tmpdir}/blog-media/thumb}
+  # 블로그 백업 파일 디렉터리(004 FR-145). 저장소 루트 아래 data/exports(커밋하지 않음).
+  export:
+    dir: ${BLOG_EXPORT_DIR:./data/exports}
   security:
     # 상태 변경 요청의 Origin 허용 목록(R3): front 개발 서버
     allowed-origins:

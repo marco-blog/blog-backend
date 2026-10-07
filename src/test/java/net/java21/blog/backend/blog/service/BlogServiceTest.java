@@ -420,6 +420,53 @@ class BlogServiceTest {
         expect(() -> service.update(2L, "marco", byOther), ErrorCode.FORBIDDEN);
     }
 
+    // ---- 방명록·비회원 쓰기 설정(004 T011, FR-058·066) ----
+
+    @Test
+    void getAndPatchGuestSettings() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        assertThat(BlogResponse.of(blog).guestbookEnabled()).isTrue();
+        assertThat(BlogResponse.of(blog).guestWriteEnabled()).isFalse();
+
+        UpdateBlogRequest both = new UpdateBlogRequest();
+        both.setGuestbookEnabled(false);
+        both.setGuestWriteEnabled(true);
+        BlogResponse response = service.update(1L, "marco", both);
+        assertThat(response.guestbookEnabled()).isFalse();
+        assertThat(response.guestWriteEnabled()).isTrue();
+
+        // 보내지 않은 값은 그대로
+        UpdateBlogRequest onlyGuestbook = new UpdateBlogRequest();
+        onlyGuestbook.setGuestbookEnabled(true);
+        response = service.update(1L, "marco", onlyGuestbook);
+        assertThat(response.guestbookEnabled()).isTrue();
+        assertThat(response.guestWriteEnabled()).isTrue();
+        UpdateBlogRequest title = new UpdateBlogRequest();
+        title.setTitle("새 제목");
+        assertThat(service.update(1L, "marco", title).guestWriteEnabled()).isTrue();
+    }
+
+    @Test
+    void patchCannotClearGuestSettingsAndOnlyOwnerChangesThem() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+
+        UpdateBlogRequest noGuestbook = new UpdateBlogRequest();
+        noGuestbook.setGuestbookEnabled(null);
+        assertFieldError(() -> service.update(1L, "marco", noGuestbook),
+                new FieldError("guestbookEnabled", "REQUIRED", Map.of()));
+        UpdateBlogRequest noGuestWrite = new UpdateBlogRequest();
+        noGuestWrite.setGuestWriteEnabled(null);
+        assertFieldError(() -> service.update(1L, "marco", noGuestWrite),
+                new FieldError("guestWriteEnabled", "REQUIRED", Map.of()));
+        UpdateBlogRequest byOther = new UpdateBlogRequest();
+        byOther.setGuestWriteEnabled(true);
+        expect(() -> service.update(2L, "marco", byOther), ErrorCode.FORBIDDEN);
+        assertThat(blog.isGuestbookEnabled()).isTrue();
+        assertThat(blog.isGuestWriteEnabled()).isFalse();
+    }
+
     @Test
     void onlyOwnerCanPatch() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
