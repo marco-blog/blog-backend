@@ -21,6 +21,7 @@ import net.java21.blog.backend.guest.dto.GuestCredentials;
 import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import net.java21.blog.backend.guest.service.GuestAuthorService;
 import net.java21.blog.backend.guestbook.domain.GuestbookEntry;
+import net.java21.blog.backend.guestbook.domain.GuestbookStatus;
 import net.java21.blog.backend.guestbook.dto.GuestbookEntryResponse;
 import net.java21.blog.backend.guestbook.dto.GuestbookUpdateRequest;
 import net.java21.blog.backend.guestbook.dto.GuestbookWriteRequest;
@@ -84,9 +85,9 @@ public class GuestbookService {
     public Page<GuestbookEntryResponse> list(String handle, Long viewerId, Pageable pageable) {
         Blog blog = blogAccess.requireVisibleBlog(handle);
         requireGuestbookOpen(blog, viewerId);
-        Page<GuestbookRow> page = queryRepository.findPage(blog.getId(), pageable);
+        Page<GuestbookRow> page = queryRepository.findPage(blog.getId(), viewerId, pageable);
         List<GuestbookRow> replies = queryRepository.findReplies(page.getContent().stream().map(GuestbookRow::id)
-                .toList());
+                .toList(), viewerId);
         List<GuestbookEntryResponse> tree = toTree(page.getContent(), replies, viewerId, blog.getUser().getId());
         return new PageImpl<>(tree, pageable, page.getTotalElements());
     }
@@ -189,7 +190,7 @@ public class GuestbookService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Only the blog owner can reply: " + blog.getHandle());
         }
         GuestbookEntry parent = entryRepository.findById(parentId)
-                .filter(p -> !p.isDeleted() && p.getBlog().getId().equals(blog.getId()))
+                .filter(p -> p.isActive() && p.getBlog().getId().equals(blog.getId()))
                 .orElseThrow(() -> entryNotFound(parentId));
         if (parent.isReply()) {
             throw new BusinessException(ErrorCode.REPLY_DEPTH_EXCEEDED,
@@ -203,7 +204,7 @@ public class GuestbookService {
     /** 고치거나 지울 글: 있고, 삭제 자리가 아니고, 블로그를 볼 수 있고, 방명록이 열려 있어야 한다(주인은 꺼져 있어도). */
     private GuestbookEntry requireEntry(Long entryId, Long userId) {
         GuestbookEntry entry = entryRepository.findWithBlogAndOwner(entryId)
-                .filter(e -> !e.isDeleted())
+                .filter(GuestbookEntry::isActive)
                 .filter(e -> e.getBlog().isActive() && e.getBlog().getUser().isActive())
                 .orElseThrow(() -> entryNotFound(entryId));
         requireGuestbookOpen(entry.getBlog(), userId);
@@ -269,9 +270,13 @@ public class GuestbookService {
         for (GuestbookRow top : tops) {
             boolean readable = GuestbookVisibility.canRead(top.secret(), top.userId(), viewerId, blogOwnerId);
             List<GuestbookEntryResponse> children = replies.getOrDefault(top.id(), List.of()).stream()
-                    .map(r -> toResponse(r, top.secret(), readable, List.of()))
+                    .filter(r -> r.status() != GuestbookStatus.HIDDEN || hiddenForAuthor(r, viewerId))
+                    .map(r -> toResponse(r, top.secret(), readable, viewerId, List.of()))
                     .toList();
-            tree.add(toResponse(top, top.secret(), readable, children));
+            if (top.status() == GuestbookStatus.HIDDEN && !hiddenForAuthor(top, viewerId) && children.isEmpty()) {
+                continue;
+            }
+            tree.add(toResponse(top, top.secret(), readable, viewerId, children));
         }
         return tree;
     }
@@ -279,6 +284,25 @@ public class GuestbookService {
     /** 답글의 비밀 여부는 부모를 따르므로 {@code secret}·{@code readable}은 최상위 글 기준으로 넘긴다. */
     private static GuestbookEntryResponse toResponse(GuestbookRow row, boolean secret, boolean readable,
             List<GuestbookEntryResponse> replies) {
+        return toResponse(row, secret, readable, null, replies);
+    }
+
+    /** 숨긴 글을 쓴 회원 본인이 보는지(005 FR-041). */
+    private static boolean hiddenForAuthor(GuestbookRow row, Long viewerId) {
+        return row.status() == GuestbookStatus.HIDDEN && viewerId != null && viewerId.equals(row.userId());
+    }
+
+    private static GuestbookEntryResponse toResponse(GuestbookRow row, boolean secret, boolean readable,
+            Long viewerId, List<GuestbookEntryResponse> replies) {
+        if (row.status() == GuestbookStatus.HIDDEN) {
+            if (!hiddenForAuthor(row, viewerId)) {
+                return new GuestbookEntryResponse(row.id(), null, secret, false, null, row.createdAt(),
+                        row.updatedAt(), replies, true);
+            }
+            return new GuestbookEntryResponse(row.id(), row.content(), secret, false,
+                    AuthorResponse.member(row.userId(), row.nickname(), Media.urlOf(row.profileMediaKey())),
+                    row.createdAt(), row.updatedAt(), replies, true);
+        }
         if (row.deleted()) {
             return new GuestbookEntryResponse(row.id(), null, secret, true, null, row.createdAt(),
                     row.updatedAt(), replies);

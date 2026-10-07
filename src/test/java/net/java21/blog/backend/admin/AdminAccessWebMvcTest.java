@@ -18,6 +18,7 @@ import java.net.URI;
 
 import net.java21.blog.backend.admin.user.AdminUserController;
 import net.java21.blog.backend.admin.user.AdminUserService;
+import net.java21.blog.backend.admin.user.SuspensionService;
 import net.java21.blog.backend.admin.user.dto.BlogLimitRequest;
 import net.java21.blog.backend.admin.user.dto.BlogLimitResponse;
 import net.java21.blog.backend.common.error.BusinessException;
@@ -52,6 +53,8 @@ class AdminAccessWebMvcTest {
     private AdminRoleLookup roleLookup;
     @MockitoBean
     private AdminUserService adminUserService;
+    @MockitoBean
+    private SuspensionService suspensionService;
 
     @Test
     void anonymousGets404NotFound() throws Exception {

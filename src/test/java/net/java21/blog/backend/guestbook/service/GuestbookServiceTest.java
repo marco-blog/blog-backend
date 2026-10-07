@@ -407,8 +407,8 @@ class GuestbookServiceTest {
 
     private void stubPage(List<GuestbookRow> tops, List<GuestbookRow> replies) {
         Page<GuestbookRow> page = new PageImpl<>(tops, PAGE, tops.size());
-        when(queryRepository.findPage(10L, PAGE)).thenReturn(page);
-        when(queryRepository.findReplies(tops.stream().map(GuestbookRow::id).toList())).thenReturn(replies);
+        when(queryRepository.findPage(eq(10L), any(), eq(PAGE))).thenReturn(page);
+        when(queryRepository.findReplies(eq(tops.stream().map(GuestbookRow::id).toList()), any())).thenReturn(replies);
     }
 
     private GuestbookEntry stored(GuestbookEntry entry, long id) {

@@ -16,6 +16,7 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * 003: {@code topicId}(글의 주제 소분류, 없으면 null). 주제 이름은 front가 {@code GET /topics} 트리로 찾는다.
  * 004: {@code notice}(공지), {@code locked}(열지 않은 보호 글이면 true — 본문·요약·대표 이미지·카테고리·주제는 null, 태그는 빈 배열),
  * {@code scheduledAt}(예약 시각, 주인에게만).
+ * 005: {@code hidden}(관리자가 숨긴 글, 주인에게만 true일 수 있음 — 다른 사람에게는 상세가 404).
  */
 public record PostDetailResponse(
         Long id,
@@ -42,7 +43,19 @@ public record PostDetailResponse(
         Long topicId,
         boolean notice,
         boolean locked,
-        Instant scheduledAt) {
+        Instant scheduledAt,
+        boolean hidden) {
+
+    /** 숨기지 않은 글(001~004 호출부). */
+    public PostDetailResponse(Long id, String blogHandle, String title, String contentHtml, String contentMarkdown,
+            String summary, String thumbnailUrl, CategoryRef category, List<String> tags, PostVisibility visibility,
+            PostStatus status, int viewCount, int commentCount, boolean commentEnabled, Author author, PostLink prev,
+            PostLink next, Instant publishedAt, Instant updatedAt, int likeCount, Boolean likedByMe, Long topicId,
+            boolean notice, boolean locked, Instant scheduledAt) {
+        this(id, blogHandle, title, contentHtml, contentMarkdown, summary, thumbnailUrl, category, tags, visibility,
+                status, viewCount, commentCount, commentEnabled, author, prev, next, publishedAt, updatedAt, likeCount,
+                likedByMe, topicId, notice, locked, scheduledAt, false);
+    }
 
     public record Author(String nickname, String profileImageUrl) {
     }
@@ -65,7 +78,8 @@ public record PostDetailResponse(
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
                 new Author(user.getNickname(), user.profileImageUrl()), prev, next,
                 post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe,
-                locked ? null : post.getTopicId(), post.isNotice(), locked, owner ? post.getScheduledAt() : null);
+                locked ? null : post.getTopicId(), post.isNotice(), locked, owner ? post.getScheduledAt() : null,
+                post.isHidden());
     }
 
     /** 잠기지 않은 상세(001~003 호출부). */

@@ -86,8 +86,10 @@ public class ManagePostService {
                     throw invalid("visibility", "INVALID", Map.of("allowed", List.of("PUBLIC", "PRIVATE")));
                 }
                 requireOwned(blog, postIds);
+                long hidden = repository.countHidden(blog.getId(), postIds);
                 yield new BulkPostResponse(
-                        repository.changeVisibility(blog.getId(), postIds, request.visibility(), clock.instant()));
+                        repository.changeVisibility(blog.getId(), postIds, request.visibility(), clock.instant()),
+                        hidden);
             }
             case MOVE_CATEGORY -> {
                 Category target = request.categoryId() == null ? null
@@ -101,8 +103,9 @@ public class ManagePostService {
             }
             case NOTICE, UNNOTICE -> {
                 requireOwned(blog, postIds);
+                long hidden = repository.countHidden(blog.getId(), postIds);
                 yield new BulkPostResponse(repository.changeNotice(blog.getId(), postIds,
-                        request.action() == BulkAction.NOTICE));
+                        request.action() == BulkAction.NOTICE), hidden);
             }
         };
     }
