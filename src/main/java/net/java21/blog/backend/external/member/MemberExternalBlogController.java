@@ -9,7 +9,9 @@ import net.java21.blog.backend.external.dto.MyExternalBlogResponse;
 import net.java21.blog.backend.external.dto.MyExternalPostResponse;
 import net.java21.blog.backend.external.member.dto.ClaimRequest;
 import net.java21.blog.backend.external.member.dto.CreateExternalBlogRequest;
+import net.java21.blog.backend.external.member.dto.DefaultTopicChangeRequest;
 import net.java21.blog.backend.external.member.dto.FeedPreviewResponse;
+import net.java21.blog.backend.external.member.dto.PostTopicRequest;
 import net.java21.blog.backend.external.member.dto.PreviewRequest;
 import net.java21.blog.backend.external.verify.VerificationRequest;
 import net.java21.blog.backend.external.verify.VerificationResponse;
@@ -20,7 +22,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,12 +41,14 @@ public class MemberExternalBlogController {
     private final PreviewService previewService;
     private final VerificationService verificationService;
     private final MemberExternalBlogService service;
+    private final ExternalPostTopicService topicService;
 
     public MemberExternalBlogController(PreviewService previewService, VerificationService verificationService,
-            MemberExternalBlogService service) {
+            MemberExternalBlogService service, ExternalPostTopicService topicService) {
         this.previewService = previewService;
         this.verificationService = verificationService;
         this.service = service;
+        this.topicService = topicService;
     }
 
     @PostMapping("/api/v1/external-blog-previews")
@@ -85,6 +91,20 @@ public class MemberExternalBlogController {
     @GetMapping("/api/v1/me/external-blogs/{id}")
     ApiResponse<MyExternalBlogResponse> get(@CurrentUser AuthUser user, @PathVariable long id) {
         return ApiResponse.ok(service.get(user.userId(), id));
+    }
+
+    /** 기본 주제 변경(인증된 주인, 007 US3). */
+    @PatchMapping("/api/v1/me/external-blogs/{id}")
+    ApiResponse<MyExternalBlogResponse> update(@CurrentUser AuthUser user, @PathVariable long id,
+            @RequestBody DefaultTopicChangeRequest request) {
+        return ApiResponse.ok(topicService.changeDefaultTopic(user.userId(), id, request.defaultTopicId()));
+    }
+
+    /** 글 주제 변경(인증된 주인, 출처 OWNER, 007 US3). */
+    @PutMapping("/api/v1/me/external-blogs/{id}/posts/{postId}/topic")
+    ApiResponse<MyExternalPostResponse> postTopic(@CurrentUser AuthUser user, @PathVariable long id,
+            @PathVariable long postId, @RequestBody PostTopicRequest request) {
+        return ApiResponse.ok(topicService.changePostTopic(user.userId(), id, postId, request.topicId()));
     }
 
     @GetMapping("/api/v1/me/external-blogs/{id}/posts")

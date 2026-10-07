@@ -7,14 +7,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.persistence.EntityManager;
+
 import net.java21.blog.backend.admin.audit.AuditActions;
+import net.java21.blog.backend.external.domain.ExternalBlog;
+import net.java21.blog.backend.support.ExternalFixtures;
 import net.java21.blog.backend.support.ExternalTestKit;
 import net.java21.blog.backend.support.StubHttpServer;
+import net.java21.blog.backend.topic.domain.Topic;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 006 T046(SC-017, US3 AS1, FR-106, research A8): {@code /api/v1/admin/**}의 GET이 아닌 매핑 전체가 아래 표에 있어야 하고, 표의 각
@@ -78,6 +85,13 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private long draftNote;
     private long bannedWord;
     private long externalBlog;
+    private long mappingRule;
+    private ExternalFixtures externalFixtures;
+
+    @Autowired
+    private EntityManager em;
+    @Autowired
+    private TransactionTemplate tx;
 
     @Test
     void everyAdminChangeIsAudited() throws Exception {
@@ -230,6 +244,22 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                 new Row("POST", "/api/v1/admin/external-blogs/{id}/reject", AuditActions.EXTERNAL_BLOG_REJECT,
                         () -> new Call("/api/v1/admin/external-blogs/" + memberRequest("acextr") + "/reject",
                                 "{\"reason\":\"off topic\"}")),
+                // 007 분류 검수·매핑 규칙(US3)
+                new Row("POST", "/api/v1/admin/classification-reviews/{id}/confirm",
+                        AuditActions.CLASSIFICATION_CONFIRM, () -> new Call("/api/v1/admin/classification-reviews/"
+                                + pendingReview() + "/confirm", "{\"topicId\":%d}".formatted(topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/classification-reviews/confirm-batch",
+                        AuditActions.CLASSIFICATION_CONFIRM, () -> new Call(
+                                "/api/v1/admin/classification-reviews/confirm-batch",
+                                "{\"items\":[{\"id\":%d,\"topicId\":%d}]}".formatted(pendingReview(),
+                                        topicChildren.get(1)))),
+                new Row("POST", "/api/v1/admin/topic-mapping-rules", AuditActions.TOPIC_MAPPING_RULE_CREATE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules", "{\"keyword\":\"%s\",\"topicId\":%d}"
+                                .formatted(uniqueHandle("acrule"), topicChildren.get(0)))),
+                new Row("PATCH", "/api/v1/admin/topic-mapping-rules/{id}", AuditActions.TOPIC_MAPPING_RULE_UPDATE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, "{\"priority\":5}")),
+                new Row("DELETE", "/api/v1/admin/topic-mapping-rules/{id}", AuditActions.TOPIC_MAPPING_RULE_DELETE,
+                        () -> new Call("/api/v1/admin/topic-mapping-rules/" + mappingRule, null)),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));
@@ -244,9 +274,23 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
             case "POST /api/v1/admin/banned-words" -> bannedWord = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/external-blogs" ->
                     externalBlog = ((Number) reply.read("$.result.id")).longValue();
+            case "POST /api/v1/admin/topic-mapping-rules" ->
+                    mappingRule = ((Number) reply.read("$.result.id")).longValue();
             default -> {
             }
         }
+    }
+
+    /** 직접 등록한 외부 블로그에 글과 대기 검수를 하나 만든다. 검수 id */
+    private long pendingReview() {
+        return tx.execute(status -> {
+            if (externalFixtures == null) {
+                externalFixtures = new ExternalFixtures(em);
+            }
+            Topic topic = em.find(Topic.class, topicChildren.get(0));
+            ExternalBlog blog = em.find(ExternalBlog.class, externalBlog);
+            return externalFixtures.review(externalFixtures.post(blog, "검수 글", topic, null), topic, 0.2).getId();
+        });
     }
 
     /** 새 회원이 외부 블로그를 신청한다(승인 대기). 등록 id */

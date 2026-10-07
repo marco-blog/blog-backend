@@ -252,7 +252,18 @@ class OpenApiContractTest {
             "GET /api/v1/admin/external-blogs/{id}/posts",
             "GET /media/external/{key}",
             // 007 US2 — 외부 글 방문(클릭 집계 후 원문으로 302)
-            "GET /api/v1/external-posts/{id}/visit");
+            "GET /api/v1/external-posts/{id}/visit",
+            // 007 US3 — 주인의 주제 고치기, 검수·현황, 매핑 규칙
+            "PATCH /api/v1/me/external-blogs/{id}",
+            "PUT /api/v1/me/external-blogs/{id}/posts/{postId}/topic",
+            "GET /api/v1/admin/classification-reviews",
+            "POST /api/v1/admin/classification-reviews/{id}/confirm",
+            "POST /api/v1/admin/classification-reviews/confirm-batch",
+            "GET /api/v1/admin/classification-stats",
+            "GET /api/v1/admin/topic-mapping-rules",
+            "POST /api/v1/admin/topic-mapping-rules",
+            "PATCH /api/v1/admin/topic-mapping-rules/{id}",
+            "DELETE /api/v1/admin/topic-mapping-rules/{id}");
 
     /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
