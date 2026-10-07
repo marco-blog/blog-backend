@@ -16,10 +16,13 @@ public record PostSummaryRow(Long id, String title, String summary, String thumb
         String categoryName, int viewCount, int commentCount, PostVisibility visibility, PostStatus status,
         Instant publishedAt, Instant updatedAt, boolean notice) {
 
-    /** 공개 목록용 응답. 작성 중 사본 여부는 주인 관리 화면의 정보라 공개 목록에서는 false. */
+    /**
+     * 공개 목록용 응답. 작성 중 사본 여부는 주인 관리 화면의 정보라 공개 목록에서는 false. 보호 글은 요약·대표 이미지를 가린다
+     * ({@link PostSummaryResponse#forReader}, 004).
+     */
     public PostSummaryResponse toPublicResponse(List<String> tags) {
         return new PostSummaryResponse(id, title, summary, thumbnailUrl, CategoryRef.of(categoryId, categoryName),
                 tags == null ? List.of() : tags, viewCount, commentCount, visibility, status, publishedAt, updatedAt,
-                false, notice, null, null);
+                false, notice, null, null, null).forReader();
     }
 }

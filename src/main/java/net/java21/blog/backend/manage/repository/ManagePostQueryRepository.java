@@ -87,10 +87,17 @@ public class ManagePostQueryRepository {
         return count == null ? 0 : count;
     }
 
-    /** 이 블로그 글의 공개 범위를 한 번에 바꾼다. 바뀐 행 수. */
+    /**
+     * 이 블로그 글의 공개 범위를 한 번에 바꾼다. 바뀐 행 수. 보호 글(004)은 비밀번호가 필요하므로 이 일괄 작업으로 지정할 수 없고
+     * (서비스가 400), 보호 글을 다른 공개 범위로 바꾸면 비밀번호 해시를 지운다({@code ck_posts_protected_password}).
+     */
     public long changeVisibility(Long blogId, Collection<Long> postIds, PostVisibility visibility, Instant now) {
+        if (visibility == PostVisibility.PROTECTED) {
+            throw new IllegalArgumentException("PROTECTED needs a password and cannot be set in bulk");
+        }
         return queryFactory.update(post)
                 .set(post.visibility, visibility)
+                .setNull(post.passwordHash)
                 .set(post.updatedAt, now)
                 .where(post.blog.id.eq(blogId), post.id.in(postIds))
                 .execute();
@@ -154,7 +161,7 @@ public class ManagePostQueryRepository {
                 .select(Projections.constructor(ManagePostRow.class,
                         post.id, post.title, post.summary, post.thumbnailUrl, category.id, category.name,
                         post.viewCount, post.commentCount, post.visibility, post.status, post.publishedAt,
-                        post.updatedAt, hasDraft, post.deletedAt, post.notice))
+                        post.updatedAt, hasDraft, post.deletedAt, post.notice, post.scheduledAt))
                 .from(post)
                 .leftJoin(post.category, category)
                 .leftJoin(postDraft).on(postDraft.postId.eq(post.id));

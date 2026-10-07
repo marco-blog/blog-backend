@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.github.benmanes.caffeine.cache.Ticker;
+
+import net.java21.blog.backend.block.service.BlogBlockPolicy;
 import net.java21.blog.backend.blog.domain.Blog;
 import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.comment.domain.CommentStatus;
@@ -25,6 +30,11 @@ import net.java21.blog.backend.comment.repository.CommentRepository;
 import net.java21.blog.backend.comment.repository.CommentRow;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.common.security.PasswordAttemptGuard;
+import net.java21.blog.backend.common.web.ClientInfo;
+import net.java21.blog.backend.guest.service.GuestAuthorService;
+import net.java21.blog.backend.guest.service.GuestWriteGuard;
+import net.java21.blog.backend.post.PostsProperties;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.repository.PostRepository;
@@ -42,6 +52,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * 댓글 규칙(T185, FR-027~029, US3 AS1~4): 볼 수 있는 글에만(노출 매트릭스, 아니면 404 {@code POST_NOT_FOUND}),
@@ -57,6 +68,22 @@ class CommentServiceTest {
     private static final long OWNER = 1L;
     private static final long WRITER = 2L;
     private static final long STRANGER = 3L;
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder(4);
+    private static final ClientInfo CLIENT = new ClientInfo("203.0.113.9", "JUnit");
+
+    /** 테스트에서 시간을 움직이는 Caffeine 시계. */
+    static final class FakeTicker implements Ticker {
+        private long nanos;
+
+        @Override
+        public long read() {
+            return nanos;
+        }
+
+        void advance(java.time.Duration duration) {
+            nanos += duration.toNanos();
+        }
+    }
 
     @Mock
     private PostRepository postRepository;
@@ -68,8 +95,13 @@ class CommentServiceTest {
     private CommentQueryRepository queryRepository;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private GuestWriteGuard writeGuard;
+    @Mock
+    private BlogBlockPolicy blockPolicy;
 
     private CommentService service;
+    private PasswordAttemptGuard attemptGuard;
     private User owner;
     private User writer;
     private Blog blog;
@@ -77,7 +109,10 @@ class CommentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CommentService(postRepository, userRepository, commentRepository, queryRepository, events);
+        attemptGuard = new PasswordAttemptGuard(PostsProperties.defaults(), new FakeTicker());
+        GuestAuthorService guestAuthors = new GuestAuthorService(PASSWORD_ENCODER, writeGuard, attemptGuard);
+        service = new CommentService(postRepository, userRepository, commentRepository, queryRepository, events,
+                guestAuthors, blockPolicy);
         owner = TestEntities.user(OWNER, "owner@example.com", "{hash}", "주인");
         writer = TestEntities.user(WRITER, "writer@example.com", "{hash}", "작성자");
         blog = TestEntities.blog(10L, owner, "marco");
@@ -419,6 +454,199 @@ class CommentServiceTest {
         service.delete(OWNER, 1L);
 
         verify(commentRepository).delete(comment);
+    }
+
+    // ---- 004 비밀 댓글·비회원 댓글·보호 글·차단 (T081) ----
+
+    @Test
+    void secretCommentContentOnlyForPostOwnerAuthorAndParentAuthor() {
+        when(queryRepository.findPostComments(100L)).thenReturn(List.of(
+                secretRow(1L, null, "비밀", WRITER, true),
+                secretRow(2L, 1L, "주인 답글", OWNER, false),
+                secretRow(3L, null, "공개", STRANGER, false),
+                secretRow(4L, 3L, "비밀 답글", OWNER, true)));
+
+        List<CommentResponse> anonymous = service.list(100L, null);
+        assertThat(anonymous).extracting(CommentResponse::content).containsExactly(null, "공개");
+        assertThat(anonymous.get(0).secret()).isTrue();
+        assertThat(anonymous.get(0).replies()).singleElement().satisfies(reply -> {
+            assertThat(reply.secret()).as("비밀 댓글의 답글은 비밀").isTrue();
+            assertThat(reply.content()).isNull();
+        });
+        assertThat(anonymous.get(1).replies().getFirst().content()).isNull();
+
+        List<CommentResponse> asWriter = service.list(100L, WRITER);
+        assertThat(asWriter.get(0).content()).isEqualTo("비밀");
+        assertThat(asWriter.get(0).replies().getFirst().content()).as("부모 작성자는 답글을 본다").isEqualTo("주인 답글");
+
+        List<CommentResponse> asStranger = service.list(100L, STRANGER);
+        assertThat(asStranger.get(0).content()).isNull();
+        assertThat(asStranger.get(1).replies().getFirst().content()).as("부모 작성자").isEqualTo("비밀 답글");
+
+        List<CommentResponse> asOwner = service.list(100L, OWNER);
+        assertThat(asOwner).extracting(CommentResponse::content).containsExactly("비밀", "공개");
+    }
+
+    @Test
+    void guestRowsHaveGuestAuthor() {
+        when(queryRepository.findPostComments(100L)).thenReturn(List.of(
+                new CommentRow(1L, null, "안녕", CommentStatus.ACTIVE, null, null, null, NOW, NOW, false, "손님")));
+
+        CommentResponse guest = service.list(100L, null).getFirst();
+        assertThat(guest.author().guest()).isTrue();
+        assertThat(guest.author().nickname()).isEqualTo("손님");
+        assertThat(guest.author().userId()).isNull();
+    }
+
+    @Test
+    void secretMemberCommentAndReplyInheritsSecret() {
+        CommentResponse created = service.create(WRITER, 100L,
+                new CreateCommentRequest("비밀", null, true, null, null), CLIENT, p -> false);
+        assertThat(created.secret()).isTrue();
+
+        Comment secretParent = comment(1L, post, writer, null);
+        secretParent.changeSecret(true);
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(secretParent));
+        CommentResponse reply = service.create(OWNER, 100L, new CreateCommentRequest("답", 1L, false, null, null),
+                CLIENT, p -> false);
+        assertThat(reply.secret()).isTrue();
+        verify(blockPolicy).requireNotBlocked(10L, WRITER);
+    }
+
+    @Test
+    void guestCommentNeedsGuestWriteEnabledThenStoresHashedPassword() {
+        assertCode(() -> service.create(null, 100L, guestRequest("손님", "1234"), CLIENT, p -> false),
+                ErrorCode.UNAUTHENTICATED);
+        verify(commentRepository, never()).save(any());
+
+        blog.changeGuestSettings(true, true);
+        CommentResponse created = service.create(null, 100L, guestRequest("손님", "1234"), CLIENT, p -> false);
+
+        assertThat(created.author().guest()).isTrue();
+        assertThat(created.author().nickname()).isEqualTo("손님");
+        ArgumentCaptor<Comment> saved = ArgumentCaptor.forClass(Comment.class);
+        verify(commentRepository).save(saved.capture());
+        assertThat(saved.getValue().isGuest()).isTrue();
+        assertThat(saved.getValue().getUser()).isNull();
+        assertThat(PASSWORD_ENCODER.matches("1234", saved.getValue().getGuestPasswordHash())).isTrue();
+        verify(writeGuard).check(any(), eq("203.0.113.9"));
+        ArgumentCaptor<CommentCreatedEvent> event = ArgumentCaptor.forClass(CommentCreatedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().authorId()).isNull();
+        assertThat(event.getValue().guestName()).isEqualTo("손님");
+        verify(blockPolicy, never()).requireNotBlocked(any(), any());
+    }
+
+    @Test
+    void guestFieldsAreValidated() {
+        blog.changeGuestSettings(true, true);
+        assertThatThrownBy(() -> service.create(null, 100L, guestRequest(null, "12"), CLIENT, p -> false))
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(e.fieldErrors()).extracting(f -> f.field() + ":" + f.code())
+                            .contains("guestName:REQUIRED", "guestPassword:TOO_SHORT");
+                });
+    }
+
+    @Test
+    void blockedMemberCannotComment() {
+        doThrow(new BusinessException(ErrorCode.FORBIDDEN, "blocked")).when(blockPolicy).requireNotBlocked(10L, WRITER);
+
+        assertCode(() -> service.create(WRITER, 100L, new CreateCommentRequest("안녕", null)), ErrorCode.FORBIDDEN);
+        verify(commentRepository, never()).save(any());
+    }
+
+    @Test
+    void lockedProtectedPostCommentsAre403UntilUnlocked() {
+        Post locked = published(101L, PostVisibility.PROTECTED);
+        locked.applyProtection("$2a$04$hash");
+        when(postRepository.findWithBlogAndOwner(101L)).thenReturn(Optional.of(locked));
+
+        assertCode(() -> service.list(101L, null), ErrorCode.POST_LOCKED);
+        assertCode(() -> service.list(101L, WRITER, p -> false), ErrorCode.POST_LOCKED);
+        assertCode(() -> service.create(WRITER, 101L, new CreateCommentRequest("안녕", null)), ErrorCode.POST_LOCKED);
+        assertThat(service.list(101L, WRITER, p -> true)).isEmpty();
+        assertThat(service.list(101L, OWNER)).as("주인은 열지 않아도 본다").isEmpty();
+
+        Comment onLocked = comment(7L, locked, writer, null);
+        when(commentRepository.findWithPostAndOwner(7L)).thenReturn(Optional.of(onLocked));
+        assertCode(() -> service.update(WRITER, 7L, new UpdateCommentRequest("x")), ErrorCode.POST_LOCKED);
+        assertCode(() -> service.delete(WRITER, 7L), ErrorCode.POST_LOCKED);
+    }
+
+    @Test
+    void guestUpdateDeleteAndUnlockNeedThePassword() {
+        Comment guest = guestComment(8L, "1234");
+        when(commentRepository.findWithPostAndOwner(8L)).thenReturn(Optional.of(guest));
+
+        assertCode(() -> service.update(null, 8L, new UpdateCommentRequest("고침", true, "nope"), "v:a", "ip",
+                p -> false), ErrorCode.GUEST_PASSWORD_MISMATCH);
+        assertCode(() -> service.unlock(null, 8L, null, "v:a", "ip", p -> false), ErrorCode.GUEST_PASSWORD_MISMATCH);
+        assertCode(() -> service.delete(null, 8L, "nope", "v:a", "ip", p -> false), ErrorCode.GUEST_PASSWORD_MISMATCH);
+
+        CommentResponse unlocked = service.unlock(null, 8L, "1234", "v:a", "ip", p -> false);
+        assertThat(unlocked.content()).isEqualTo("손님 글");
+        assertThat(unlocked.secret()).isTrue();
+
+        CommentResponse updated = service.update(null, 8L, new UpdateCommentRequest("고침", false, "1234"), "v:a",
+                "ip", p -> false);
+        assertThat(updated.content()).isEqualTo("고침");
+        assertThat(updated.secret()).isFalse();
+
+        service.delete(null, 8L, "1234", "v:a", "ip", p -> false);
+        verify(commentRepository).delete(guest);
+    }
+
+    @Test
+    void fiveWrongGuestPasswordsLockTheComment() {
+        Comment guest = guestComment(8L, "1234");
+        when(commentRepository.findWithPostAndOwner(8L)).thenReturn(Optional.of(guest));
+        for (int i = 0; i < 5; i++) {
+            assertCode(() -> service.unlock(null, 8L, "nope", "v:a", "ip", p -> false),
+                    ErrorCode.GUEST_PASSWORD_MISMATCH);
+        }
+        assertCode(() -> service.unlock(null, 8L, "1234", "v:a", "ip", p -> false),
+                ErrorCode.PASSWORD_ATTEMPTS_EXCEEDED);
+    }
+
+    @Test
+    void postOwnerDeletesGuestCommentWithoutPassword() {
+        Comment guest = guestComment(8L, "1234");
+        when(commentRepository.findWithPostAndOwner(8L)).thenReturn(Optional.of(guest));
+
+        service.delete(OWNER, 8L, null, null, null, p -> false);
+        verify(commentRepository).delete(guest);
+    }
+
+    @Test
+    void memberCommentRulesForAnonymousAndUnlock() {
+        Comment member = comment(9L, post, writer, null);
+        when(commentRepository.findWithPostAndOwner(9L)).thenReturn(Optional.of(member));
+
+        assertCode(() -> service.update(null, 9L, new UpdateCommentRequest("x"), null, null, p -> false),
+                ErrorCode.UNAUTHENTICATED);
+        assertCode(() -> service.delete(null, 9L, null, null, null, p -> false), ErrorCode.UNAUTHENTICATED);
+        assertCode(() -> service.unlock(WRITER, 9L, "1234", null, null, p -> false), ErrorCode.FORBIDDEN);
+
+        CommentResponse updated = service.update(WRITER, 9L, new UpdateCommentRequest("비밀로", true, null), null,
+                null, p -> false);
+        assertThat(updated.secret()).isTrue();
+        assertThat(updated.author().guest()).isFalse();
+    }
+
+    private Comment guestComment(long id, String password) {
+        Comment guest = Comment.byGuest(post, null, "손님", PASSWORD_ENCODER.encode(password), "enc-ip", "손님 글",
+                true);
+        return TestEntities.with(guest, "id", id);
+    }
+
+    private static CreateCommentRequest guestRequest(String name, String password) {
+        return new CreateCommentRequest("안녕", null, false, name, password);
+    }
+
+    private static CommentRow secretRow(Long id, Long parentId, String content, Long userId, boolean secret) {
+        return new CommentRow(id, parentId, content, CommentStatus.ACTIVE, userId, "회원" + userId, null, NOW, NOW,
+                secret, null);
     }
 
     private Post published(long id, PostVisibility visibility) {

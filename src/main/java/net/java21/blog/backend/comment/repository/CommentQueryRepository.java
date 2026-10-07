@@ -12,6 +12,7 @@ import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
 import net.java21.blog.backend.comment.domain.CommentStatus;
+import net.java21.blog.backend.comment.domain.QComment;
 import net.java21.blog.backend.media.domain.QMedia;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.user.domain.QUser;
@@ -21,7 +22,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 /**
- * 댓글 조회(T194, QueryDSL DTO projection). 작성자는 같은 쿼리의 LEFT JOIN으로 읽어 댓글 수와 관계없이 쿼리 수가 일정하다.
+ * 댓글 조회(T194, QueryDSL DTO projection). 작성자는 같은 쿼리의 LEFT JOIN으로 읽어(004 비회원 댓글은 작성자 없음) 댓글 수와
+ * 관계없이 쿼리 수가 일정하다.
  * <ul>
  *   <li>글 댓글 목록: 쿼리 1회(답글 포함, 작성순). 트리는 서비스가 만든다.</li>
  *   <li>블로그 관리 목록: 쿼리 2회(목록, 전체 수). 휴지통 글의 댓글은 보이지 않는다(spec "글을 삭제하면 댓글도 보이지 않는다").</li>
@@ -34,6 +36,8 @@ public class CommentQueryRepository {
     private static final QUser author = new QUser("author");
     /** 작성자 프로필 이미지(US4). 같은 쿼리의 LEFT JOIN으로 읽는다. */
     private static final QMedia authorMedia = new QMedia("authorMedia");
+    /** 답글의 부모(004 비밀 댓글: 부모가 비밀이면 답글도 비밀). */
+    private static final QComment parentComment = new QComment("parentComment");
 
     private final JPAQueryFactory queryFactory;
 
@@ -46,7 +50,7 @@ public class CommentQueryRepository {
         return queryFactory
                 .select(Projections.constructor(CommentRow.class, comment.id, comment.parent.id, comment.content,
                         comment.status, author.id, author.nickname, authorMedia.mediaKey, comment.createdAt,
-                        comment.updatedAt))
+                        comment.updatedAt, comment.secret, comment.guestName))
                 .from(comment)
                 .leftJoin(comment.user, author)
                 .leftJoin(author.profileMedia, authorMedia)
@@ -89,9 +93,11 @@ public class CommentQueryRepository {
     private JPAQuery<BlogCommentRow> selectBlogComments() {
         return queryFactory
                 .select(Projections.constructor(BlogCommentRow.class, comment.id, comment.content, author.id,
-                        author.nickname, authorMedia.mediaKey, comment.createdAt, comment.updatedAt, post.id, post.title))
+                        author.nickname, authorMedia.mediaKey, comment.createdAt, comment.updatedAt, post.id, post.title,
+                        comment.secret, parentComment.secret, comment.guestName))
                 .from(comment)
                 .join(comment.post, post)
+                .leftJoin(comment.parent, parentComment)
                 .leftJoin(comment.user, author)
                 .leftJoin(author.profileMedia, authorMedia);
     }

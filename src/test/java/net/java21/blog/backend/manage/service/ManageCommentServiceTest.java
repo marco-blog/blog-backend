@@ -93,13 +93,20 @@ class ManageCommentServiceTest {
     void statsCountSevenDaysAndRecentFive() {
         when(repository.countBlogCommentsSince(10L, NOW.minus(Duration.ofDays(7)))).thenReturn(3L);
         when(repository.findRecentBlogComments(10L, 5)).thenReturn(List.of(ROW,
-                new BlogCommentRow(8L, "비회원(004)", null, null, null, NOW, NOW, 100L, "첫 글")));
+                new BlogCommentRow(8L, "비회원(004)", null, null, null, NOW, NOW, 100L, "첫 글", false, true, "손님")));
 
         ManageCommentService.CommentStats stats = service().stats(10L, 5);
 
         assertThat(stats.newComments7d()).isEqualTo(3);
         assertThat(stats.recentComments()).extracting(ManageCommentResponse::id).containsExactly(7L, 8L);
-        assertThat(stats.recentComments().get(1).author()).isNull();
+        // 004: 비회원 작성자는 이름과 guest 표시, 비밀 댓글의 답글은 비밀로 표시하되 주인 화면이라 내용을 보인다.
+        ManageCommentResponse guest = stats.recentComments().get(1);
+        assertThat(guest.author().guest()).isTrue();
+        assertThat(guest.author().nickname()).isEqualTo("손님");
+        assertThat(guest.author().userId()).isNull();
+        assertThat(guest.secret()).isTrue();
+        assertThat(guest.content()).isEqualTo("비회원(004)");
+        assertThat(stats.recentComments().get(0).secret()).isFalse();
         assertThat(stats.recentComments().get(0).author().profileImageUrl()).isEqualTo("/media/k3Jd9fQ2xLmA7pZ0bR5tYw");
     }
 

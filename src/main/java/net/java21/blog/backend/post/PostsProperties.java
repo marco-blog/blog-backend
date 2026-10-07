@@ -50,6 +50,11 @@ public record PostsProperties(
                 DEFAULT_PASSWORD_MAX_FAILURES, DEFAULT_PASSWORD_LOCK_DURATION, DEFAULT_SCHEDULE_MAX_AHEAD);
     }
 
+    /** 모든 값이 기본값인 설정(application.yml 기본값과 같다, 테스트용). */
+    public static PostsProperties defaults() {
+        return new PostsProperties(Duration.ofMinutes(30), 100_000, "visitor_id", Duration.ofDays(365));
+    }
+
     @ConstructorBinding
     public PostsProperties {
         requirePositive(statsRetention, "stats-retention");

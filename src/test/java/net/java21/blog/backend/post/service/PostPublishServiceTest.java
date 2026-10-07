@@ -25,6 +25,7 @@ import net.java21.blog.backend.category.service.CategoryAccess;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.post.PostsProperties;
 import net.java21.blog.backend.content.HtmlSanitizerPolicy;
 import net.java21.blog.backend.content.MarkdownRenderer;
 import net.java21.blog.backend.content.VideoEmbedTransformer;
@@ -48,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /** 발행·수정 발행(T061, FR-013, FR-015, FR-070, FR-107·108, AS6·7). */
 @ExtendWith(MockitoExtension.class)
@@ -56,6 +58,7 @@ class PostPublishServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final String KEY_A = "k3Jd9fQ2xLmA7pZ0bR5tYw";
     private static final String KEY_B = "AAAAAAAAAAAAAAAAAAAAAA";
+    static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder(4);
 
     @Mock
     private PostRepository postRepository;
@@ -92,7 +95,8 @@ class PostPublishServiceTest {
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
-                new TopicService(topicRepository, null, null, null, null, null, null), clock);
+                new TopicService(topicRepository, null, null, null, null, null, null), PASSWORD_ENCODER,
+                PostsProperties.defaults(), clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
@@ -357,6 +361,148 @@ class PostPublishServiceTest {
         service.publish(1L, 100L, topicSettings(31L));
 
         assertThat(post.getTopic()).isSameAs(minor);
+    }
+
+    // ---- 004 US3 T075: 보호 글·예약 발행 ----
+
+    private void noNeighbours() {
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+    }
+
+    private static PublishSettingsRequest protect(String password) {
+        return new PublishSettingsRequest(PostVisibility.PROTECTED, null, null, null, null, null, null, password,
+                null);
+    }
+
+    private static PublishSettingsRequest scheduleAt(Instant at) {
+        return new PublishSettingsRequest(PostVisibility.PUBLIC, null, null, null, null, null, null, null, at);
+    }
+
+    @Test
+    void protectedNeedsPasswordWhenNewlyProtected() {
+        draft("제목", "본문");
+        assertCode(() -> service.publish(1L, 100L, protect(null)), ErrorCode.VALIDATION_FAILED);
+        assertCode(() -> service.publish(1L, 100L, protect("")), ErrorCode.VALIDATION_FAILED);
+        assertCode(() -> service.publish(1L, 100L, protect("123")), ErrorCode.VALIDATION_FAILED);
+        assertCode(() -> service.publish(1L, 100L, protect("x".repeat(65))), ErrorCode.VALIDATION_FAILED);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        assertThat(post.getPasswordHash()).isNull();
+    }
+
+    @Test
+    void passwordErrorsNameTheField() {
+        draft("제목", "본문");
+        assertThatThrownBy(() -> service.publish(1L, 100L, protect(null)))
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.fieldErrors()).singleElement().satisfies(f -> {
+                        assertThat(f.field()).isEqualTo("password");
+                        assertThat(f.code()).isEqualTo("REQUIRED");
+                    });
+                });
+        assertThatThrownBy(() -> service.publish(1L, 100L, protect("123")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.fieldErrors().getFirst().code()).isEqualTo("TOO_SHORT"));
+        assertThatThrownBy(() -> service.publish(1L, 100L, protect("x".repeat(65))))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.fieldErrors().getFirst().code()).isEqualTo("TOO_LONG"));
+    }
+
+    @Test
+    void protectedStoresBcryptKeepsHashWhenOmittedAndClearsOnOtherVisibility() {
+        noNeighbours();
+        draft("제목", "본문");
+        PostDetailResponse detail = service.publish(1L, 100L, protect("secret1"));
+        assertThat(detail.visibility()).isEqualTo(PostVisibility.PROTECTED);
+        assertThat(post.getPasswordHash()).startsWith("$2").doesNotContain("secret1");
+        assertThat(PASSWORD_ENCODER.matches("secret1", post.getPasswordHash())).isTrue();
+        String first = post.getPasswordHash();
+
+        draft("제목", "본문");
+        service.publish(1L, 100L, protect(null));
+        assertThat(post.getPasswordHash()).isEqualTo(first);
+
+        draft("제목", "본문");
+        service.publish(1L, 100L, protect("another"));
+        assertThat(PASSWORD_ENCODER.matches("another", post.getPasswordHash())).isTrue();
+
+        draft("제목", "본문");
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        assertThat(post.getPasswordHash()).isNull();
+        assertThat(post.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+    }
+
+    @Test
+    void futureScheduledAtSchedulesWithoutPublishing() {
+        noNeighbours();
+        PostDraft copy = draft("제목", "예약 ![a](/media/" + KEY_A + ")");
+        Instant at = NOW.plusSeconds(600);
+
+        PostDetailResponse detail = service.publish(1L, 100L, scheduleAt(at));
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.SCHEDULED);
+        assertThat(post.getScheduledAt()).isEqualTo(at);
+        assertThat(post.getPublishedAt()).isNull();
+        assertThat(post.getContentHtml()).contains("예약");
+        assertThat(blog.getFirstPublishedAt()).isNull();
+        verify(postDraftRepository).delete(copy);
+        verify(mediaReferences).syncPublished(100L, 1L, copy.getContentMarkdown());
+        assertThat(detail.status()).isEqualTo(PostStatus.SCHEDULED);
+        assertThat(detail.scheduledAt()).isEqualTo(at);
+        assertThat(detail.prev()).isNull();
+    }
+
+    @Test
+    void pastOrPresentScheduledAtPublishesImmediately() {
+        noNeighbours();
+        draft("제목", "본문");
+        service.publish(1L, 100L, scheduleAt(NOW.minusSeconds(3600)));
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(post.getPublishedAt()).isEqualTo(NOW);
+        assertThat(post.getScheduledAt()).isNull();
+    }
+
+    @Test
+    void publishingScheduledPostNowClearsScheduledAt() {
+        noNeighbours();
+        draft("제목", "본문");
+        service.publish(1L, 100L, scheduleAt(NOW.plusSeconds(600)));
+        draft("제목", "본문");
+        service.publish(1L, 100L, scheduleAt(NOW.plusSeconds(1200)));
+        assertThat(post.getScheduledAt()).isEqualTo(NOW.plusSeconds(1200));
+
+        draft("제목", "본문");
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(post.getScheduledAt()).isNull();
+        assertThat(blog.getFirstPublishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void publishedPostCannotBeScheduled() {
+        post.publish("제목", "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PUBLIC, true, NOW);
+        draft("새 제목", "새 본문");
+        assertCode(() -> service.publish(1L, 100L, scheduleAt(NOW.plusSeconds(600))),
+                ErrorCode.SCHEDULE_NOT_ALLOWED);
+        assertThat(post.getTitle()).isEqualTo("제목");
+    }
+
+    @Test
+    void scheduleBeyondMaxAheadIsInvalid() {
+        draft("제목", "본문");
+        assertThatThrownBy(() -> service.publish(1L, 100L, scheduleAt(NOW.plus(java.time.Duration.ofDays(366)))))
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(e.fieldErrors().getFirst().field()).isEqualTo("scheduledAt");
+                    assertThat(e.fieldErrors().getFirst().code()).isEqualTo("INVALID");
+                    assertThat(e.fieldErrors().getFirst().params()).containsEntry("max", 365L);
+                });
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void settingsToStringHidesPassword() {
+        assertThat(protect("secret1").toString()).doesNotContain("secret1").contains("****");
     }
 
     private static PublishSettingsRequest topicSettings(Long topicId) {

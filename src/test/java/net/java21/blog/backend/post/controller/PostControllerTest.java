@@ -43,6 +43,7 @@ import net.java21.blog.backend.post.dto.SavedDraftResponse;
 import net.java21.blog.backend.post.service.PostDraftService;
 import net.java21.blog.backend.post.service.PostPublishService;
 import net.java21.blog.backend.post.service.PostService;
+import net.java21.blog.backend.post.service.PostUnlockService;
 import net.java21.blog.backend.post.service.ReadCompleteService;
 import net.java21.blog.backend.post.service.RelatedPostService;
 import net.java21.blog.backend.post.service.ViewCountService;
@@ -59,6 +60,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseCookie;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -78,9 +80,9 @@ class PostControllerTest {
     private static final PostDetailResponse DETAIL = new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>", null,
             "본문", "/media/k3Jd9fQ2xLmA7pZ0bR5tYw", null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2,
             true, new PostDetailResponse.Author("마르코", null), new PostLink(122L, "이전"), null, NOW, NOW, 5, null, 31L,
-            false);
+            false, false, null);
     private static final PostSummaryResponse SUMMARY = new PostSummaryResponse(123L, "제목", "본문", null, null,
-            List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, false, null, null);
+            List.of(), 10, 2, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW, NOW, false, false, null, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -99,6 +101,8 @@ class PostControllerTest {
     private ViewCountService viewCountService;
     @MockitoBean
     private ReadCompleteService readCompleteService;
+    @MockitoBean
+    private PostUnlockService postUnlockService;
 
     // ---- 블로그 글 목록 ----
 
@@ -279,7 +283,7 @@ class PostControllerTest {
 
     @Test
     void detailIsPublicWithPostDetailShape() throws Exception {
-        when(postService.detail(123L, null)).thenReturn(DETAIL);
+        when(postService.detail(eq(123L), isNull(), any())).thenReturn(DETAIL);
 
         mvc.perform(get("/api/v1/posts/123"))
                 .andExpect(status().isOk())
@@ -308,19 +312,21 @@ class PostControllerTest {
 
     @Test
     void detailPassesLoggedInViewer() throws Exception {
-        when(postService.detail(123L, 7L)).thenReturn(new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>",
+        when(postService.detail(eq(123L), eq(7L), any())).thenReturn(new PostDetailResponse(123L, "marco", "제목",
+                "<p>본문</p>",
                 null, "본문", null, null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2, true,
-                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true, null, false));
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, true, null, false, false, null));
         mvc.perform(get("/api/v1/posts/123").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.likedByMe").value(true))
                 .andExpect(header().string("Cache-Control", "private, no-cache"));
-        verify(postService).detail(123L, 7L);
+        verify(postService).detail(eq(123L), eq(7L), any());
     }
 
     @Test
     void privatePostForAnonymousIs404() throws Exception {
-        when(postService.detail(123L, null)).thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
+        when(postService.detail(eq(123L), isNull(), any()))
+                .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
         expectError(mvc.perform(get("/api/v1/posts/123")), 404, "POST_NOT_FOUND");
     }
 
@@ -452,6 +458,110 @@ class PostControllerTest {
                 "POST_NOT_IN_TRASH");
     }
 
+    // ---- 보호 글 열기·예약 취소(004 US3) ----
+
+    @Test
+    void unlockReturnsDetailWithCookieAndNoStore() throws Exception {
+        ResponseCookie cookie = ResponseCookie.from("post_unlock_123", "token").httpOnly(true).secure(true)
+                .sameSite("Lax").path("/").maxAge(1800).build();
+        when(postUnlockService.unlock(eq(123L), isNull(), eq("1234"), isNull(), anyString()))
+                .thenReturn(new PostUnlockService.Unlocked(DETAIL, cookie));
+
+        mvc.perform(post("/api/v1/posts/123/unlock").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"1234\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.id").value(123))
+                .andExpect(jsonPath("$.result.locked").value(false))
+                .andExpect(jsonPath("$.result.contentHtml").value("<p>본문</p>"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Set-Cookie", containsString("post_unlock_123=token")))
+                .andExpect(header().string("Set-Cookie", containsString("HttpOnly")))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Lax")))
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=1800")));
+    }
+
+    @Test
+    void unlockUsesExistingVisitorCookieAndMemberId() throws Exception {
+        ResponseCookie cookie = ResponseCookie.from("post_unlock_123", "t").build();
+        when(postUnlockService.unlock(eq(123L), eq(7L), eq("1234"), eq("u:7"), anyString()))
+                .thenReturn(new PostUnlockService.Unlocked(DETAIL, cookie));
+        mvc.perform(post("/api/v1/posts/123/unlock").cookie(authCookies.user(7L))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"1234\"}"))
+                .andExpect(status().isOk());
+
+        when(postUnlockService.unlock(eq(123L), isNull(), eq("1234"),
+                eq("v:3f1c2b8e-1111-2222-3333-444455556666"), anyString()))
+                .thenReturn(new PostUnlockService.Unlocked(DETAIL, cookie));
+        MvcResult result = mvc.perform(post("/api/v1/posts/123/unlock")
+                        .cookie(new Cookie("visitor_id", "3f1c2b8e-1111-2222-3333-444455556666"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"1234\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(result.getResponse().getHeaders("Set-Cookie")).noneMatch(c -> c.startsWith("visitor_id"));
+    }
+
+    @Test
+    void unlockErrors() throws Exception {
+        when(postUnlockService.unlock(eq(123L), isNull(), eq("wrong"), isNull(), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.POST_PASSWORD_MISMATCH, "x"));
+        expectError(mvc.perform(post("/api/v1/posts/123/unlock").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\":\"wrong\"}")), 400, "POST_PASSWORD_MISMATCH");
+
+        when(postUnlockService.unlock(eq(124L), isNull(), any(), isNull(), anyString()))
+                .thenThrow(BusinessException.retryAfter(ErrorCode.PASSWORD_ATTEMPTS_EXCEEDED, "x", 600));
+        expectError(mvc.perform(post("/api/v1/posts/124/unlock").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\":\"x\"}")), 429, "PASSWORD_ATTEMPTS_EXCEEDED")
+                .andExpect(header().string("Retry-After", "600"));
+
+        when(postUnlockService.unlock(eq(125L), isNull(), isNull(), isNull(), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
+        expectError(mvc.perform(post("/api/v1/posts/125/unlock")), 404, "POST_NOT_FOUND");
+    }
+
+    @Test
+    void unlockFromForeignOriginIsRejected() throws Exception {
+        mvc.perform(post("/api/v1/posts/123/unlock").header("Origin", "https://evil.example")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"1234\"}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(postUnlockService);
+    }
+
+    @Test
+    void lockedDetailShowsLockedFlag() throws Exception {
+        PostDetailResponse locked = new PostDetailResponse(123L, "marco", "제목", null, null, null, null, null,
+                List.of(), PostVisibility.PROTECTED, PostStatus.PUBLISHED, 10, 2, true,
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, null, null, false, true, null);
+        when(postService.detail(eq(123L), isNull(), any())).thenReturn(locked);
+        mvc.perform(get("/api/v1/posts/123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.locked").value(true))
+                .andExpect(jsonPath("$.result.visibility").value("PROTECTED"))
+                .andExpect(jsonPath("$.result.contentHtml").value(nullValue()))
+                .andExpect(jsonPath("$.result.scheduledAt").value(nullValue()));
+    }
+
+    @Test
+    void unscheduleReturnsDraftSummary() throws Exception {
+        PostSummaryResponse draft = new PostSummaryResponse(123L, "제목", "본문", null, null, List.of(), 0, 0,
+                PostVisibility.PUBLIC, PostStatus.DRAFT, null, NOW, false, false, null, null, null);
+        when(postService.unschedule(7L, 123L)).thenReturn(draft);
+        mvc.perform(post("/api/v1/posts/123/unschedule").cookie(authCookies.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.status").value("DRAFT"))
+                .andExpect(jsonPath("$.result.scheduledAt").value(nullValue()));
+    }
+
+    @Test
+    void unscheduleErrors() throws Exception {
+        expectError(mvc.perform(post("/api/v1/posts/123/unschedule")), 401, "UNAUTHENTICATED");
+        when(postService.unschedule(7L, 124L)).thenThrow(new BusinessException(ErrorCode.POST_NOT_SCHEDULED, "x"));
+        expectError(mvc.perform(post("/api/v1/posts/124/unschedule").cookie(authCookies.user(7L))), 409,
+                "POST_NOT_SCHEDULED");
+        when(postService.unschedule(8L, 123L)).thenThrow(new BusinessException(ErrorCode.FORBIDDEN, "x"));
+        expectError(mvc.perform(post("/api/v1/posts/123/unschedule").cookie(authCookies.user(8L))), 403,
+                "FORBIDDEN");
+    }
+
     // ---- 조회수 ----
 
     @Test
@@ -463,7 +573,7 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.result").value(nullValue()))
                 .andReturn();
         assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
-        verify(viewCountService).record(123L, null, "v:3f1c2b8e-1111-2222-3333-444455556666");
+        verify(viewCountService).record(eq(123L), isNull(), eq("v:3f1c2b8e-1111-2222-3333-444455556666"), any());
     }
 
     @Test
@@ -475,7 +585,7 @@ class PostControllerTest {
         String setCookie = result.getResponse().getHeader("Set-Cookie");
         assertThat(setCookie).contains("Path=/", "HttpOnly", "Secure", "SameSite=Lax", "Max-Age=31536000");
         String visitorId = setCookie.substring("visitor_id=".length(), setCookie.indexOf(';'));
-        verify(viewCountService).record(123L, null, "v:" + visitorId);
+        verify(viewCountService).record(eq(123L), isNull(), eq("v:" + visitorId), any());
     }
 
     @Test
@@ -483,12 +593,12 @@ class PostControllerTest {
         MvcResult result = mvc.perform(post("/api/v1/posts/123/views").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk()).andReturn();
         assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
-        verify(viewCountService).record(123L, 7L, "u:7");
+        verify(viewCountService).record(eq(123L), eq(7L), eq("u:7"), any());
     }
 
     @Test
     void viewOfInvisiblePostIs404() throws Exception {
-        when(viewCountService.record(eq(123L), isNull(), anyString()))
+        when(viewCountService.record(eq(123L), isNull(), anyString(), any()))
                 .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
         expectError(mvc.perform(post("/api/v1/posts/123/views")), 404, "POST_NOT_FOUND");
     }
@@ -511,7 +621,7 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.result").value(nullValue()))
                 .andReturn();
         assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
-        verify(readCompleteService).record(123L, null, "v:3f1c2b8e-1111-2222-3333-444455556666");
+        verify(readCompleteService).record(eq(123L), isNull(), eq("v:3f1c2b8e-1111-2222-3333-444455556666"), any());
         verifyNoInteractions(viewCountService);
     }
 
@@ -523,18 +633,18 @@ class PostControllerTest {
                 .andReturn();
         String setCookie = result.getResponse().getHeader("Set-Cookie");
         String visitorId = setCookie.substring("visitor_id=".length(), setCookie.indexOf(';'));
-        verify(readCompleteService).record(123L, null, "v:" + visitorId);
+        verify(readCompleteService).record(eq(123L), isNull(), eq("v:" + visitorId), any());
     }
 
     @Test
     void readCompleteOfLoggedInMemberUsesMemberId() throws Exception {
         mvc.perform(post("/api/v1/posts/123/read-complete").cookie(authCookies.user(7L))).andExpect(status().isOk());
-        verify(readCompleteService).record(123L, 7L, "u:7");
+        verify(readCompleteService).record(eq(123L), eq(7L), eq("u:7"), any());
     }
 
     @Test
     void readCompleteOfInvisiblePostIs404() throws Exception {
-        when(readCompleteService.record(eq(123L), isNull(), anyString()))
+        when(readCompleteService.record(eq(123L), isNull(), anyString(), any()))
                 .thenThrow(new BusinessException(ErrorCode.POST_NOT_FOUND, "x"));
         expectError(mvc.perform(post("/api/v1/posts/123/read-complete")), 404, "POST_NOT_FOUND");
     }

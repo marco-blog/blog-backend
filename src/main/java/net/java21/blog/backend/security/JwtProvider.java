@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
 import java.util.Optional;
 
 import javax.crypto.SecretKey;
@@ -24,6 +25,8 @@ public class JwtProvider {
 
     static final String ROLE = "role";
     static final String FAMILY_ID = "fid";
+    /** 접근 토큰이 아닌 짧은 서명 토큰(004 보호 글 열람 쿠키 등)의 종류 클레임. 접근 토큰에는 없으므로 서로 바꿔 쓸 수 없다. */
+    static final String TYPE = "typ";
 
     private final SecretKey key;
     private final Duration accessTtl;
@@ -65,6 +68,37 @@ public class JwtProvider {
                 return Optional.empty();
             }
             return Optional.of(new AuthUser(Long.parseLong(claims.getSubject()), role, familyId));
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 접근 토큰이 아닌 짧은 서명 토큰(004 research B4: 보호 글 열람 쿠키). 같은 키로 서명하되 {@code typ} 클레임으로 종류를 나누고
+     * {@code role}·{@code fid}가 없으므로 {@link #verify}를 통과하지 못한다.
+     */
+    public String issueScoped(String type, Map<String, ?> claims, Duration ttl) {
+        Instant now = clock.instant();
+        return Jwts.builder()
+                .claims(claims)
+                .claim(TYPE, type)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(ttl)))
+                .signWith(key, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    /** {@link #issueScoped}로 만든 {@code type} 토큰이면(서명·만료 확인) 클레임, 아니면 빈 값. */
+    public Optional<Map<String, Object>> verifyScoped(String token, String type) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            Claims claims = parser.parseSignedClaims(token).getPayload();
+            if (claims.getExpiration() == null || !type.equals(claims.get(TYPE, String.class))) {
+                return Optional.empty();
+            }
+            return Optional.of(Map.copyOf(claims));
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }

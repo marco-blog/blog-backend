@@ -13,7 +13,10 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.content.MarkdownRenderer;
 import net.java21.blog.backend.content.RenderedContent;
 import net.java21.blog.backend.media.service.MediaReferenceService;
+import net.java21.blog.backend.post.PostsProperties;
 import net.java21.blog.backend.post.domain.Post;
+import net.java21.blog.backend.post.domain.PostStatus;
+import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.domain.PostDraft;
 import net.java21.blog.backend.post.dto.PostDetailResponse;
 import net.java21.blog.backend.post.dto.PublishSettingsRequest;
@@ -22,6 +25,7 @@ import net.java21.blog.backend.tag.domain.TagNormalizer;
 import net.java21.blog.backend.tag.service.TagService;
 import net.java21.blog.backend.topic.domain.Topic;
 import net.java21.blog.backend.topic.service.TopicService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,11 +40,18 @@ import org.springframework.transaction.annotation.Transactional;
  * 소분류이고 운영자 숨김이 아니어야 한다(없으면 404 {@code TOPIC_NOT_FOUND}, 아니면 422 {@code TOPIC_NOT_SELECTABLE}).
  * 사본의 {@code null}은 "선택 안 함"이다.
  * <p>발행 때 본문의 이미지 참조를 PUBLISHED로 바꾸고 DRAFT 참조를 지운다(US4, FR-071·073).
+ * <p>004 보호 글(FR-062, research B4): PROTECTED를 새로 지정하면 {@code password}(4~64자) 필수, 이미 보호 글이면 생략 시 해시 유지,
+ * 다른 공개 범위로 바꾸면 해시를 지운다. BCrypt로만 저장한다.
+ * <p>004 예약 발행(FR-064, research B5): {@code scheduledAt}이 지금보다 미래면 예약(DRAFT·SCHEDULED 글만, PUBLISHED면 422
+ * {@code SCHEDULE_NOT_ALLOWED}, {@code blog.posts.schedule-max-ahead} 넘으면 400 {@code scheduledAt INVALID}). 예약은
+ * {@code published_at}을 건드리지 않고 블로그 첫 발행 시각도 남기지 않는다(작업이 실제로 발행할 때 남긴다). 없거나 지금 이하면 즉시 발행.
  */
 @Service
 public class PostPublishService {
 
     static final int TITLE_MAX = 200;
+    static final int PASSWORD_MIN = 4;
+    static final int PASSWORD_MAX = 64;
 
     private final PostAccess postAccess;
     private final PostDraftRepository postDraftRepository;
@@ -50,11 +61,14 @@ public class PostPublishService {
     private final TagService tagService;
     private final MediaReferenceService mediaReferences;
     private final TopicService topicService;
+    private final PasswordEncoder passwordEncoder;
+    private final PostsProperties properties;
     private final Clock clock;
 
     public PostPublishService(PostAccess postAccess, PostDraftRepository postDraftRepository,
             MarkdownRenderer markdownRenderer, PostService postService, CategoryAccess categoryAccess,
-            TagService tagService, MediaReferenceService mediaReferences, TopicService topicService, Clock clock) {
+            TagService tagService, MediaReferenceService mediaReferences, TopicService topicService,
+            PasswordEncoder passwordEncoder, PostsProperties properties, Clock clock) {
         this.postAccess = postAccess;
         this.postDraftRepository = postDraftRepository;
         this.markdownRenderer = markdownRenderer;
@@ -63,6 +77,8 @@ public class PostPublishService {
         this.tagService = tagService;
         this.mediaReferences = mediaReferences;
         this.topicService = topicService;
+        this.passwordEncoder = passwordEncoder;
+        this.properties = properties;
         this.clock = clock;
     }
 
@@ -88,20 +104,30 @@ public class PostPublishService {
         List<String> rawTags = settings.tags() != null ? settings.tags() : draft != null ? draft.getTags() : null;
         List<String> tags = rawTags == null ? null : TagNormalizer.normalizeAll(rawTags, "tags");
         Topic topic = topic(post, draft, settings);
+        Instant now = clock.instant();
+        String passwordHash = passwordHash(post, settings);
+        boolean schedule = schedule(post, settings.scheduledAt(), now);
 
         RenderedContent content = markdownRenderer.render(markdown);
         String thumbnailUrl = thumbnailUrl(content, settings.thumbnailMediaKey());
         boolean commentEnabled = settings.commentEnabled() == null || settings.commentEnabled();
         post.classify(category);
         post.assignTopic(topic);
-        Instant now = clock.instant();
-        post.publish(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
-                settings.visibility(), commentEnabled, now);
+        if (schedule) {
+            post.schedule(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
+                    settings.visibility(), commentEnabled, settings.scheduledAt());
+        } else {
+            post.publish(title, markdown, content.html(), content.text(), content.summary(), thumbnailUrl,
+                    settings.visibility(), commentEnabled, now);
+        }
+        post.applyProtection(passwordHash);
         if (settings.notice() != null) {
             post.changeNotice(settings.notice());
         }
-        // 003 FR-087 "새로 시작한 블로그": 블로그의 첫 발행(비공개 발행 포함)만 남긴다. 004 예약 발행도 같은 메서드를 부른다.
-        post.getBlog().markFirstPublished(now);
+        if (!schedule) {
+            // 003 FR-087 "새로 시작한 블로그": 블로그의 첫 발행(비공개 발행 포함)만 남긴다. 예약 글은 작업이 발행할 때 남긴다.
+            post.getBlog().markFirstPublished(now);
+        }
         if (draft != null) {
             postDraftRepository.delete(draft);
         }
@@ -111,6 +137,46 @@ public class PostPublishService {
         postDraftRepository.flush();
         mediaReferences.syncPublished(postId, userId, markdown);
         return postService.detailOf(post, userId);
+    }
+
+    /**
+     * 보호 글 비밀번호의 BCrypt 해시. PROTECTED가 아니거나 이미 보호 글이고 비밀번호를 생략했으면 null(해시 유지·삭제는
+     * {@link Post#applyProtection}). 새로 보호 글로 바꾸는데 없으면 400 {@code password REQUIRED}, 4~64자.
+     */
+    private String passwordHash(Post post, PublishSettingsRequest settings) {
+        if (settings.visibility() != PostVisibility.PROTECTED) {
+            return null;
+        }
+        String password = settings.password();
+        if (password == null || password.isEmpty()) {
+            if (post.isProtected() && post.getPasswordHash() != null) {
+                return null;
+            }
+            throw invalid(FieldError.of("password", "REQUIRED"));
+        }
+        if (password.length() < PASSWORD_MIN) {
+            throw invalid(new FieldError("password", "TOO_SHORT", Map.of("min", PASSWORD_MIN)));
+        }
+        if (password.length() > PASSWORD_MAX) {
+            throw invalid(new FieldError("password", "TOO_LONG", Map.of("max", PASSWORD_MAX)));
+        }
+        return passwordEncoder.encode(password);
+    }
+
+    /** 예약할지(미래 시각). 발행된 글은 422, 최대 앞날을 넘으면 400. 지금 이하이면 즉시 발행(Edge Cases). */
+    private boolean schedule(Post post, Instant scheduledAt, Instant now) {
+        if (scheduledAt == null || !scheduledAt.isAfter(now)) {
+            return false;
+        }
+        if (post.getStatus() != PostStatus.DRAFT && post.getStatus() != PostStatus.SCHEDULED) {
+            throw new BusinessException(ErrorCode.SCHEDULE_NOT_ALLOWED,
+                    "Published post cannot be scheduled: " + post.getId());
+        }
+        if (scheduledAt.isAfter(now.plus(properties.scheduleMaxAhead()))) {
+            throw invalid(new FieldError("scheduledAt", "INVALID",
+                    Map.of("max", properties.scheduleMaxAhead().toDays())));
+        }
+        return true;
     }
 
     /** 발행 설정 → 작성 중 사본 → 지금 발행본 순으로 고른 카테고리. 이 블로그의 카테고리여야 한다. */

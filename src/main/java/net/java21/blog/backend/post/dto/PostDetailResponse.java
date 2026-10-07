@@ -14,6 +14,8 @@ import net.java21.blog.backend.post.domain.PostVisibility;
  * 카테고리는 미분류면 null, 태그는 이름순. 작성자 프로필 이미지는 {@code /media/{key}} 또는 null.
  * 002: {@code likeCount}(좋아요 수), {@code likedByMe}(로그인 회원이 눌렀으면 true, 아니면 false, 비로그인이면 null).
  * 003: {@code topicId}(글의 주제 소분류, 없으면 null). 주제 이름은 front가 {@code GET /topics} 트리로 찾는다.
+ * 004: {@code notice}(공지), {@code locked}(열지 않은 보호 글이면 true — 본문·요약·대표 이미지·카테고리·주제는 null, 태그는 빈 배열),
+ * {@code scheduledAt}(예약 시각, 주인에게만).
  */
 public record PostDetailResponse(
         Long id,
@@ -38,22 +40,37 @@ public record PostDetailResponse(
         int likeCount,
         Boolean likedByMe,
         Long topicId,
-        boolean notice) {
+        boolean notice,
+        boolean locked,
+        Instant scheduledAt) {
 
     public record Author(String nickname, String profileImageUrl) {
     }
 
-    /** 이미 읽은 글(블로그·주인·카테고리 포함)과 태그 이름, 좋아요 여부(비로그인 null)로 만든다. */
+    /**
+     * 이미 읽은 글(블로그·주인·카테고리 포함)과 태그 이름, 좋아요 여부(비로그인 null)로 만든다. {@code locked}면 제목·작성자·블로그·
+     * 발행 시각·공개 범위만 남긴다(004 research B4).
+     */
     public static PostDetailResponse of(Post post, boolean owner, PostLink prev, PostLink next, List<String> tags,
-            Boolean likedByMe) {
+            Boolean likedByMe, boolean locked) {
         var user = post.getBlog().getUser();
-        return new PostDetailResponse(post.getId(), post.getBlog().getHandle(), post.getTitle(), post.getContentHtml(),
-                owner ? post.getContentMarkdown() : null, post.getSummary(), post.getThumbnailUrl(), CategoryRef.of(post.getCategory()),
-                tags == null ? List.of() : tags,
+        return new PostDetailResponse(post.getId(), post.getBlog().getHandle(), post.getTitle(),
+                locked ? null : post.getContentHtml(),
+                owner ? post.getContentMarkdown() : null,
+                locked ? null : post.getSummary(),
+                locked ? null : post.getThumbnailUrl(),
+                locked ? null : CategoryRef.of(post.getCategory()),
+                locked || tags == null ? List.of() : tags,
                 post.getVisibility(), post.getStatus(), post.getViewCount(), post.getCommentCount(),
                 owner ? post.isCommentEnabled() : post.isCommentEnabled() && post.getBlog().isCommentEnabled(),
                 new Author(user.getNickname(), user.profileImageUrl()), prev, next,
-                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe, post.getTopicId(),
-                post.isNotice());
+                post.getPublishedAt(), post.getUpdatedAt(), post.getLikeCount(), likedByMe,
+                locked ? null : post.getTopicId(), post.isNotice(), locked, owner ? post.getScheduledAt() : null);
+    }
+
+    /** 잠기지 않은 상세(001~003 호출부). */
+    public static PostDetailResponse of(Post post, boolean owner, PostLink prev, PostLink next, List<String> tags,
+            Boolean likedByMe) {
+        return of(post, owner, prev, next, tags, likedByMe, false);
     }
 }

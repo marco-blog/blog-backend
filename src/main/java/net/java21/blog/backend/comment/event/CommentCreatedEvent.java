@@ -8,8 +8,14 @@ package net.java21.blog.backend.comment.event;
  * @param postTitle   글 제목(알림 문구용, 만들 때의 값)
  * @param blogId      글이 속한 블로그
  * @param blogOwnerId 블로그 주인(알림 받는 회원)
- * @param authorId    댓글 작성자
+ * @param authorId    댓글 작성 회원. 비회원 댓글(004)이면 null
+ * @param guestName   비회원 댓글의 이름(004). 회원 댓글이면 null
  */
 public record CommentCreatedEvent(long commentId, long postId, String postTitle, long blogId, long blogOwnerId,
-        long authorId) {
+        Long authorId, String guestName) {
+
+    public CommentCreatedEvent(long commentId, long postId, String postTitle, long blogId, long blogOwnerId,
+            long authorId) {
+        this(commentId, postId, postTitle, blogId, blogOwnerId, Long.valueOf(authorId), null);
+    }
 }

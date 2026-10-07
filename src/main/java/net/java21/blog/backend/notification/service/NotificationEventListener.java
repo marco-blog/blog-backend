@@ -58,10 +58,13 @@ public class NotificationEventListener {
         this.requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /** 댓글·답글 → 글이 속한 블로그의 주인에게 NEW_COMMENT. 작성자가 주인이면 만들지 않는다. */
+    /**
+     * 댓글·답글 → 글이 속한 블로그의 주인에게 NEW_COMMENT. 작성자가 주인이면 만들지 않는다. 비회원 댓글(004)은 {@code actor} 없이
+     * {@code params.guestName}을 싣는다.
+     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onCommentCreated(CommentCreatedEvent event) {
-        if (event.authorId() == event.blogOwnerId()) {
+        if (event.authorId() != null && event.authorId() == event.blogOwnerId()) {
             return;
         }
         try {
@@ -69,9 +72,12 @@ public class NotificationEventListener {
                 Map<String, Object> params = new LinkedHashMap<>();
                 params.put("postId", event.postId());
                 params.put("postTitle", event.postTitle());
+                if (event.authorId() == null) {
+                    params.put("guestName", event.guestName());
+                }
                 notificationRepository.saveAndFlush(new Notification(
                         userRepository.getReferenceById(event.blogOwnerId()),
-                        userRepository.getReferenceById(event.authorId()),
+                        event.authorId() == null ? null : userRepository.getReferenceById(event.authorId()),
                         blogRepository.getReferenceById(event.blogId()), NotificationType.NEW_COMMENT,
                         NotificationTargetType.COMMENT, event.commentId(), params));
             });

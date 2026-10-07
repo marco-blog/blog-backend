@@ -321,6 +321,84 @@ class PostServiceTest {
         assertCode(() -> service.restore(OWNER, 100L), ErrorCode.POST_NOT_FOUND);
     }
 
+    // ---- 004 예약 취소·예약 글 복구·보호 글 상세 (T079) ----
+
+    @Test
+    void unscheduleTurnsScheduledPostIntoDraft() {
+        schedule(NOW.plusSeconds(3600));
+        stubFound();
+
+        PostSummaryResponse summary = service.unschedule(OWNER, 100L);
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        assertThat(post.getScheduledAt()).isNull();
+        assertThat(summary.status()).isEqualTo(PostStatus.DRAFT);
+        assertThat(summary.scheduledAt()).isNull();
+    }
+
+    @Test
+    void unscheduleRulesForNotScheduledAndStrangers() {
+        publish(PostVisibility.PUBLIC);
+        stubFound();
+        assertCode(() -> service.unschedule(OWNER, 100L), ErrorCode.POST_NOT_SCHEDULED);
+
+        Post scheduled = TestEntities.post(101L, blog, "예약");
+        scheduled.schedule("예약", "b", "<p>b</p>", "b", "b", null, PostVisibility.PUBLIC, true, NOW.plusSeconds(60));
+        when(postRepository.findWithBlogAndOwner(101L)).thenReturn(Optional.of(scheduled));
+        assertCode(() -> service.unschedule(STRANGER, 101L), ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void restoredScheduledPostIsScheduledAgainWithItsTime() {
+        Instant at = NOW.plusSeconds(3600);
+        schedule(at);
+        post.moveToTrash(NOW);
+        stubFound();
+
+        PostSummaryResponse restored = service.restore(OWNER, 100L);
+
+        assertThat(restored.status()).isEqualTo(PostStatus.SCHEDULED);
+        assertThat(restored.scheduledAt()).isEqualTo(at);
+    }
+
+    @Test
+    void scheduledPostIsOnlyVisibleToItsOwnerWithScheduledAt() {
+        Instant at = NOW.plusSeconds(3600);
+        schedule(at);
+        stubFound();
+
+        assertCode(() -> service.detail(100L, null), ErrorCode.POST_NOT_FOUND);
+        assertCode(() -> service.detail(100L, STRANGER), ErrorCode.POST_NOT_FOUND);
+        PostDetailResponse forOwner = service.detail(100L, OWNER);
+        assertThat(forOwner.status()).isEqualTo(PostStatus.SCHEDULED);
+        assertThat(forOwner.scheduledAt()).isEqualTo(at);
+    }
+
+    @Test
+    void protectedPostIsLockedUntilUnlocked() {
+        publish(PostVisibility.PROTECTED);
+        post.applyProtection("$2a$04$hash");
+        stubFound();
+
+        PostDetailResponse locked = service.detail(100L, STRANGER, p -> false);
+        assertThat(locked.locked()).isTrue();
+        assertThat(locked.contentHtml()).isNull();
+        assertThat(locked.summary()).isNull();
+        assertThat(locked.tags()).isEmpty();
+        assertThat(locked.title()).isEqualTo("제목");
+
+        PostDetailResponse unlocked = service.detail(100L, STRANGER, p -> true);
+        assertThat(unlocked.locked()).isFalse();
+        assertThat(unlocked.contentHtml()).isEqualTo("<p>본문</p>");
+
+        assertThat(service.detail(100L, OWNER, p -> false).locked()).as("주인").isFalse();
+        assertThat(service.detail(100L, null).locked()).isTrue();
+    }
+
+    private void schedule(Instant at) {
+        post.schedule("제목", "본문", "<p>본문</p>", "본문", "본문", null, PostVisibility.PUBLIC, true, at);
+    }
+
     private void publish(PostVisibility visibility) {
         post.publish("제목", "본문", "<p>본문</p>", "본문", "본문", null, visibility, true, NOW);
     }

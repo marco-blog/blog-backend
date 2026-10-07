@@ -184,7 +184,11 @@ class OpenApiContractTest {
             "PUT /api/v1/blogs/{handle}/sidebar",
             "GET /api/v1/blogs/{handle}/archive",
             "POST /api/v1/blogs/{handle}/visits",
-            "GET /api/v1/blogs/{handle}/manage/stats");
+            "GET /api/v1/blogs/{handle}/manage/stats",
+            // 004 글 공개 옵션(US3): 보호 글 열기·예약 취소·비회원 댓글 내용 보기
+            "POST /api/v1/posts/{id}/unlock",
+            "POST /api/v1/posts/{id}/unschedule",
+            "POST /api/v1/comments/{id}/unlock");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",

@@ -104,6 +104,19 @@ class NotificationEventListenerTest {
         assertThat(n.getReadAt()).isNull();
     }
 
+    /** 004 비회원 댓글(T084): 글 주인에게 NEW_COMMENT, 행위자 없음, {@code params.guestName}. */
+    @Test
+    void guestCommentNotifiesBlogOwnerWithGuestName() {
+        listener.onCommentCreated(new CommentCreatedEvent(3003L, 123L, "첫 글", 10L, OWNER, null, "손님"));
+
+        Notification n = saved();
+        assertThat(n.getUser()).isSameAs(owner);
+        assertThat(n.getActor()).isNull();
+        assertThat(n.getType()).isEqualTo(NotificationType.NEW_COMMENT);
+        assertThat(n.getTargetId()).isEqualTo(3003L);
+        assertThat(n.getParams()).isEqualTo(Map.of("postId", 123L, "postTitle", "첫 글", "guestName", "손님"));
+    }
+
     @Test
     void ownCommentOrReplyCreatesNothing() {
         listener.onCommentCreated(new CommentCreatedEvent(3002L, 123L, "첫 글", 10L, OWNER, OWNER));

@@ -98,15 +98,23 @@ public class PostService {
     }
 
     /**
-     * 글 상세. 주인 외에게는 본문 노출 가능 글만, 주인에게는 DRAFT·PRIVATE도 보인다(DELETED는 상세에서 404).
-     * 쿼리: 글(블로그·주인·카테고리 fetch join) 1회 + 태그 1회 + 발행된 글이면 이전·다음 2회 + 로그인했으면 좋아요 여부 1회(002).
+     * 글 상세. 주인 외에게는 목록 노출 가능 글만, 주인에게는 DRAFT·PRIVATE·SCHEDULED도 보인다(DELETED는 상세에서 404).
+     * 보호 글(004)은 주인이 아니고 유효한 열람 쿠키가 없으면 잠긴 상세({@code locked: true})다.
+     * 쿼리: 글(블로그·주인·카테고리 fetch join) 1회 + 태그 1회(잠긴 글은 없음) + 발행된 글이면 이전·다음 2회
+     * + 로그인했으면 좋아요 여부 1회(002).
      */
     @Transactional(readOnly = true)
-    public PostDetailResponse detail(Long postId, Long viewerId) {
+    public PostDetailResponse detail(Long postId, Long viewerId, PostUnlockCheck unlock) {
         Post post = postRepository.findWithBlogAndOwner(postId)
                 .filter(p -> PostExposure.isDetailVisibleTo(p, viewerId))
                 .orElseThrow(() -> PostAccess.notFound(postId));
-        return detailOf(post, viewerId);
+        return detailOf(post, viewerId, PostExposure.isLocked(post, viewerId, unlock.isUnlocked(post)));
+    }
+
+    /** 열람 쿠키가 없는 요청의 상세. */
+    @Transactional(readOnly = true)
+    public PostDetailResponse detail(Long postId, Long viewerId) {
+        return detail(postId, viewerId, PostUnlockCheck.NONE);
     }
 
     /**
@@ -114,6 +122,10 @@ public class PostService {
      * {@code likedByMe}는 비로그인이면 null.
      */
     PostDetailResponse detailOf(Post post, Long viewerId) {
+        return detailOf(post, viewerId, false);
+    }
+
+    PostDetailResponse detailOf(Post post, Long viewerId, boolean locked) {
         boolean owner = post.isOwnedBy(viewerId);
         PostLink prev = null;
         PostLink next = null;
@@ -124,7 +136,23 @@ public class PostService {
         }
         Boolean likedByMe = viewerId == null ? null
                 : postLikeRepository.existsByUserIdAndPostId(viewerId, post.getId());
-        return PostDetailResponse.of(post, owner, prev, next, tagNames(post.getId()), likedByMe);
+        return PostDetailResponse.of(post, owner, prev, next, locked ? List.of() : tagNames(post.getId()), likedByMe,
+                locked);
+    }
+
+    /**
+     * 예약 취소(004 research B5): SCHEDULED → DRAFT, 예약 시각을 지운다. 예약 상태가 아니면(이미 발행됨 등) 409
+     * {@code POST_NOT_SCHEDULED}. 주인만(남의 글 403, 휴지통 글 404).
+     */
+    @Transactional
+    public PostSummaryResponse unschedule(long userId, Long postId) {
+        Post post = postAccess.requireOwnedEditablePost(postId, userId);
+        if (!post.isScheduled()) {
+            throw new BusinessException(ErrorCode.POST_NOT_SCHEDULED, "Post is not scheduled: " + postId);
+        }
+        post.unschedule();
+        postRepository.flush();
+        return summaryOf(post);
     }
 
     /** 휴지통으로(FR-084). 이미 휴지통이면 404(상세와 같다). 남의 글 403. */
@@ -142,11 +170,17 @@ public class PostService {
         }
         post.restore();
         postRepository.flush();
+        return summaryOf(post);
+    }
+
+    /** 주인에게 돌려줄 한 줄(예약 시각 포함). */
+    private PostSummaryResponse summaryOf(Post post) {
+        Long postId = post.getId();
         return new PostSummaryResponse(post.getId(), post.getTitle(), post.getSummary(), post.getThumbnailUrl(),
                 CategoryRef.of(post.getCategory()), tagNames(postId), post.getViewCount(), post.getCommentCount(),
                 post.getVisibility(), post.getStatus(),
                 post.getPublishedAt(), post.getUpdatedAt(), postDraftRepository.existsById(postId),
-                post.isNotice(), null, null);
+                post.isNotice(), post.getScheduledAt(), null, null);
     }
 
     /** 글 하나의 태그 이름(이름순). 쿼리 1회. */

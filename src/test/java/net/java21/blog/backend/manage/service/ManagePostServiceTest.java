@@ -76,7 +76,7 @@ class ManagePostServiceTest {
         ManagePostFilter trash = new ManagePostFilter(PostStatus.DELETED, null, null, null);
         Instant deletedAt = NOW.minus(Duration.ofDays(2));
         ManagePostRow row = new ManagePostRow(5L, "버린 글", "요약", null, 7L, "Spring", 3, 0, PostVisibility.PRIVATE,
-                PostStatus.DELETED, NOW.minus(Duration.ofDays(9)), deletedAt, false, deletedAt, false);
+                PostStatus.DELETED, NOW.minus(Duration.ofDays(9)), deletedAt, false, deletedAt, false, null);
         when(repository.findPosts(eq(10L), eq(trash), eq(NOW.minus(Duration.ofDays(30))), any()))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
         when(tagQueryRepository.findTagNames(List.of(5L))).thenReturn(Map.of(5L, List.of("jpa", "spring")));
@@ -96,7 +96,7 @@ class ManagePostServiceTest {
     void liveListHasNoPurgeAt() {
         when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
         ManagePostRow row = new ManagePostRow(5L, "글", null, null, null, null, 0, 0, PostVisibility.PUBLIC,
-                PostStatus.DRAFT, null, NOW, true, null, false);
+                PostStatus.DRAFT, null, NOW, true, null, false, null);
         when(repository.findPosts(eq(10L), eq(ManagePostFilter.ALL), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(row)));
 
@@ -132,6 +132,22 @@ class ManagePostServiceTest {
                 new BulkPostRequest(List.of(1L, 2L, 3L, 2L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PRIVATE, null));
 
         assertThat(result.updated()).isEqualTo(3);
+    }
+
+    /** 004 결정 26: 일괄 작업으로 PROTECTED는 지정할 수 없다(비밀번호가 없음). */
+    @Test
+    void changeVisibilityToProtectedIsInvalid() {
+        when(blogAccess.requireOwnedActiveBlog("marco", OWNER)).thenReturn(blog);
+
+        assertThatThrownBy(() -> service.bulk(OWNER, "marco",
+                new BulkPostRequest(List.of(1L), BulkAction.CHANGE_VISIBILITY, PostVisibility.PROTECTED, null)))
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(e.fieldErrors()).singleElement()
+                            .satisfies(f -> assertThat(f.field()).isEqualTo("visibility"))
+                            .satisfies(f -> assertThat(f.code()).isEqualTo("INVALID"));
+                });
+        verify(repository, never()).changeVisibility(anyLong(), anyCollection(), any(), any());
     }
 
     @Test

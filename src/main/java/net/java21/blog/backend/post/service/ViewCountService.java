@@ -61,9 +61,18 @@ public class ViewCountService {
      */
     @Transactional
     public boolean record(Long postId, Long viewerId, String visitorKey) {
+        return record(postId, viewerId, visitorKey, PostUnlockCheck.NONE);
+    }
+
+    /** 열지 않은 보호 글(004)은 200이지만 세지 않는다(contracts/api.md 보호 글 절). */
+    @Transactional
+    public boolean record(Long postId, Long viewerId, String visitorKey, PostUnlockCheck unlock) {
         Post post = postRepository.findWithBlogAndOwner(postId)
                 .filter(p -> PostExposure.isDetailVisibleTo(p, viewerId))
                 .orElseThrow(() -> PostAccess.notFound(postId));
+        if (PostExposure.isLocked(post, viewerId, unlock.isUnlocked(post))) {
+            return false;
+        }
         String key = post.getId() + ":" + visitorKey;
         if (recentViews.asMap().putIfAbsent(key, Boolean.TRUE) != null) {
             return false;

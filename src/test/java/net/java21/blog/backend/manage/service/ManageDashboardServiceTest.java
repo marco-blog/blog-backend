@@ -60,7 +60,7 @@ class ManageDashboardServiceTest {
         when(repository.countDrafts(10L)).thenReturn(2L);
         when(repository.findRecentPosts(10L, ManageDashboardService.RECENT_SIZE)).thenReturn(List.of(
                 new ManagePostRow(3L, "최근 글", "요약", null, 7L, "Spring", 1, 0, PostVisibility.PUBLIC, PostStatus.PUBLISHED, NOW,
-                        NOW, false, null, false)));
+                        NOW, false, null, false, null)));
         when(commentService.stats(10L, 5)).thenReturn(new ManageCommentService.CommentStats(1, List.of()));
         GuestbookEntryResponse secret = new GuestbookEntryResponse(9L, "비밀 인사", true, false,
                 AuthorResponse.guest("손님"), NOW, NOW, List.of());
