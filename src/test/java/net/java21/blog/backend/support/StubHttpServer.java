@@ -15,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 /**
@@ -48,6 +49,8 @@ public final class StubHttpServer implements AutoCloseable {
 
     private final HttpServer server;
     private final Map<String, Stub> stubs = new ConcurrentHashMap<>();
+    /** 머리글·바이트 본문을 직접 쓰는 경로(007: ETag/304, Location, 이미지, 흘려보내기). */
+    private final Map<String, HttpHandler> handlers = new ConcurrentHashMap<>();
     private final List<Recorded> requests = new CopyOnWriteArrayList<>();
 
     private StubHttpServer(HttpServer server) {
@@ -76,6 +79,43 @@ public final class StubHttpServer implements AutoCloseable {
         return this;
     }
 
+    /**
+     * 경로의 응답을 직접 쓴다(요청 본문은 이미 읽혀 있고 기록도 됨). {@link #respond}보다 우선한다.
+     */
+    public StubHttpServer handle(String path, HttpHandler handler) {
+        handlers.put(path, handler);
+        return this;
+    }
+
+    /** 바이트 본문과 추가 머리글. */
+    public StubHttpServer respondBytes(String path, int status, String contentType, byte[] body,
+            Map<String, String> headers) {
+        return handle(path, exchange -> {
+            if (contentType != null) {
+                exchange.getResponseHeaders().add("Content-Type", contentType);
+            }
+            headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
+            boolean head = "HEAD".equals(exchange.getRequestMethod());
+            int length = body == null || body.length == 0 ? -1 : body.length;
+            exchange.sendResponseHeaders(status, head ? -1 : length);
+            if (!head && length > 0) {
+                try (OutputStream out = exchange.getResponseBody()) {
+                    out.write(body);
+                }
+            }
+        });
+    }
+
+    /** 다른 주소로 보내는 리다이렉트. */
+    public StubHttpServer redirect(String path, int status, String location) {
+        return respondBytes(path, status, null, null, Map.of("Location", location));
+    }
+
+    /** 기록을 지운다. */
+    public void clearRequests() {
+        requests.clear();
+    }
+
     public int port() {
         return server.getAddress().getPort();
     }
@@ -97,6 +137,11 @@ public final class StubHttpServer implements AutoCloseable {
             URI uri = exchange.getRequestURI();
             requests.add(new Recorded(exchange.getRequestMethod(), uri.getPath(), uri.getRawQuery(),
                     Map.copyOf(exchange.getRequestHeaders()), body));
+            HttpHandler handler = handlers.get(uri.getPath());
+            if (handler != null) {
+                handler.handle(exchange);
+                return;
+            }
             Stub stub = stubs.getOrDefault(uri.getPath(), new Stub(404, "text/plain", "not found", Duration.ZERO));
             if (!stub.delay().isZero()) {
                 try {

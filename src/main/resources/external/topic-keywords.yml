@@ -1,0 +1,50 @@
+# 외부 글 자동 분류 키워드 사전(007 research E9, KeywordTopicClassifier).
+# version: keyword-v1
+# - 키는 003 TopicSeeder(portal/topics-seed.json)의 소분류 slug, 값은 그 주제를 가리키는 낱말 목록이다.
+#   대분류(life·travel-food·culture·sports·knowledge)의 공통어는 넣지 않는다.
+# - 정규화 규칙: NFKC → 앞뒤 공백 제거 → 소문자(Locale.ROOT). 매핑 규칙(topic_mapping_rules.keyword)·피드 태그와 같다.
+# - 영어·숫자만으로 된 낱말은 토큰 완전 일치, 한글·가나·한자나 공백이 섞인 낱말은 부분 문자열로 찾는다.
+#   그래서 한국어·일본어·중국어 낱말은 두 글자 이상으로 쓰고, 다른 낱말 안에 흔히 들어가는 짧은 말은 피한다.
+# - 한 낱말은 한 주제에만 둔다(KeywordDictionaryTest가 중복을 막는다). 소분류마다 10개 이상.
+# - 고치면 버전(KeywordTopicClassifier.VERSION)을 올리고 PR로 낸다(blog-backend/docs/operations.md).
+version: keyword-v1
+topics:
+  daily-thoughts: [일상, 생각, 하루, 일기, 회고, diary, daily, thoughts, journal, 日常, 日記, 考え, 随想, 心情, 感想文]
+  parenting-marriage: [육아, 결혼, 아기, 신생아, 임신, 출산, parenting, wedding, marriage, pregnancy, toddler, 育児, 結婚, 赤ちゃん, 育儿, 婚礼, 宝宝]
+  pets: [반려동물, 강아지, 고양이, 반려견, 반려묘, 산책, pet, pets, puppy, kitten, cat, dog, ペット, 子猫, 宠物, 猫咪, 狗狗]
+  fashion-beauty: [패션, 뷰티, 화장품, 메이크업, 스킨케어, 코디, fashion, beauty, makeup, skincare, cosmetics, outfit, ファッション, 美容, コスメ, 时尚, 化妆品, 护肤]
+  interior-diy: [인테리어, 셀프인테리어, 가구, 리모델링, 수납, 집꾸미기, interior, diy, furniture, remodeling, woodworking, インテリア, 家具, 装修, 家居, 手工制作]
+  cooking-recipe: [요리, 레시피, 반찬, 집밥, 베이킹, 밀키트, recipe, recipes, cooking, baking, homemade, レシピ, 料理, 手料理, 菜谱, 烹饪, 做饭]
+  product-review: [상품리뷰, 내돈내산, 구매후기, 언박싱, 사용후기, 제품후기, review, unboxing, haul, レビュー, 購入品, 商品レビュー, 测评, 开箱, 好物推荐]
+  gardening: [원예, 텃밭, 화분, 식물, 다육이, 가드닝, 분갈이, gardening, garden, plants, houseplants, succulent, ガーデニング, 家庭菜園, 観葉植物, 园艺, 种菜, 多肉]
+  domestic-travel: [국내여행, 제주도, 강릉, 부산여행, 경주, 여수, 당일치기, roadtrip, staycation, 国内旅行, 温泉旅館, 국내 여행, 周边游, 国内游, 自驾游]
+  overseas-travel: [해외여행, 배낭여행, 유럽여행, 일본여행, 항공권, 환전, travel, backpacking, itinerary, passport, 海外旅行, 旅行記, 出国游, 自由行, 签证]
+  camping-hiking: [캠핑, 등산, 백패킹, 차박, 텐트, 산행, 글램핑, camping, hiking, trekking, tent, キャンプ, 登山, ハイキング, 露营, 徒步, 爬山]
+  restaurants: [맛집, 식당, 맛집탐방, 오마카세, 노포, 미슐랭, restaurant, restaurants, foodie, michelin, グルメ, 食べ歩き, レストラン, 美食, 餐厅, 探店]
+  cafe-dessert: [카페, 디저트, 커피, 케이크, 베이커리, 마카롱, cafe, coffee, dessert, latte, bakery, カフェ, スイーツ, 咖啡, 甜品, 咖啡馆]
+  tv: [드라마, 예능, 방송, 시청률, 넷플릭스, 티빙, drama, netflix, sitcom, episode, ドラマ, バラエティ, テレビ番組, 电视剧, 综艺, 追剧]
+  stars: [연예인, 아이돌, 배우 인터뷰, 팬미팅, 컴백, 케이팝, idol, kpop, celebrity, fandom, アイドル, 芸能人, 推し活, 明星, 偶像, 粉丝]
+  movies: [영화, 개봉, 영화관, 관람평, 감독, 박스오피스, movie, movies, film, cinema, boxoffice, 映画, 映画館, 电影, 影评, 票房]
+  music: [음악, 앨범, 노래, 플레이리스트, 콘서트, 작곡, music, album, playlist, concert, songwriter, 音楽, 新曲, 歌詞, 音乐, 专辑, 歌曲]
+  books: [책추천, 독서, 서평, 소설, 북리뷰, 독후감, book, books, reading, novel, bookreview, 読書, 小説, 書評, 读书, 书评, 阅读]
+  comics-animation: [만화, 웹툰, 애니메이션, 애니, 코믹스, 원피스, manga, anime, webtoon, comics, アニメ, 漫画, マンガ, 动漫, 动画, 番剧]
+  shows-exhibitions-festivals: [공연, 전시회, 뮤지컬, 축제, 연극, 미술관, musical, exhibition, festival, theater, gallery, 展覧会, ミュージカル, 美術館, 展览, 音乐节, 话剧]
+  creative-works: [창작, 시창작, 단편소설, 일러스트, 그림, 습작, illustration, fanfic, poetry, drawing, artwork, 創作, イラスト, 自作小説, 原创, 插画, 写作]
+  soccer: [축구, 프리미어리그, 손흥민, 케이리그, 챔피언스리그, 월드컵, soccer, football, epl, premierleague, サッカー, Jリーグ, 足球, 英超, 世界杯]
+  baseball: [야구, 프로야구, 메이저리그, 류현진, 홈런, 투수, baseball, mlb, kbo, pitcher, homerun, 野球, プロ野球, 甲子園, 棒球, 本垒打, 大联盟]
+  basketball: [농구, 덩크, 리바운드, 3점슛, 르브론, 농구화, basketball, nba, kbl, dunk, rebound, バスケ, バスケットボール, 篮球, 灌篮, 篮板]
+  volleyball: [배구, 브이리그, 스파이크, 리시브, 세터, 김연경, volleyball, vleague, setter, libero, バレーボール, 排球, 扣球, 女排]
+  golf: [골프, 라운딩, 스크린골프, 드라이버샷, 퍼팅, 골프장, golf, pga, lpga, birdie, putting, ゴルフ, 高尔夫, 挥杆, 推杆]
+  general-sports: [스포츠, 마라톤, 수영, 테니스, 헬스, 크로스핏, 올림픽, marathon, tennis, swimming, olympics, crossfit, マラソン, テニス, 马拉松, 网球, 奥运]
+  it-internet: [개발, 프로그래밍, 코딩, 개발자, 백엔드, 프론트엔드, 클라우드, 데이터베이스, 오픈소스, 인공지능, 머신러닝, spring, java, kotlin, python, javascript, typescript, react, kubernetes, docker, linux, aws, devops, api, sql, mysql, programming, developer, backend, frontend, ai, llm, github, rust, golang, プログラミング, 開発, エンジニア, 機械学習, 编程, 程序员, 开发, 人工智能, 云计算]
+  mobile: [모바일, 스마트폰, 안드로이드, 아이폰, 앱개발, 갤럭시, mobile, android, iphone, ios, smartphone, galaxy, スマホ, アプリ, 手机, 安卓, 苹果手机]
+  science: [과학, 물리학, 화학, 생물학, 천문학, 우주, 실험, science, physics, chemistry, biology, astronomy, nasa, 科学, 物理, 化学, 宇宙, 天文, 生物学]
+  it-product-review: [노트북, 키보드, 태블릿, 이어폰, 모니터, 그래픽카드, 갤럭시탭, laptop, keyboard, tablet, earbuds, monitor, gpu, macbook, ipad, ノートパソコン, イヤホン, 笔记本电脑, 耳机, 显卡]
+  business-work: [경영, 직장, 회사생활, 스타트업, 리더십, 이직, 마케팅, 창업, startup, leadership, management, marketing, career, 経営, 転職, 仕事術, 职场, 创业, 管理]
+  economy: [경제, 주식, 투자, 부동산, 금리, 재테크, 코인, economy, stocks, investing, inflation, bitcoin, finance, 経済, 株式投資, 不動産, 经济, 股票, 理财, 投资]
+  society: [사회, 뉴스, 사건, 복지, 인권, 노동, 환경문제, society, news, welfare, climate, 社会, 事件, ニュース, 社会新闻, 民生, 环保]
+  politics: [정치, 국회, 선거, 대통령, 정당, 외교, 정책, politics, election, president, parliament, policy, 政治, 選挙, 国会, 选举, 外交, 政府]
+  education: [교육, 수능, 입시, 공부법, 학교, 대학원, 교사, education, exam, university, teacher, school, 教育, 受験, 勉強法, 高考, 考研, 学习方法]
+  health-medicine: [건강, 의학, 다이어트, 병원, 운동법, 영양제, 질환, health, medicine, diet, fitness, nutrition, 健康, 医学, ダイエット, 医疗, 养生, 减肥]
+  history: [역사, 조선시대, 고려시대, 삼국시대, 세계사, 한국사, 전쟁사, history, ancient, medieval, dynasty, 歴史, 戦国時代, 日本史, 历史, 三国, 古代史]
+  foreign-languages: [외국어, 영어공부, 일본어, 중국어, 토익, 회화, 단어장, english, toeic, ielts, vocabulary, grammar, 英語, 日本語学習, 中国語, 英语, 日语, 外语]

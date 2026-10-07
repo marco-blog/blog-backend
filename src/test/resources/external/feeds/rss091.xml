@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="0.91">
+  <channel>
+    <title>Old RSS</title>
+    <link>http://old.example/</link>
+    <description>091</description>
+    <language>en</language>
+    <item>
+      <title>First 091</title>
+      <link>http://old.example/1</link>
+      <description>One</description>
+    </item>
+  </channel>
+</rss>

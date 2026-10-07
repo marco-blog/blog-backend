@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
-        ResponseEntity<ApiResponse<Void>> response = error(e.errorCode(), e.getMessage(), e.fieldErrors());
+        ResponseEntity<ApiResponse<Void>> response = error(e.errorCode(), e.getMessage(), e.fieldErrors(), e.params());
         if (e.retryAfterSeconds() == null) {
             return response;
         }
@@ -139,8 +139,13 @@ public class GlobalExceptionHandler {
     }
 
     private static ResponseEntity<ApiResponse<Void>> error(ErrorCode code, String message, List<FieldError> fieldErrors) {
+        return error(code, message, fieldErrors, null);
+    }
+
+    private static ResponseEntity<ApiResponse<Void>> error(ErrorCode code, String message, List<FieldError> fieldErrors,
+            Map<String, Object> params) {
         ApiResponse.Header header = ApiResponse.Header.failure(
-                code.name(), message, fieldErrors, RequestIdFilter.currentTraceId());
+                code.name(), message, fieldErrors, RequestIdFilter.currentTraceId(), params);
         // 형식을 정해 두어 Accept가 JSON이 아닌 요청(피드 리더의 application/rss+xml 등)에도 공통 틀 JSON으로 답한다(002 contracts/api.md).
         return ResponseEntity.status(code.status()).contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResponse.failure(header));

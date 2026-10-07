@@ -57,7 +57,7 @@ class SchedulingConfigTest {
 
     @Test
     void fullQueueRejectsSoTheSchedulerCanSkipThisRound() throws Exception {
-        ThreadPoolTaskExecutor executor = new SchedulingConfig().feedFetchExecutor(new ExternalFeedProperties(1, 1));
+        ThreadPoolTaskExecutor executor = new SchedulingConfig().feedFetchExecutor(ExternalFeedProperties.ofPool(1, 1));
         executor.initialize();
         CountDownLatch release = new CountDownLatch(1);
         try {

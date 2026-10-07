@@ -15,5 +15,11 @@ public enum NotificationType {
      * 005 내 신고 처리 결과(회원 신고자에게, 행위자 없음, 링크 없음). target REPORT, params {@code { targetType, decision }}
      * ({@code decision}: ACTIONED·DISMISSED, 대상 제목·내용 없음).
      */
-    REPORT_RESOLVED
+    REPORT_RESOLVED,
+    /** 007 외부 블로그 신청 승인(신청 회원에게, 행위자 없음). target EXTERNAL_BLOG, params {@code { externalBlogTitle }}. */
+    EXTERNAL_BLOG_APPROVED,
+    /** 007 외부 블로그 신청 거절. target EXTERNAL_BLOG, params {@code { externalBlogTitle, reason }}. */
+    EXTERNAL_BLOG_REJECTED,
+    /** 007 연속 실패 자동 중지(관리 회원에게). target EXTERNAL_BLOG, params {@code { externalBlogTitle, lastResult }}. */
+    EXTERNAL_FEED_STOPPED
 }

@@ -209,6 +209,58 @@ public enum SettingKey {
             }
             return normalized;
         }
+    },
+
+    /** 외부 블로그 수집 주기(007 FR-113). ISO-8601 기간 문자열 {@code PT10M}~{@code PT24H}. 프로퍼티 기본값은 시험용으로 더 짧을 수 있다. */
+    EXTERNAL_FETCH_INTERVAL("external.fetch-interval") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.external().fetchInterval().toString();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            Map<String, Object> params = Map.of("min", "PT10M", "max", "PT24H");
+            if (!(raw instanceof String text)) {
+                throw invalid(new FieldError(VALUE, INVALID, params));
+            }
+            Duration duration;
+            try {
+                duration = Duration.parse(text.strip());
+            } catch (DateTimeParseException e) {
+                throw invalid(new FieldError(VALUE, INVALID, params));
+            }
+            if (duration.compareTo(Duration.ofMinutes(10)) < 0 || duration.compareTo(Duration.ofHours(24)) > 0) {
+                throw invalid(new FieldError(VALUE, INVALID, params));
+            }
+            return duration.toString();
+        }
+    },
+
+    /** 자동 분류 채택 기준(007 FR-118·119). 숫자 0~1. */
+    EXTERNAL_AUTO_CLASSIFY_MIN_CONFIDENCE("external.auto-classify-min-confidence") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.external().autoClassifyMinConfidence();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return decimal(raw, 0, 1);
+        }
+    },
+
+    /** 외부 글 인기 점수 가중치(007 FR-124). 숫자 0~10. 바꾸면 포털 캐시를 비운다. */
+    EXTERNAL_SCORE_WEIGHT("external.score-weight") {
+        @Override
+        public Object defaultValue(SettingDefaults defaults) {
+            return defaults.external().scoreWeight();
+        }
+
+        @Override
+        public Object normalize(Object raw) {
+            return decimal(raw, 0, 10);
+        }
     };
 
     static final String VALUE = "value";
@@ -248,6 +300,14 @@ public enum SettingKey {
         if (raw instanceof Number n && n.doubleValue() == Math.rint(n.doubleValue())
                 && n.doubleValue() >= min && n.doubleValue() <= max) {
             return n.intValue();
+        }
+        throw invalid(new FieldError(VALUE, INVALID, range(min, max)));
+    }
+
+    private static Object decimal(Object raw, double min, double max) {
+        if (raw instanceof Number n && Double.isFinite(n.doubleValue()) && n.doubleValue() >= min
+                && n.doubleValue() <= max) {
+            return n.doubleValue();
         }
         throw invalid(new FieldError(VALUE, INVALID, range(min, max)));
     }

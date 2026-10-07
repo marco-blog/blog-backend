@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No dates</title>
+    <description>d</description>
+    <item>
+      <link>https://nodates.example/a/b/</link>
+      <description>no title no date</description>
+    </item>
+    <item>
+      <guid isPermaLink="true">https://nodates.example/permalink</guid>
+      <title>Guid permalink</title>
+    </item>
+  </channel>
+</rss>

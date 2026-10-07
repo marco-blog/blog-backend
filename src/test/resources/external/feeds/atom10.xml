@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title type="html">Atom &lt;i&gt;Blog&lt;/i&gt;</title>
+  <link rel="alternate" href="https://atom.example/"/>
+  <link rel="self" href="https://atom.example/atom.xml"/>
+  <id>urn:uuid:feed</id>
+  <updated>2026-10-05T00:00:00Z</updated>
+  <entry>
+    <title>Atom entry</title>
+    <link rel="alternate" href="https://atom.example/entry/1"/>
+    <id>urn:uuid:entry-1</id>
+    <updated>2026-10-03T00:00:00Z</updated>
+    <category term="kubernetes" label="K8s"/>
+    <summary type="html">&lt;p&gt;Atom summary&lt;/p&gt;</summary>
+  </entry>
+  <entry>
+    <title>Only updated</title>
+    <link rel="alternate" href="https://atom.example/entry/2"/>
+    <id>urn:uuid:entry-2</id>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <content type="html">&lt;p&gt;content only&lt;/p&gt;</content>
+  </entry>
+</feed>

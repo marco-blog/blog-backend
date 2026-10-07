@@ -75,6 +75,21 @@ public class SystemSettingsService {
         return ((Number) value(SettingKey.PORTAL_TOPIC_AUTO_HIDE_THRESHOLD)).intValue();
     }
 
+    /** 외부 블로그 수집 주기(007 {@code external.fetch-interval}). */
+    public Duration externalFetchInterval() {
+        return Duration.parse((String) value(SettingKey.EXTERNAL_FETCH_INTERVAL));
+    }
+
+    /** 자동 분류 채택 기준(007 {@code external.auto-classify-min-confidence}). */
+    public double autoClassifyMinConfidence() {
+        return ((Number) value(SettingKey.EXTERNAL_AUTO_CLASSIFY_MIN_CONFIDENCE)).doubleValue();
+    }
+
+    /** 외부 글 인기 점수 가중치(007 {@code external.score-weight}). */
+    public double externalScoreWeight() {
+        return ((Number) value(SettingKey.EXTERNAL_SCORE_WEIGHT)).doubleValue();
+    }
+
     /** 정수 값 키(예: {@code ratelimit.*})의 지금 값. */
     public int intValue(SettingKey key) {
         return ((Number) value(key)).intValue();

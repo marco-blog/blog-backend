@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Media</title>
+    <link>https://media.example/</link>
+    <description>m</description>
+    <item>
+      <title>Enclosure image</title>
+      <link>https://media.example/1</link>
+      <enclosure url="https://media.example/enc.jpg" type="image/jpeg" length="100"/>
+      <media:thumbnail url="https://media.example/thumb1.jpg"/>
+      <description>e</description>
+    </item>
+    <item>
+      <title>Media thumbnail</title>
+      <link>https://media.example/2</link>
+      <enclosure url="https://media.example/audio.mp3" type="audio/mpeg" length="100"/>
+      <media:content url="https://media.example/content2.jpg" medium="image"/>
+      <media:thumbnail url="https://media.example/thumb2.jpg"/>
+      <description>t</description>
+    </item>
+    <item>
+      <title>Media content</title>
+      <link>https://media.example/3</link>
+      <media:content url="https://media.example/video.mp4" type="video/mp4"/>
+      <media:content url="https://media.example/content3.png" type="image/png"/>
+      <description><![CDATA[<img src="https://media.example/body3.jpg">]]></description>
+    </item>
+    <item>
+      <title>Body image</title>
+      <link>https://media.example/4</link>
+      <description><![CDATA[<img src="data:image/png;base64,AAA"><img src="ftp://media.example/x.jpg"><img src="https://media.example/body4.jpg" width="49">]]></description>
+    </item>
+  </channel>
+</rss>

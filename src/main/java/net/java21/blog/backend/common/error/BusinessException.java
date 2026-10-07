@@ -1,6 +1,9 @@
 package net.java21.blog.backend.common.error;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.java21.blog.backend.common.api.FieldError;
 
@@ -14,21 +17,42 @@ public class BusinessException extends RuntimeException {
     private final List<FieldError> fieldErrors;
     /** 429 응답의 {@code Retry-After}(초). 없으면 null. */
     private final Long retryAfterSeconds;
+    /** 오류 문구에 필요한 값(응답 {@code header.params}). 없으면 빈 맵. */
+    private final Map<String, Object> params;
 
     public BusinessException(ErrorCode errorCode, String message) {
         this(errorCode, message, List.of());
     }
 
     public BusinessException(ErrorCode errorCode, String message, List<FieldError> fieldErrors) {
-        this(errorCode, message, fieldErrors, null);
+        this(errorCode, message, fieldErrors, null, Map.of());
     }
 
     private BusinessException(ErrorCode errorCode, String message, List<FieldError> fieldErrors,
-            Long retryAfterSeconds) {
+            Long retryAfterSeconds, Map<String, Object> params) {
         super(message);
         this.errorCode = errorCode;
         this.fieldErrors = List.copyOf(fieldErrors);
         this.retryAfterSeconds = retryAfterSeconds;
+        // null 값은 빼고 넣은 순서를 지킨다(응답 JSON 순서).
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (params != null) {
+            params.forEach((k, v) -> {
+                if (v != null) {
+                    copy.put(k, v);
+                }
+            });
+        }
+        this.params = Collections.unmodifiableMap(copy);
+    }
+
+    /** 문구에 필요한 값을 함께 알리는 오류(007: {@code EXTERNAL_BLOG_LIMIT_EXCEEDED}의 {@code max} 등). null 값은 뺀다. */
+    public static BusinessException withParams(ErrorCode errorCode, String message, Map<String, ?> params) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (params != null) {
+            copy.putAll(params);
+        }
+        return new BusinessException(errorCode, message, List.of(), null, copy);
     }
 
     /**
@@ -36,7 +60,7 @@ public class BusinessException extends RuntimeException {
      * 비밀번호 시도 제한 429 {@code PASSWORD_ATTEMPTS_EXCEEDED}). 응답에 {@code Retry-After} 헤더(초, 최소 1)가 붙는다.
      */
     public static BusinessException retryAfter(ErrorCode errorCode, String message, long seconds) {
-        return new BusinessException(errorCode, message, List.of(), Math.max(1, seconds));
+        return new BusinessException(errorCode, message, List.of(), Math.max(1, seconds), Map.of());
     }
 
     public ErrorCode errorCode() {
@@ -45,6 +69,11 @@ public class BusinessException extends RuntimeException {
 
     public List<FieldError> fieldErrors() {
         return fieldErrors;
+    }
+
+    /** 응답 {@code header.params}. 없으면 빈 맵. */
+    public Map<String, Object> params() {
+        return params;
     }
 
     /** {@code Retry-After} 초. 없으면 null. */

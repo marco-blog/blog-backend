@@ -39,6 +39,16 @@ class AuditActionsTest {
     }
 
     @Test
+    void externalRowsOf007ArePresent() {
+        assertThat(AuditActions.ALL).contains("EXTERNAL_BLOG_CREATE", "EXTERNAL_BLOG_APPROVE", "EXTERNAL_BLOG_REJECT",
+                "EXTERNAL_BLOG_UPDATE", "EXTERNAL_BLOG_PAUSE", "EXTERNAL_BLOG_RESUME", "EXTERNAL_BLOG_BLOCK",
+                "EXTERNAL_POST_REMOVE", "TOPIC_MAPPING_RULE_CREATE", "TOPIC_MAPPING_RULE_UPDATE",
+                "TOPIC_MAPPING_RULE_DELETE", "CLASSIFICATION_CONFIRM");
+        assertThat(AuditActions.TARGETS).contains("EXTERNAL_BLOG", "EXTERNAL_POST", "TOPIC_MAPPING_RULE",
+                "CLASSIFICATION_REVIEW");
+    }
+
+    @Test
     void valuesFitColumns() {
         assertThat(AuditActions.ALL).allSatisfy(action -> assertThat(action).hasSizeLessThanOrEqualTo(50)
                 .matches("[A-Z_]+"));
