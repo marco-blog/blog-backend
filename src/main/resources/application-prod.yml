@@ -62,11 +62,10 @@ blog:
     thumbnail-dir: ${BLOG_DATA_DIR}/media/thumbnail
   export:
     dir: ${BLOG_DATA_DIR}/exports
-  # 005 CAPTCHA(FR-141): 운영은 Turnstile만(test·none·빈 키면 기동 실패). 키는 환경 변수로만 준다.
+  # 005 CAPTCHA(FR-141): 1.0에서는 끈다(marco 2026-10-07). 켤 때는 provider를 turnstile로 바꾸고
+  # site-key: ${BLOG_CAPTCHA_SITE_KEY}, secret-key: ${BLOG_CAPTCHA_SECRET_KEY}를 더한다. test는 운영에서 기동 실패.
   captcha:
-    provider: turnstile
-    site-key: ${BLOG_CAPTCHA_SITE_KEY}
-    secret-key: ${BLOG_CAPTCHA_SECRET_KEY}
+    provider: none
   security:
     allowed-origins: https://blog.java21.net
     trusted-proxies: "${BLOG_SECURITY_TRUSTED_PROXIES:127.0.0.1,::1}"
