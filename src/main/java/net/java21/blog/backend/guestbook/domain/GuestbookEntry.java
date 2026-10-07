@@ -124,6 +124,32 @@ public class GuestbookEntry extends BaseTimeEntity {
         }
     }
 
+    public boolean isHidden() {
+        return status == GuestbookStatus.HIDDEN;
+    }
+
+    public boolean isActive() {
+        return status == GuestbookStatus.ACTIVE;
+    }
+
+    /** 관리자 숨김(005 FR-041). ACTIVE만 HIDDEN으로 바뀐다. @return 이번에 바뀌었으면 true */
+    public boolean hide() {
+        if (status != GuestbookStatus.ACTIVE) {
+            return false;
+        }
+        this.status = GuestbookStatus.HIDDEN;
+        return true;
+    }
+
+    /** 숨김 해제(005 FR-041). HIDDEN만 ACTIVE로 돌아간다. @return 이번에 바뀌었으면 true */
+    public boolean unhide() {
+        if (status != GuestbookStatus.HIDDEN) {
+            return false;
+        }
+        this.status = GuestbookStatus.ACTIVE;
+        return true;
+    }
+
     /** 답글이 남은 글을 "삭제된 글" 자리로 남긴다. */
     public void markDeleted() {
         this.status = GuestbookStatus.DELETED;

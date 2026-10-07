@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 
 import jakarta.mail.BodyPart;
@@ -24,6 +26,9 @@ import jakarta.mail.internet.MimeMessage;
 
 import net.java21.blog.backend.config.SiteProperties;
 import net.java21.blog.backend.i18n.I18nConfig;
+import net.java21.blog.backend.report.domain.ReportStatus;
+import net.java21.blog.backend.report.domain.ReportTargetType;
+import net.java21.blog.backend.report.event.ReportResolvedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +39,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.context.MessageSource;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
@@ -117,6 +123,50 @@ class MailServiceTest {
     void sentAfterCommitAsynchronously() throws NoSuchMethodException {
         Method handler = MailService.class.getMethod("onPasswordResetRequested", PasswordResetMail.class);
 
+        assertThat(handler.getAnnotation(Async.class)).isNotNull();
+        assertThat(handler.getAnnotation(TransactionalEventListener.class).phase())
+                .isEqualTo(TransactionPhase.AFTER_COMMIT);
+    }
+
+    /** 005 권리 침해 결과 메일(T042): ko·en을 함께, 결정과 신고한 주소만, 받는 주소는 로그에 없음, 실패는 다음 수신자를 막지 않음. */
+    @Test
+    void rightsRequestResultIsBilingual(CapturedOutput output) throws Exception {
+        when(sender.createMimeMessage()).thenAnswer(i -> new MimeMessage(Session.getInstance(new Properties())));
+        doThrow(new MailSendException("smtp down")).doNothing().when(sender).send(any(MimeMessage.class));
+
+        service.onRightsRequestResolved(new ReportResolvedEvent(null, ReportStatus.ACTIONED,
+                List.of(new ReportResolvedEvent.MemberRecipient(1L, 2L)),
+                List.of(new ReportResolvedEvent.RightsRecipient(41L, "first@example.com", "https://x.example/a"),
+                        new ReportResolvedEvent.RightsRecipient(42L, "me@example.com", "https://x.example/<b>"))));
+
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(sender, times(2)).send(captor.capture());
+        MimeMessage message = captor.getAllValues().get(1);
+        assertThat(message.getRecipients(Message.RecipientType.TO)).containsExactly(new InternetAddress(
+                "me@example.com"));
+        assertThat(message.getSubject()).contains(" / ");
+        List<String> parts = textParts(message);
+        assertThat(parts.get(0)).contains("https://x.example/<b>").contains("----------");
+        assertThat(parts.get(1)).contains("&lt;b&gt;").doesNotContain("<b>");
+        assertThat(output).contains("Rights request result mail failed: reportId=41")
+                .contains("Rights request result mail sent: reportId=42").doesNotContain("me@example.com")
+                .doesNotContain("first@example.com");
+    }
+
+    @Test
+    void dismissedRightsRequestUsesTheDismissedBody() throws Exception {
+        when(sender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
+        service.onRightsRequestResolved(new ReportResolvedEvent(ReportTargetType.POST, ReportStatus.DISMISSED,
+                List.of(), List.of(new ReportResolvedEvent.RightsRecipient(41L, "me@example.com", "https://x/a"))));
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(sender).send(captor.capture());
+        String text = textParts(captor.getValue()).get(0);
+        MessageSource messages = new I18nConfig().messageSource();
+        String siteKo = messages.getMessage("mail.site-name", null, Locale.KOREAN);
+        assertThat(text).contains(messages.getMessage("mail.rightsRequest.body.dismissed",
+                new Object[] {siteKo, "https://x/a"}, Locale.KOREAN));
+
+        Method handler = MailService.class.getMethod("onRightsRequestResolved", ReportResolvedEvent.class);
         assertThat(handler.getAnnotation(Async.class)).isNotNull();
         assertThat(handler.getAnnotation(TransactionalEventListener.class).phase())
                 .isEqualTo(TransactionPhase.AFTER_COMMIT);

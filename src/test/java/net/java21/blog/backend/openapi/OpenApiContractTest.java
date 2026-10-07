@@ -196,6 +196,22 @@ class OpenApiContractTest {
             "GET /api/v1/blogs/{handle}/blocks",
             "PUT /api/v1/blogs/{handle}/blocks/{userId}",
             "DELETE /api/v1/blogs/{handle}/blocks/{userId}",
+            // 005 (005 contracts/api.md) — CAPTCHA·신고·관리자 신고·숨김·회원
+            "GET /api/v1/captcha/config",
+            "POST /api/v1/reports",
+            "POST /api/v1/rights-requests",
+            "GET /api/v1/admin/reports",
+            "GET /api/v1/admin/reports/summary",
+            "GET /api/v1/admin/reports/{id}",
+            "PATCH /api/v1/admin/reports/{id}/target",
+            "POST /api/v1/admin/reports/{id}/resolve",
+            "PUT /api/v1/admin/contents/{type}/{id}/hidden",
+            "DELETE /api/v1/admin/contents/{type}/{id}/hidden",
+            "GET /api/v1/admin/contents/hidden-posts",
+            "GET /api/v1/admin/users",
+            "GET /api/v1/admin/users/{id}",
+            "POST /api/v1/admin/users/{id}/suspend",
+            "POST /api/v1/admin/users/{id}/unsuspend",
             // 006 (006 contracts/api.md) — 대시보드·콘텐츠 검색·예약어·서비스 설정·작업 기록·관리자 권한
             "GET /api/v1/admin/dashboard",
             "GET /api/v1/admin/contents/posts",
@@ -239,7 +255,10 @@ class OpenApiContractTest {
             Map.entry("BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
                     "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
             Map.entry("PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice", "locked",
-                    "scheduledAt")),
+                    "scheduledAt", "hidden")),
+            // 005 숨김(005 contracts "001~004 응답 확장")
+            Map.entry("GuestbookEntryResponse", List.of("hidden")),
+            Map.entry("BulkPostResponse", List.of("skipped")),
             Map.entry("UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled",
                     "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
             Map.entry("DraftWriteRequest", List.of("topicId")),
@@ -248,7 +267,7 @@ class OpenApiContractTest {
             Map.entry("DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors")),
             Map.entry("PostSummaryResponse", List.of("notice", "scheduledAt")),
             // 004 비밀·비회원 댓글(004 contracts "001~003 요청·응답 확장")
-            Map.entry("CommentResponse", List.of("secret")),
+            Map.entry("CommentResponse", List.of("secret", "hidden")),
             Map.entry("AuthorResponse", List.of("guest")),
             Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword")),
             Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")));

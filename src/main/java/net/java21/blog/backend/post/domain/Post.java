@@ -33,7 +33,7 @@ import org.hibernate.type.SqlTypes;
  * (좋아요·취소의 원자적 UPDATE로만 바뀐다). 003의 주제({@code topic_id}, 소분류)는 LAZY 연관으로 매핑한다.
  * 004의 보호 글 비밀번호({@code password_hash}), 예약 시각({@code scheduled_at}), 공지({@code notice})를 매핑하고 스키마의
  * {@code ck_posts_protected_password}를 {@link Check}로도 적어 H2 테스트에서도 같은 제약이 걸린다(004 research B2).
- * 005가 더한 컬럼({@code status_before_hidden})은 NULL 허용이므로 매핑하지 않는다.
+ * 005 관리자 숨김(FR-041): {@link #hide()}가 직전 상태를 {@code status_before_hidden}에 두고 HIDDEN으로, {@link #unhide()}가 되돌린다.
  * 노출 판단은 {@code PostExposure} 한 곳에서 한다.
  */
 @Entity
@@ -91,6 +91,12 @@ public class Post extends BaseTimeEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "status_before_delete", length = 10)
     private PostStatus statusBeforeDelete;
+
+    /** 관리자 숨김 직전 상태(005 FR-041). HIDDEN일 때만 값이 있다. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "status_before_hidden", length = 10)
+    private PostStatus statusBeforeHidden;
 
     @Column(name = "comment_enabled", nullable = false)
     private boolean commentEnabled = true;
@@ -257,6 +263,43 @@ public class Post extends BaseTimeEntity {
         this.deletedAt = now;
     }
 
+    /**
+     * 관리자 숨김(005 FR-041, research M1). 직전 상태를 남기고 HIDDEN으로 바꾼다. 이미 숨긴 글은 그대로 둔다(멱등).
+     * 휴지통 글은 숨기지 않는다(이미 노출 없음).
+     *
+     * @return 이번에 바뀌었으면 true
+     */
+    public boolean hide() {
+        if (status == PostStatus.DELETED) {
+            throw new IllegalStateException("Deleted post cannot be hidden: " + id);
+        }
+        if (status == PostStatus.HIDDEN) {
+            return false;
+        }
+        this.statusBeforeHidden = status;
+        this.status = PostStatus.HIDDEN;
+        return true;
+    }
+
+    /**
+     * 숨김 해제(005 FR-041): 숨김 직전 상태로 되돌린다(예약 글은 SCHEDULED, 시각이 지났으면 다음 예약 작업 주기에 발행된다).
+     * 숨긴 글이 아니면 그대로 둔다.
+     *
+     * @return 이번에 바뀌었으면 true
+     */
+    public boolean unhide() {
+        if (status != PostStatus.HIDDEN) {
+            return false;
+        }
+        this.status = statusBeforeHidden == null ? PostStatus.DRAFT : statusBeforeHidden;
+        this.statusBeforeHidden = null;
+        return true;
+    }
+
+    public boolean isHidden() {
+        return status == PostStatus.HIDDEN;
+    }
+
     /** 휴지통에서 삭제 전 상태로(FR-084). 공개 범위는 삭제 중에도 바뀌지 않았으므로 그대로다. */
     public void restore() {
         if (status != PostStatus.DELETED) {
@@ -324,6 +367,11 @@ public class Post extends BaseTimeEntity {
 
     public PostStatus getStatusBeforeDelete() {
         return statusBeforeDelete;
+    }
+
+    /** 관리자 숨김 직전 상태(005). 숨긴 글이 아니면 null. */
+    public PostStatus getStatusBeforeHidden() {
+        return statusBeforeHidden;
     }
 
     public boolean isCommentEnabled() {

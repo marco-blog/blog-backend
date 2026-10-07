@@ -156,11 +156,12 @@ class ExposureMatrixIntegrationTest {
                     .andExpect(jsonPath("$.result[*].id", contains((int) visible)))
                     .andExpect(jsonPath("$.totalCount").value(1))
                     .andReturn().getResponse().getContentAsString());
-            // 정지·탈퇴 회원과 삭제된 블로그는 블로그 자체가 404
+            // 정지·탈퇴 회원과 삭제된 블로그는 블로그 자체가 404(정지 회원 블로그 첫 화면만 BLOG_RESTRICTED, 005 FR-042)
             for (String handle : List.of("ownerold", "suspended", "withdrawn")) {
                 bodies.add(read(get("/api/v1/blogs/" + handle), cookie)
                         .andExpect(status().isNotFound())
-                        .andExpect(jsonPath("$.header.resultCode").value("BLOG_NOT_FOUND"))
+                        .andExpect(jsonPath("$.header.resultCode").value(
+                                handle.equals("suspended") ? "BLOG_RESTRICTED" : "BLOG_NOT_FOUND"))
                         .andReturn().getResponse().getContentAsString());
                 bodies.add(read(get("/api/v1/blogs/" + handle + "/posts"), cookie)
                         .andReturn().getResponse().getContentAsString());

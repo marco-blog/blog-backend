@@ -29,6 +29,24 @@ public class BlogAccess {
                 .orElseThrow(() -> new BusinessException(ErrorCode.BLOG_NOT_FOUND, "Blog not found: " + handle));
     }
 
+    /**
+     * 블로그 첫 화면용({@code GET /blogs/{handle}}만, 005 FR-042): 블로그는 ACTIVE인데 주인이 정지(SUSPENDED)면 404
+     * {@code BLOG_RESTRICTED}(front가 "이용이 제한된 블로그"로 안내). 그 밖에 볼 수 없으면 {@code BLOG_NOT_FOUND}.
+     */
+    @Transactional(readOnly = true)
+    public Blog requireVisibleBlogForPage(String handle) {
+        Blog blog = blogRepository.findByHandleWithOwner(handle)
+                .filter(Blog::isActive)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BLOG_NOT_FOUND, "Blog not found: " + handle));
+        if (blog.getUser().isSuspended()) {
+            throw new BusinessException(ErrorCode.BLOG_RESTRICTED, "Blog owner is suspended: " + handle);
+        }
+        if (!blog.getUser().isActive()) {
+            throw new BusinessException(ErrorCode.BLOG_NOT_FOUND, "Blog not found: " + handle);
+        }
+        return blog;
+    }
+
     /** 이 회원이 주인인 블로그. 볼 수 없는 블로그면 404, 주인이 아니면 403. */
     @Transactional(readOnly = true)
     public Blog requireOwnedActiveBlog(String handle, long userId) {

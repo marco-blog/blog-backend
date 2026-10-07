@@ -129,7 +129,7 @@ public class BlogService {
      */
     @Transactional(readOnly = true)
     public BlogResponse get(String handle, Long viewerId) {
-        Blog blog = blogAccess.requireVisibleBlog(handle);
+        Blog blog = blogAccess.requireVisibleBlogForPage(handle);
         Boolean subscribedByMe = viewerId == null ? null
                 : subscriptionRepository.existsByUserIdAndBlogId(viewerId, blog.getId());
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), subscribedByMe);

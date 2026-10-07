@@ -5,9 +5,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import net.java21.blog.backend.portal.PortalProperties;
 import net.java21.blog.backend.portal.event.PortalChangedEvent;
 import net.java21.blog.backend.portal.service.ScoreWeights;
+import net.java21.blog.backend.setting.SettingDefaults;
 import net.java21.blog.backend.setting.SettingKey;
 import net.java21.blog.backend.setting.domain.SystemSetting;
 import net.java21.blog.backend.setting.repository.SystemSettingRepository;
@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 운영 설정값(003 research P3). {@code system_settings} 행이 있으면 그 값, 없으면 프로퍼티({@link PortalProperties}) 기본값.
+ * 운영 설정값(003 research P3). {@code system_settings} 행이 있으면 그 값, 없으면 프로퍼티({@link SettingDefaults}) 기본값.
  * 모든 행을 메모리에 캐시하고(행은 몇 개뿐), 바꾸면 커밋 뒤 캐시를 비우고 {@link PortalChangedEvent}로 포털 캐시도 비운다.
  * 저장된 값이 형식에 맞지 않으면(손으로 고친 행 등) 경고를 남기고 기본값을 쓴다.
  */
@@ -30,14 +30,14 @@ public class SystemSettingsService {
     private static final Logger log = LoggerFactory.getLogger(SystemSettingsService.class);
 
     private final SystemSettingRepository repository;
-    private final PortalProperties properties;
+    private final SettingDefaults defaults;
     private final ApplicationEventPublisher events;
     private final AtomicReference<Map<String, Object>> overrides = new AtomicReference<>();
 
-    public SystemSettingsService(SystemSettingRepository repository, PortalProperties properties,
+    public SystemSettingsService(SystemSettingRepository repository, SettingDefaults defaults,
             ApplicationEventPublisher events) {
         this.repository = repository;
-        this.properties = properties;
+        this.defaults = defaults;
         this.events = events;
     }
 
@@ -51,7 +51,7 @@ public class SystemSettingsService {
                 log.warn("Ignoring invalid stored setting {}: {}", key.key(), stored);
             }
         }
-        return key.defaultValue(properties);
+        return key.defaultValue(defaults);
     }
 
     /** 행이 있는지(관리자 화면의 "기본값과 다름"). */
@@ -73,6 +73,22 @@ public class SystemSettingsService {
 
     public int topicAutoHideThreshold() {
         return ((Number) value(SettingKey.PORTAL_TOPIC_AUTO_HIDE_THRESHOLD)).intValue();
+    }
+
+    /** 정수 값 키(예: {@code ratelimit.*})의 지금 값. */
+    public int intValue(SettingKey key) {
+        return ((Number) value(key)).intValue();
+    }
+
+    /** 반복 스팸 기준(창 분, 허용 수). */
+    public DuplicateRule duplicateRule() {
+        Map<?, ?> value = (Map<?, ?>) value(SettingKey.SPAM_DUPLICATE_COMMENT);
+        return new DuplicateRule(((Number) value.get("windowMinutes")).intValue(),
+                ((Number) value.get("maxCount")).intValue());
+    }
+
+    /** {@code spam.duplicate-comment} 값. */
+    public record DuplicateRule(int windowMinutes, int maxCount) {
     }
 
     /** 값을 검증해 저장한다(없으면 만들고 있으면 바꾼다). @return 저장한 값 */

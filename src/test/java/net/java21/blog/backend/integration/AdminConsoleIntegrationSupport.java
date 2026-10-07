@@ -171,7 +171,8 @@ abstract class AdminConsoleIntegrationSupport {
     }
 
     /**
-     * 경로 변수를 채운다: {@code handle}은 주어진 값, {@code key}(설정 키)는 고정 문자열, {@code type}(005 콘텐츠 종류)은 {@code posts},
+     * 경로 변수를 채운다: {@code handle}은 주어진 값, {@code key}(설정 키)는 고정 문자열, {@code type}·{@code segment}(005 콘텐츠
+     * 종류)는 {@code posts},
      * 나머지는 {@code id} 값.
      */
     static String fill(String pattern, String handle, String id) {
@@ -182,7 +183,7 @@ abstract class AdminConsoleIntegrationSupport {
             String value = switch (name) {
                 case "handle" -> handle;
                 case "key" -> "portal.min-content-length";
-                case "type" -> "posts";
+                case "type", "segment" -> "posts";
                 default -> id;
             };
             matcher.appendReplacement(path, Matcher.quoteReplacement(value));

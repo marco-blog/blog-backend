@@ -22,7 +22,10 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
 
     /** 상태를 바꾸지 않아 기록하지 않는 매핑과 그 이유. */
     private static final Map<String, String> NO_AUDIT = Map.of(
-            "POST /api/v1/admin/release-notes/preview", "Markdown 변환 결과만 돌려준다(저장 없음)");
+            "POST /api/v1/admin/release-notes/preview", "Markdown 변환 결과만 돌려준다(저장 없음)",
+            "PATCH /api/v1/admin/reports/{id}/target",
+            "권리 침해 신고에 대상 콘텐츠를 연결만 한다. 처리 결정은 resolve가 REPORT_ACTION·REPORT_DISMISS로 남긴다"
+                    + "(005 data-model에 이 작업의 action 코드가 없음 — marco 확인 대기)");
 
     /** 한 행의 실제 요청(경로 변수 채움, 본문). */
     private record Call(String path, String body) {
@@ -47,6 +50,8 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private long topicParent;
     private final List<Long> topicChildren = new ArrayList<>();
     private long curation;
+    private Member suspendTarget;
+    private Member reporter;
     private long note;
     private long draftNote;
 
@@ -151,6 +156,26 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                     draftNote = ((Number) created.read("$.result.id")).longValue();
                     return new Call("/api/v1/admin/release-notes/" + draftNote, null);
                 }),
+                // 005 회원 정지·해제, 콘텐츠 숨김·해제, 신고 처리
+                new Row("POST", "/api/v1/admin/users/{id}/suspend", AuditActions.USER_SUSPEND, () -> {
+                    suspendTarget = signup("acsusp");
+                    return new Call("/api/v1/admin/users/" + suspendTarget.id() + "/suspend", "{\"reason\":\"스팸\"}");
+                }),
+                new Row("POST", "/api/v1/admin/users/{id}/unsuspend", AuditActions.USER_UNSUSPEND, () -> new Call(
+                        "/api/v1/admin/users/" + suspendTarget.id() + "/unsuspend", "{}")),
+                new Row("POST", "/api/v1/admin/reports/{id}/resolve", AuditActions.REPORT_DISMISS, () -> {
+                    reporter = signup("acrep");
+                    Reply report = send(HttpMethod.POST, "/api/v1/reports",
+                            "{\"targetType\":\"POST\",\"targetId\":%d,\"reason\":\"SPAM\"}".formatted(post),
+                            reporter.cookie());
+                    assertThat(report.status()).as(report.body()).isEqualTo(201);
+                    long reportId = ((Number) report.read("$.result.id")).longValue();
+                    return new Call("/api/v1/admin/reports/" + reportId + "/resolve", "{\"decision\":\"DISMISS\"}");
+                }),
+                new Row("PUT", "/api/v1/admin/contents/{segment}/{id}/hidden", AuditActions.CONTENT_HIDE,
+                        () -> new Call("/api/v1/admin/contents/posts/" + post + "/hidden", "{\"reason\":\"광고\"}")),
+                new Row("DELETE", "/api/v1/admin/contents/{segment}/{id}/hidden", AuditActions.CONTENT_UNHIDE,
+                        () -> new Call("/api/v1/admin/contents/posts/" + post + "/hidden", "{}")),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));

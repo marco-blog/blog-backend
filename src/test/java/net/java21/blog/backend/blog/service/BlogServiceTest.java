@@ -233,7 +233,9 @@ class BlogServiceTest {
     void blogOfSuspendedOrWithdrawnMemberIsNotFoundEvenForOwner(UserStatus status) {
         TestEntities.with(owner, "status", status);
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
-        expect(() -> service.get("marco", null), ErrorCode.BLOG_NOT_FOUND);
+        // 005 FR-042: 블로그 첫 화면만 정지 회원이면 BLOG_RESTRICTED(탈퇴는 그대로 BLOG_NOT_FOUND).
+        expect(() -> service.get("marco", null),
+                status == UserStatus.SUSPENDED ? ErrorCode.BLOG_RESTRICTED : ErrorCode.BLOG_NOT_FOUND);
         expect(() -> service.update(1L, "marco", new UpdateBlogRequest()), ErrorCode.BLOG_NOT_FOUND);
     }
 

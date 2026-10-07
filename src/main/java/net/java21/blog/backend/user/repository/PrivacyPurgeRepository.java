@@ -4,6 +4,8 @@ import static net.java21.blog.backend.auth.domain.QPasswordResetToken.passwordRe
 import static net.java21.blog.backend.auth.domain.QRefreshToken.refreshToken;
 import static net.java21.blog.backend.comment.domain.QComment.comment;
 import static net.java21.blog.backend.guestbook.domain.QGuestbookEntry.guestbookEntry;
+import static net.java21.blog.backend.report.domain.QReport.report;
+import static net.java21.blog.backend.trackback.domain.QTrackback.trackback;
 import static net.java21.blog.backend.user.domain.QUser.user;
 
 import java.time.Instant;
@@ -11,6 +13,8 @@ import java.util.List;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
+import net.java21.blog.backend.report.domain.ReportChannel;
+import net.java21.blog.backend.report.domain.ReportStatus;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import org.springframework.stereotype.Repository;
@@ -18,6 +22,8 @@ import org.springframework.stereotype.Repository;
 /**
  * 개인정보 파기 작업(FR-138·139, research R26)의 조회·삭제. 건수 단위로 나눠 부른다.
  * 004: 보관 기간이 지난 비회원 댓글·방명록의 IP({@code guest_ip_enc})만 비운다(001 FR-134, research B6).
+ * 005: 처리 후 보관 기간이 지난 권리 침해 신고의 연락 이메일({@code contact_email_enc}), 보관 기간이 지난 트랙백 송신 IP
+ * ({@code sender_ip_enc})만 비운다(005 data-model reports·trackbacks).
  */
 @Repository
 public class PrivacyPurgeRepository {
@@ -108,5 +114,39 @@ public class PrivacyPurgeRepository {
         return ids.isEmpty() ? 0
                 : queryFactory.update(guestbookEntry).setNull(guestbookEntry.guestIp)
                         .where(guestbookEntry.id.in(ids), guestbookEntry.user.isNull()).execute();
+    }
+
+    /** 처리({@code handled_at})한 지 보관 기간이 지난 권리 침해 신고 중 연락 이메일이 남은 id(오래된 순, 최대 {@code limit}개). */
+    public List<Long> findExpiredRightsContactIds(Instant cutoff, int limit) {
+        return queryFactory.select(report.id)
+                .from(report)
+                .where(report.channel.eq(ReportChannel.RIGHTS_REQUEST), report.contactEmail.isNotNull(),
+                        report.status.ne(ReportStatus.PENDING), report.handledAt.lt(cutoff))
+                .orderBy(report.id.asc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 권리 침해 신고의 연락 이메일만 비운다(나머지 내용은 그대로). */
+    public long clearRightsContact(List<Long> ids) {
+        return ids.isEmpty() ? 0
+                : queryFactory.update(report).setNull(report.contactEmail)
+                        .where(report.id.in(ids), report.channel.eq(ReportChannel.RIGHTS_REQUEST)).execute();
+    }
+
+    /** 받은 지 보관 기간이 지난 트랙백 중 송신 IP가 남은 id(오래된 순, 최대 {@code limit}개). */
+    public List<Long> findExpiredTrackbackIpIds(Instant cutoff, int limit) {
+        return queryFactory.select(trackback.id)
+                .from(trackback)
+                .where(trackback.senderIp.isNotNull(), trackback.createdAt.lt(cutoff))
+                .orderBy(trackback.id.asc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 트랙백 송신 IP만 비운다. */
+    public long clearTrackbackIp(List<Long> ids) {
+        return ids.isEmpty() ? 0
+                : queryFactory.update(trackback).setNull(trackback.senderIp).where(trackback.id.in(ids)).execute();
     }
 }

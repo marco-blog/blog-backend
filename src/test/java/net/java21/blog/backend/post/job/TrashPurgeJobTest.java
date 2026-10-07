@@ -23,6 +23,7 @@ import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.post.repository.TrashPurgeRepository;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
+import net.java21.blog.backend.trackback.domain.Trackback;
 import net.java21.blog.backend.user.domain.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,12 +91,6 @@ class TrashPurgeJobTest {
 
     @BeforeEach
     void setUp() {
-        // 트랙백(005) 엔티티는 아직 없다. 영구 삭제가 이 테이블의 posts FK(ON DELETE CASCADE 없음)를 먼저 정리하는지
-        // 확인하려고 실제 스키마와 같은 FK만 가진 모양으로 만든다. 포털(003) 테이블은 엔티티로 생긴다.
-        jdbc.execute("CREATE TABLE IF NOT EXISTS trackbacks (id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-                + " post_id BIGINT NOT NULL, source_post_id BIGINT, source_url VARCHAR(1000) NOT NULL,"
-                + " CONSTRAINT fk_test_trackbacks_post FOREIGN KEY (post_id) REFERENCES posts (id),"
-                + " CONSTRAINT fk_test_trackbacks_source FOREIGN KEY (source_post_id) REFERENCES posts (id))");
         owner = new User("marco@example.com", "a".repeat(64), "$2a$hash", "marco", null, null, "2026-10-06", NOW);
         em.persist(owner);
         blog = new Blog(owner, "marco", "마르코의 블로그");
@@ -184,9 +179,9 @@ class TrashPurgeJobTest {
         Comment kept = new Comment(live, reader, null, "남는 댓글");
         em.persist(kept);
         em.flush();
-        jdbc.update("INSERT INTO trackbacks (post_id, source_url) VALUES (?, 'https://x.test/1')", old.getId());
-        jdbc.update("INSERT INTO trackbacks (post_id, source_post_id, source_url) VALUES (?, ?, 'https://x.test/2')",
-                live.getId(), old.getId());
+        // 트랙백(005)의 posts FK에는 ON DELETE CASCADE가 없다. 영구 삭제가 받은 트랙백을 지우고 보낸 트랙백의 출처를 비우는지 본다.
+        em.persist(new Trackback(old, null, "https://x.test/1", "1".repeat(64), "t1", null, null, null));
+        em.persist(new Trackback(live, old, "https://x.test/2", "2".repeat(64), "t2", null, null, null));
         em.persist(new PortalCuration(old, NOW, NOW.plus(Duration.ofDays(1)), 0, owner));
         em.persist(new PortalExclusion(old, "테스트", owner));
         em.flush();

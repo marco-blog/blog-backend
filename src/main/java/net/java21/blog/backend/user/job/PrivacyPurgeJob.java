@@ -34,6 +34,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>만료된 비밀번호 재설정 토큰과 절대 만료가 지난 리프레시 토큰을 지운다.</li>
  *   <li>004: {@code blog.guest.ip-retention(90일)}이 지난 비회원 댓글·방명록의 IP({@code guest_ip_enc})만 비운다
  *       (내용·이름·비밀번호 해시는 그대로, 001 FR-134, research B6).</li>
+ *   <li>005: 처리 후 {@code blog.privacy.rights-request-retention(1년)}이 지난 권리 침해 신고의 연락 이메일, 받은 지
+ *       {@code blog.privacy.trackback-ip-retention(90일)}이 지난 트랙백 송신 IP만 비운다(005 data-model).</li>
  * </ol>
  * {@code blog.jobs.purge-batch-size}건씩 트랜잭션을 나눠 처리하고 건수를 로그에 남긴다. 서버 1대 전제라 분산 락은 없다.
  */
@@ -88,8 +90,12 @@ public class PrivacyPurgeJob {
         this.guest = guest;
     }
 
-    /** 처리 결과(파기한 회원 수, 지운 로그인 기록·재설정 토큰·리프레시 토큰 수, IP를 비운 비회원 댓글·방명록 수). */
-    public record Result(long users, long loginHistory, long resetTokens, long refreshTokens, long guestIps) {
+    /**
+     * 처리 결과(파기한 회원 수, 지운 로그인 기록·재설정 토큰·리프레시 토큰 수, IP를 비운 비회원 댓글·방명록 수, 연락 이메일을 비운 권리 침해
+     * 신고 수, 송신 IP를 비운 트랙백 수).
+     */
+    public record Result(long users, long loginHistory, long resetTokens, long refreshTokens, long guestIps,
+            long rightsContacts, long trackbackIps) {
     }
 
     @Scheduled(cron = "${blog.jobs.privacy-purge-cron:0 0 4 * * *}")
@@ -115,9 +121,16 @@ public class PrivacyPurgeJob {
                 repository::clearCommentGuestIp)
                 + inBatches(() -> repository.findGuestIpGuestbookIds(guestIpCutoff, batch),
                         repository::clearGuestbookGuestIp);
-        log.info("Privacy purge finished: users={}, loginHistory={}, resetTokens={}, refreshTokens={}, guestIps={}",
-                users, history, resetTokens, refreshTokens, guestIps);
-        return new Result(users, history, resetTokens, refreshTokens, guestIps);
+        Instant rightsCutoff = now.minus(privacy.rightsRequestRetention());
+        long rightsContacts = inBatches(() -> repository.findExpiredRightsContactIds(rightsCutoff, batch),
+                repository::clearRightsContact);
+        Instant trackbackCutoff = now.minus(privacy.trackbackIpRetention());
+        long trackbackIps = inBatches(() -> repository.findExpiredTrackbackIpIds(trackbackCutoff, batch),
+                repository::clearTrackbackIp);
+        log.info("Privacy purge finished: users={}, loginHistory={}, resetTokens={}, refreshTokens={}, guestIps={}, "
+                + "rightsContacts={}, trackbackIps={}", users, history, resetTokens, refreshTokens, guestIps,
+                rightsContacts, trackbackIps);
+        return new Result(users, history, resetTokens, refreshTokens, guestIps, rightsContacts, trackbackIps);
     }
 
     private long purgeUsers(List<Long> ids) {

@@ -43,8 +43,17 @@ public class GuestbookQueryRepository {
 
     /** 최상위 글(ACTIVE와 답글이 남은 삭제 자리), 최신순 페이지. */
     public Page<GuestbookRow> findPage(Long blogId, Pageable pageable) {
+        return findPage(blogId, null, pageable);
+    }
+
+    /**
+     * 최상위 글 최신순 페이지: ACTIVE, 보이는 답글이 남은 삭제·숨김 자리, 그리고 {@code viewerId}가 쓴 숨긴 글(005 FR-041).
+     */
+    public Page<GuestbookRow> findPage(Long blogId, Long viewerId, Pageable pageable) {
         BooleanExpression where = topLevel(blogId).and(guestbookEntry.status.eq(GuestbookStatus.ACTIVE)
-                .or(JPAExpressions.selectOne().from(reply).where(reply.parent.id.eq(guestbookEntry.id)).exists()));
+                .or(JPAExpressions.selectOne().from(reply)
+                        .where(reply.parent.id.eq(guestbookEntry.id), visible(reply, viewerId)).exists())
+                .or(hiddenBy(guestbookEntry, viewerId)));
         List<GuestbookRow> rows = select()
                 .where(where)
                 .orderBy(guestbookEntry.createdAt.desc(), guestbookEntry.id.desc())
@@ -57,11 +66,16 @@ public class GuestbookQueryRepository {
 
     /** 이 글들의 답글, 작성순. 쿼리 1회. */
     public List<GuestbookRow> findReplies(Collection<Long> parentIds) {
+        return findReplies(parentIds, null);
+    }
+
+    /** 이 글들의 ACTIVE 답글과 {@code viewerId}가 쓴 숨긴 답글, 작성순. 쿼리 1회. */
+    public List<GuestbookRow> findReplies(Collection<Long> parentIds, Long viewerId) {
         if (parentIds.isEmpty()) {
             return List.of();
         }
         return select()
-                .where(guestbookEntry.parent.id.in(parentIds), guestbookEntry.status.eq(GuestbookStatus.ACTIVE))
+                .where(guestbookEntry.parent.id.in(parentIds), visible(guestbookEntry, viewerId))
                 .orderBy(guestbookEntry.createdAt.asc(), guestbookEntry.id.asc())
                 .fetch();
     }
@@ -93,6 +107,19 @@ public class GuestbookQueryRepository {
                 .from(guestbookEntry)
                 .leftJoin(guestbookEntry.user, author)
                 .leftJoin(author.profileMedia, authorMedia);
+    }
+
+    /** ACTIVE이거나 {@code viewerId}가 쓴 숨긴 글. */
+    private static BooleanExpression visible(QGuestbookEntry entry, Long viewerId) {
+        BooleanExpression active = entry.status.eq(GuestbookStatus.ACTIVE);
+        BooleanExpression own = hiddenBy(entry, viewerId);
+        return own == null ? active : active.or(own);
+    }
+
+    /** {@code viewerId}가 쓴 숨긴 글(비로그인이면 null — 조건 없음). */
+    private static BooleanExpression hiddenBy(QGuestbookEntry entry, Long viewerId) {
+        return viewerId == null ? null
+                : entry.status.eq(GuestbookStatus.HIDDEN).and(entry.user.id.eq(viewerId));
     }
 
     private static BooleanExpression topLevel(Long blogId) {

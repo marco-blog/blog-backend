@@ -15,7 +15,7 @@ import net.java21.blog.backend.admin.setting.dto.SettingResponse;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
-import net.java21.blog.backend.portal.PortalProperties;
+import net.java21.blog.backend.setting.SettingDefaults;
 import net.java21.blog.backend.setting.SettingKey;
 import net.java21.blog.backend.setting.domain.SystemSetting;
 import net.java21.blog.backend.setting.repository.SystemSettingRepository;
@@ -34,15 +34,15 @@ public class AdminSettingService {
 
     private final SystemSettingsService settings;
     private final SystemSettingRepository repository;
-    private final PortalProperties properties;
+    private final SettingDefaults defaults;
     private final UserRepository userRepository;
     private final AdminAuditService auditService;
 
     public AdminSettingService(SystemSettingsService settings, SystemSettingRepository repository,
-            PortalProperties properties, UserRepository userRepository, AdminAuditService auditService) {
+            SettingDefaults defaults, UserRepository userRepository, AdminAuditService auditService) {
         this.settings = settings;
         this.repository = repository;
-        this.properties = properties;
+        this.defaults = defaults;
         this.userRepository = userRepository;
         this.auditService = auditService;
     }
@@ -94,7 +94,7 @@ public class AdminSettingService {
     }
 
     private SettingResponse response(SettingKey key, SystemSetting row) {
-        Object defaultValue = key.defaultValue(properties);
+        Object defaultValue = key.defaultValue(defaults);
         if (row == null) {
             return new SettingResponse(key.key(), defaultValue, defaultValue, false, null, null);
         }

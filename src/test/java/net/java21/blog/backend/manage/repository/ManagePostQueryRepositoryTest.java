@@ -240,6 +240,27 @@ class ManagePostQueryRepositoryTest {
         assertThat(em.find(Post.class, theirs.getId()).getVisibility()).isEqualTo(PostVisibility.PUBLIC);
     }
 
+    /** 005 T033: 관리자가 숨긴 글은 일괄 공개 범위·공지에서 건너뛰고 따로 센다. */
+    @Test
+    void hiddenPostsAreSkippedByVisibilityAndNoticeAndCounted() {
+        Post open = persistPost(marco, "A", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        Post hidden = persistPost(marco, "B", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        hidden.hide();
+        Post theirs = persistPost(other, "C", PostStatus.PUBLISHED, PostVisibility.PUBLIC);
+        theirs.hide();
+        flushAndClear();
+
+        List<Long> ids = List.of(open.getId(), hidden.getId(), theirs.getId());
+        assertThat(repository.countHidden(marco.getId(), ids)).isEqualTo(1);
+        assertThat(repository.changeVisibility(marco.getId(), ids, PostVisibility.PRIVATE, NOW)).isEqualTo(1);
+        assertThat(repository.changeNotice(marco.getId(), ids, true)).isEqualTo(1);
+        em.clear();
+        Post reloaded = em.find(Post.class, hidden.getId());
+        assertThat(reloaded.getVisibility()).isEqualTo(PostVisibility.PUBLIC);
+        assertThat(reloaded.isNotice()).isFalse();
+        assertThat(reloaded.getStatus()).isEqualTo(PostStatus.HIDDEN);
+    }
+
     @Test
     void moveToTrashKeepsPreviousStatusAndSkipsTrashAndOtherBlogs() {
         Post published = persistPost(marco, "A", PostStatus.PUBLISHED, PostVisibility.PRIVATE);

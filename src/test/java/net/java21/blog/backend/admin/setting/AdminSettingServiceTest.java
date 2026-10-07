@@ -55,7 +55,7 @@ class AdminSettingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminSettingService(settings, repository, properties, userRepository, auditService);
+        service = new AdminSettingService(settings, repository, net.java21.blog.backend.setting.SettingDefaults.of(properties), userRepository, auditService);
         admin = TestEntities.user(ADMIN);
         TestEntities.with(admin, "nickname", "관리자");
         lenient().when(userRepository.getReferenceById(ADMIN)).thenReturn(admin);
@@ -68,7 +68,8 @@ class AdminSettingServiceTest {
         when(repository.findAllWithUpdatedBy()).thenReturn(List.of(row));
         when(settings.value(SettingKey.PORTAL_MIN_CONTENT_LENGTH)).thenReturn(500);
 
-        List<SettingResponse> all = service.list(null);
+        assertThat(service.list(null)).hasSize(SettingKey.values().length);
+        List<SettingResponse> all = service.list("portal.");
 
         assertThat(all).extracting(SettingResponse::key).containsExactly("portal.min-content-length",
                 "portal.new-member-delay", "portal.score-weights", "portal.topic-auto-hide-threshold");
@@ -86,6 +87,20 @@ class AdminSettingServiceTest {
         assertThat(service.list("portal.score")).extracting(SettingResponse::key)
                 .containsExactly("portal.score-weights");
         assertThat(service.list("other.")).isEmpty();
+    }
+
+    @Test
+    void rateLimitKeysDefaultToProperties() {
+        when(repository.findAllWithUpdatedBy()).thenReturn(List.of());
+
+        List<SettingResponse> limits = service.list("ratelimit.");
+
+        assertThat(limits).extracting(SettingResponse::key).containsExactly("ratelimit.comment-per-minute",
+                "ratelimit.guestbook-per-minute", "ratelimit.media-upload-per-minute",
+                "ratelimit.post-publish-per-hour", "ratelimit.signup-per-ip-per-hour");
+        assertThat(limits).extracting(SettingResponse::defaultValue).containsExactly(5, 3, 30, 10, 5);
+        assertThat(service.list("spam.")).singleElement()
+                .satisfies(r -> assertThat(r.defaultValue()).isEqualTo(Map.of("windowMinutes", 10, "maxCount", 3)));
     }
 
     @Test

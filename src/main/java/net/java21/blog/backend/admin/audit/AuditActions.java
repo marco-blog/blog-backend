@@ -16,6 +16,11 @@ public final class AuditActions {
     public static final String TARGET_RELEASE_NOTE = "RELEASE_NOTE";
     /** 005·006 회원(정지·해제·블로그 한도). */
     public static final String TARGET_USER = "USER";
+    public static final String TARGET_REPORT = "REPORT";
+    public static final String TARGET_COMMENT = "COMMENT";
+    public static final String TARGET_GUESTBOOK = "GUESTBOOK";
+    public static final String TARGET_TRACKBACK = "TRACKBACK";
+    public static final String TARGET_BANNED_WORD = "BANNED_WORD";
 
     public static final String TOPIC_CREATE = "TOPIC_CREATE";
     public static final String TOPIC_UPDATE = "TOPIC_UPDATE";
@@ -40,6 +45,17 @@ public final class AuditActions {
     public static final String RELEASE_NOTE_UNPUBLISH = "RELEASE_NOTE_UNPUBLISH";
     public static final String RELEASE_NOTE_DELETE = "RELEASE_NOTE_DELETE";
 
+    // 005 신고·숨김·정지·금칙어(005 contracts/api.md, 006 FR-106)
+    public static final String USER_SUSPEND = "USER_SUSPEND";
+    public static final String USER_UNSUSPEND = "USER_UNSUSPEND";
+    public static final String REPORT_ACTION = "REPORT_ACTION";
+    public static final String REPORT_DISMISS = "REPORT_DISMISS";
+    public static final String CONTENT_HIDE = "CONTENT_HIDE";
+    public static final String CONTENT_UNHIDE = "CONTENT_UNHIDE";
+    public static final String BANNED_WORD_CREATE = "BANNED_WORD_CREATE";
+    public static final String BANNED_WORD_UPDATE = "BANNED_WORD_UPDATE";
+    public static final String BANNED_WORD_DELETE = "BANNED_WORD_DELETE";
+
     // 001·006 회원 블로그 한도(FR-160)와 관리자 권한 부여·회수(FR-105). target USER, before/after {"maxBlogs"}·{"role"}
     public static final String USER_BLOG_LIMIT_CHANGE = "USER_BLOG_LIMIT_CHANGE";
     public static final String ROLE_GRANT = "ROLE_GRANT";
@@ -53,11 +69,14 @@ public final class AuditActions {
             SETTING_CHANGE,
             RELEASE_NOTE_CREATE, RELEASE_NOTE_UPDATE, RELEASE_NOTE_PUBLISH, RELEASE_NOTE_UNPUBLISH,
             RELEASE_NOTE_DELETE,
+            USER_SUSPEND, USER_UNSUSPEND, REPORT_ACTION, REPORT_DISMISS, CONTENT_HIDE, CONTENT_UNHIDE,
+            BANNED_WORD_CREATE, BANNED_WORD_UPDATE, BANNED_WORD_DELETE,
             USER_BLOG_LIMIT_CHANGE, ROLE_GRANT, ROLE_REVOKE);
 
     /** 알려진 대상 종류 전체. */
     public static final List<String> TARGETS = List.of(
-            TARGET_USER, TARGET_TOPIC, TARGET_CURATION, TARGET_POST, TARGET_SETTING, TARGET_RELEASE_NOTE);
+            TARGET_USER, TARGET_TOPIC, TARGET_CURATION, TARGET_POST, TARGET_SETTING, TARGET_RELEASE_NOTE,
+            TARGET_REPORT, TARGET_COMMENT, TARGET_GUESTBOOK, TARGET_TRACKBACK, TARGET_BANNED_WORD);
 
     private AuditActions() {
     }

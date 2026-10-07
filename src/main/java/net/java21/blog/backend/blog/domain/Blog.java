@@ -29,7 +29,7 @@ import org.hibernate.type.SqlTypes;
  * ({@code feed_item_count}, {@code feed_content_mode})과 003의 포털 설정({@code portal_enabled}, {@code default_topic_id},
  * {@code first_published_at})을 매핑한다. 004의 방명록·비회원 쓰기 설정({@code guestbook_enabled}, {@code guest_write_enabled})과
  * 전체 방문자 수({@code total_visitors}, 읽기 전용 카운터: 방문 기록의 원자적 UPDATE로만 바꾼다)를 매핑한다.
- * 005~007이 더한 컬럼({@code trackback_enabled} 등)은 DB 기본값이 있으므로 매핑하지 않는다.
+ * 005의 트랙백 받기({@code trackback_enabled}, 기본 켜짐)를 매핑한다. 006~007이 더한 컬럼은 DB 기본값이 있으므로 매핑하지 않는다.
  */
 @Entity
 @Table(name = "blogs")
@@ -109,6 +109,10 @@ public class Blog extends BaseTimeEntity {
     /** 비회원 댓글·방명록 허용(004 FR-066, 기본 꺼짐). */
     @Column(name = "guest_write_enabled", nullable = false)
     private boolean guestWriteEnabled;
+
+    /** 트랙백 받기(005 FR-053, 기본 켜짐). 꺼도 이미 받은 트랙백은 남는다. */
+    @Column(name = "trackback_enabled", nullable = false)
+    private boolean trackbackEnabled = true;
 
     /** 전체 방문자 수(004 FR-067). 엔티티 저장으로 바꾸지 않는다(방문 기록의 원자적 UPDATE만, research B9). */
     @ColumnDefault("0")
@@ -190,6 +194,15 @@ public class Blog extends BaseTimeEntity {
 
     public boolean isGuestWriteEnabled() {
         return guestWriteEnabled;
+    }
+
+    /** 트랙백 받기 설정(005 FR-053). */
+    public void changeTrackbackEnabled(boolean trackbackEnabled) {
+        this.trackbackEnabled = trackbackEnabled;
+    }
+
+    public boolean isTrackbackEnabled() {
+        return trackbackEnabled;
     }
 
     public long getTotalVisitors() {
