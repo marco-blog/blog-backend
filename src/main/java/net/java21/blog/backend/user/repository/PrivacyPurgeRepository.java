@@ -2,6 +2,8 @@ package net.java21.blog.backend.user.repository;
 
 import static net.java21.blog.backend.auth.domain.QPasswordResetToken.passwordResetToken;
 import static net.java21.blog.backend.auth.domain.QRefreshToken.refreshToken;
+import static net.java21.blog.backend.comment.domain.QComment.comment;
+import static net.java21.blog.backend.guestbook.domain.QGuestbookEntry.guestbookEntry;
 import static net.java21.blog.backend.user.domain.QUser.user;
 
 import java.time.Instant;
@@ -13,7 +15,10 @@ import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import org.springframework.stereotype.Repository;
 
-/** 개인정보 파기 작업(FR-138·139, research R26)의 조회·삭제. 건수 단위로 나눠 부른다. */
+/**
+ * 개인정보 파기 작업(FR-138·139, research R26)의 조회·삭제. 건수 단위로 나눠 부른다.
+ * 004: 보관 기간이 지난 비회원 댓글·방명록의 IP({@code guest_ip_enc})만 비운다(001 FR-134, research B6).
+ */
 @Repository
 public class PrivacyPurgeRepository {
 
@@ -68,5 +73,40 @@ public class PrivacyPurgeRepository {
 
     public long deleteRefreshTokens(List<Long> ids) {
         return ids.isEmpty() ? 0 : queryFactory.delete(refreshToken).where(refreshToken.id.in(ids)).execute();
+    }
+
+    /** 보관 기간이 지난 비회원 댓글 중 IP가 남은 id(오래된 순, 최대 {@code limit}개). */
+    public List<Long> findGuestIpCommentIds(Instant cutoff, int limit) {
+        return queryFactory.select(comment.id)
+                .from(comment)
+                .where(comment.user.isNull(), comment.guestIp.isNotNull(), comment.createdAt.lt(cutoff))
+                .orderBy(comment.id.asc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 보관 기간이 지난 비회원 방명록 중 IP가 남은 id(오래된 순, 최대 {@code limit}개). */
+    public List<Long> findGuestIpGuestbookIds(Instant cutoff, int limit) {
+        return queryFactory.select(guestbookEntry.id)
+                .from(guestbookEntry)
+                .where(guestbookEntry.user.isNull(), guestbookEntry.guestIp.isNotNull(),
+                        guestbookEntry.createdAt.lt(cutoff))
+                .orderBy(guestbookEntry.id.asc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 비회원 댓글의 IP만 비운다(내용·이름·비밀번호 해시는 그대로). */
+    public long clearCommentGuestIp(List<Long> ids) {
+        return ids.isEmpty() ? 0
+                : queryFactory.update(comment).setNull(comment.guestIp)
+                        .where(comment.id.in(ids), comment.user.isNull()).execute();
+    }
+
+    /** 비회원 방명록의 IP만 비운다(내용·이름·비밀번호 해시는 그대로). */
+    public long clearGuestbookGuestIp(List<Long> ids) {
+        return ids.isEmpty() ? 0
+                : queryFactory.update(guestbookEntry).setNull(guestbookEntry.guestIp)
+                        .where(guestbookEntry.id.in(ids), guestbookEntry.user.isNull()).execute();
     }
 }

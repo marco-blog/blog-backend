@@ -12,7 +12,11 @@ import jakarta.persistence.EntityManager;
 import net.java21.blog.backend.auth.domain.PasswordResetToken;
 import net.java21.blog.backend.auth.domain.RefreshToken;
 import net.java21.blog.backend.common.job.JobsProperties;
+import net.java21.blog.backend.blog.domain.Blog;
+import net.java21.blog.backend.comment.domain.Comment;
 import net.java21.blog.backend.crypto.PersonalDataHasher;
+import net.java21.blog.backend.guest.GuestProperties;
+import net.java21.blog.backend.guestbook.domain.GuestbookEntry;
 import net.java21.blog.backend.media.domain.Media;
 import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.domain.MediaStatus;
@@ -25,6 +29,8 @@ import net.java21.blog.backend.notification.domain.Notification;
 import net.java21.blog.backend.notification.domain.NotificationTargetType;
 import net.java21.blog.backend.notification.domain.NotificationType;
 import net.java21.blog.backend.notification.repository.NotificationQueryRepository;
+import net.java21.blog.backend.post.domain.Post;
+import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.support.JpaRepositoryTest;
 import net.java21.blog.backend.support.MutableClock;
 import net.java21.blog.backend.support.TestEntities;
@@ -55,6 +61,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>{@code withdrawn_at < 지금 - 30일}인 탈퇴 회원: {@code email_hash} = HMAC("withdrawn:{id}"), {@code email_enc} = 같은 문자열의
  *       암호문(NOT NULL·UNIQUE 유지, tasks.md "구현 전 결정 사항" 10번), 닉네임 익명화, 소개·프로필 이미지 NULL. 한 번만 처리.</li>
  *   <li>90일 지난 로그인 기록 삭제, 만료된 재설정 토큰과 절대 만료가 지난 리프레시 토큰 삭제.</li>
+ *   <li>004: 90일 지난 비회원 댓글·방명록의 IP만 비운다(T014, 001 FR-134).</li>
  *   <li>정해진 건수씩 나눠 처리하고 건수를 로그에 남긴다.</li>
  * </ul>
  */
@@ -96,7 +103,7 @@ class PrivacyPurgeJobTest {
             return new PrivacyPurgeJob(repository, loginHistory, hasher, transactionTemplate,
                     new PrivacyProperties(Duration.ofDays(30), Duration.ofDays(90)),
                     new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 2), clock, mediaReferences,
-                    notifications);
+                    notifications, new GuestProperties(5, 3, Duration.ofDays(90)));
         }
     }
 
@@ -241,6 +248,52 @@ class PrivacyPurgeJobTest {
                 .containsExactly("2".repeat(64));
         assertThat(jdbc.queryForList("SELECT family_id FROM refresh_tokens", String.class))
                 .containsExactly("family-idle");
+    }
+
+    @Test
+    void clearsOnlyGuestIpsOlderThanRetentionInBatches(CapturedOutput output) {
+        Blog blog = new Blog(active, "active", "블로그");
+        em.persist(blog);
+        Post post = new Post(blog, "글");
+        post.publish("글", "본문", "<p>본문</p>", "본문", "요약", null, PostVisibility.PUBLIC, true, NOW);
+        em.persist(post);
+        Comment member = new Comment(post, active, null, "회원 댓글");
+        em.persist(member);
+        List<Comment> oldComments = List.of(guestComment(post, "1"), guestComment(post, "2"), guestComment(post, "3"));
+        Comment fresh = guestComment(post, "4");
+        GuestbookEntry oldEntry = GuestbookEntry.byGuest(blog, "손님", "$2a$guest", "198.51.100.9", "안녕", false);
+        em.persist(oldEntry);
+        em.flush();
+        java.sql.Timestamp old = java.sql.Timestamp.from(NOW.minus(Duration.ofDays(90)).minusSeconds(1));
+        for (Comment c : oldComments) {
+            jdbc.update("UPDATE comments SET created_at = ? WHERE id = ?", old, c.getId());
+        }
+        jdbc.update("UPDATE comments SET created_at = ? WHERE id = ?", old, member.getId());
+        jdbc.update("UPDATE comments SET created_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minus(Duration.ofDays(89))), fresh.getId());
+        jdbc.update("UPDATE guestbook_entries SET created_at = ? WHERE id = ?", old, oldEntry.getId());
+        em.clear();
+
+        PrivacyPurgeJob.Result result = job.purge();
+
+        assertThat(result.guestIps()).isEqualTo(4);
+        assertThat(jdbc.queryForList("SELECT id FROM comments WHERE guest_ip_enc IS NOT NULL", Long.class))
+                .containsExactly(fresh.getId());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM guestbook_entries WHERE guest_ip_enc IS NULL",
+                Long.class)).isEqualTo(1);
+        Comment cleared = em.find(Comment.class, oldComments.get(0).getId());
+        assertThat(cleared.getGuestName()).isEqualTo("손님1");
+        assertThat(cleared.getGuestPasswordHash()).isEqualTo("$2a$guest");
+        assertThat(cleared.getContent()).isEqualTo("비회원 1");
+        assertThat(em.find(Comment.class, member.getId()).getContent()).isEqualTo("회원 댓글");
+        assertThat(output).contains("guestIps=4");
+        assertThat(job.purge().guestIps()).isZero();
+    }
+
+    private Comment guestComment(Post post, String n) {
+        Comment c = Comment.byGuest(post, null, "손님" + n, "$2a$guest", "203.0.113." + n, "비회원 " + n, false);
+        em.persist(c);
+        return c;
     }
 
     @Test

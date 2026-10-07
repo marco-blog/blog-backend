@@ -20,7 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 휴지통 비우기(T103, FR-084, FR-159, research R26). {@code blog.jobs.trash-purge-cron}(기본 매일 03:30)마다
  * <ol>
  *   <li>{@code deleted_at < 지금 - blog.jobs.trash-retention(30일)}인 휴지통 글을 영구 삭제하고</li>
- *   <li>같은 기간이 지난 삭제된 블로그의 카테고리를 지우고 제목·소개를 비운다({@code blogs} 행은 주소 재사용 방지로 남김).</li>
+ *   <li>같은 기간이 지난 삭제된 블로그의 카테고리·구독·방명록·사이드바 설정·일별 방문·차단 행(004)을 지우고 제목·소개를 비운다({@code blogs} 행은 주소 재사용 방지로 남김).</li>
  * </ol>
  * {@code blog.jobs.purge-batch-size}건씩 트랜잭션을 나눠 처리하고 처리 건수를 로그에 남긴다. 서버 1대 전제라 분산 락은 없다.
  * 같은 트랜잭션에서 영구 삭제한 글의 이미지 참조({@code post_media})와 비운 블로그의 대표 이미지를 정리 대상 판단한다(US4, FR-073).

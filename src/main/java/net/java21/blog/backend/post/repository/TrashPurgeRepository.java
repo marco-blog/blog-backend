@@ -1,10 +1,14 @@
 package net.java21.blog.backend.post.repository;
 
 import static net.java21.blog.backend.blog.domain.QBlog.blog;
+import static net.java21.blog.backend.block.domain.QBlogBlock.blogBlock;
 import static net.java21.blog.backend.category.domain.QCategory.category;
 import static net.java21.blog.backend.comment.domain.QComment.comment;
+import static net.java21.blog.backend.guestbook.domain.QGuestbookEntry.guestbookEntry;
 import static net.java21.blog.backend.post.domain.QPost.post;
 import static net.java21.blog.backend.post.domain.QPostDraft.postDraft;
+import static net.java21.blog.backend.sidebar.domain.QBlogSidebarItem.blogSidebarItem;
+import static net.java21.blog.backend.stats.domain.QBlogDailyVisit.blogDailyVisit;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +29,8 @@ import org.springframework.stereotype.Repository;
  * 글보다 먼저 지운다(T196·T189): 댓글은 답글 → 댓글 순, 트랙백(005)·포털(003)은 엔티티가 없으므로 SQL로.
  * 002: 좋아요({@code post_likes})는 {@code ON DELETE CASCADE}로 글과 함께 지워지고, 블로그 구독({@code blog_subscriptions})은
  * CASCADE가 없으므로 블로그를 비울 때 먼저 지운다.
+ * 004: 블로그를 비울 때 방명록(답글 → 글)·사이드바 설정·일별 방문·차단 행도 지운다(001 FR-159, research B16).
+ * 쿼리 수는 블로그 수와 무관하다(id 목록 한 번에).
  */
 @Repository
 public class TrashPurgeRepository {
@@ -105,6 +111,12 @@ public class TrashPurgeRepository {
             return 0;
         }
         subscriptionRepository.deleteByBlogIds(ids);
+        queryFactory.delete(guestbookEntry)
+                .where(guestbookEntry.blog.id.in(ids), guestbookEntry.parent.isNotNull()).execute();
+        queryFactory.delete(guestbookEntry).where(guestbookEntry.blog.id.in(ids)).execute();
+        queryFactory.delete(blogSidebarItem).where(blogSidebarItem.id.blogId.in(ids)).execute();
+        queryFactory.delete(blogDailyVisit).where(blogDailyVisit.id.blogId.in(ids)).execute();
+        queryFactory.delete(blogBlock).where(blogBlock.id.blogId.in(ids)).execute();
         queryFactory.update(post).setNull(post.category).where(post.blog.id.in(ids)).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids), category.parent.isNotNull()).execute();
         queryFactory.delete(category).where(category.blog.id.in(ids)).execute();
