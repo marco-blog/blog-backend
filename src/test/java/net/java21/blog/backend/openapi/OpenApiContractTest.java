@@ -171,7 +171,20 @@ class OpenApiContractTest {
             "DELETE /api/v1/admin/release-notes/{id}",
             "POST /api/v1/admin/release-notes/preview",
             "GET /api/v1/admin/release-notes/{id}/revisions",
-            "GET /api/v1/admin/release-notes/{id}/revisions/{revisionNo}");
+            "GET /api/v1/admin/release-notes/{id}/revisions/{revisionNo}",
+            // 004 (004 contracts/api.md) — 방명록·공지·사이드바·보관함·방문자
+            "GET /api/v1/blogs/{handle}/guestbook",
+            "POST /api/v1/blogs/{handle}/guestbook",
+            "PATCH /api/v1/guestbook-entries/{id}",
+            "DELETE /api/v1/guestbook-entries/{id}",
+            "POST /api/v1/guestbook-entries/{id}/unlock",
+            "GET /api/v1/blogs/{handle}/notices",
+            "GET /api/v1/blogs/{handle}/sidebar",
+            "GET /api/v1/blogs/{handle}/manage/sidebar",
+            "PUT /api/v1/blogs/{handle}/sidebar",
+            "GET /api/v1/blogs/{handle}/archive",
+            "POST /api/v1/blogs/{handle}/visits",
+            "GET /api/v1/blogs/{handle}/manage/stats");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
@@ -182,12 +195,15 @@ class OpenApiContractTest {
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.of(
             "MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote"),
             "BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
-                    "portalEnabled", "defaultTopicId"),
-            "PostDetailResponse", List.of("likeCount", "likedByMe", "topicId"),
-            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled", "defaultTopicId"),
+                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled"),
+            "PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice"),
+            "UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled", "defaultTopicId",
+                    "guestbookEnabled", "guestWriteEnabled"),
             "DraftWriteRequest", List.of("topicId"),
             "DraftResponse", List.of("topicId"),
-            "PublishSettingsRequest", List.of("topicId"));
+            "PublishSettingsRequest", List.of("topicId", "notice"),
+            "DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors"),
+            "PostSummaryResponse", List.of("notice"));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
