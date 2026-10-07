@@ -53,8 +53,8 @@ public class AuthController {
     /** 가입 즉시 로그인: 201 + {@code Location: /api/v1/me} + 두 쿠키. */
     @PostMapping("/signup")
     ResponseEntity<ApiResponse<SignupResponse>> signup(@Valid @RequestBody SignupRequest request,
-            HttpServletResponse response) {
-        SignupService.Result result = signupService.signup(request);
+            HttpServletRequest httpRequest, HttpServletResponse response) {
+        SignupService.Result result = signupService.signup(request, httpRequest.getRemoteAddr());
         cookieWriter.write(response, result.tokens());
         return ResponseEntity.created(URI.create("/api/v1/me")).body(ApiResponse.ok(result.response()));
     }

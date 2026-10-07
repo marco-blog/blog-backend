@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,9 +34,9 @@ import net.java21.blog.backend.common.error.ErrorCode;
 import net.java21.blog.backend.common.security.PasswordAttemptGuard;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.service.GuestAuthorService;
-import net.java21.blog.backend.guest.service.GuestWriteGuard;
 import net.java21.blog.backend.post.PostsProperties;
 import net.java21.blog.backend.post.domain.Post;
+import net.java21.blog.backend.spam.WriteGuard;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.repository.PostRepository;
 import net.java21.blog.backend.support.TestEntities;
@@ -96,7 +97,7 @@ class CommentServiceTest {
     @Mock
     private ApplicationEventPublisher events;
     @Mock
-    private GuestWriteGuard writeGuard;
+    private WriteGuard writeGuard;
     @Mock
     private BlogBlockPolicy blockPolicy;
 
@@ -110,9 +111,11 @@ class CommentServiceTest {
     @BeforeEach
     void setUp() {
         attemptGuard = new PasswordAttemptGuard(PostsProperties.defaults(), new FakeTicker());
-        GuestAuthorService guestAuthors = new GuestAuthorService(PASSWORD_ENCODER, writeGuard, attemptGuard);
+        GuestAuthorService guestAuthors = new GuestAuthorService(PASSWORD_ENCODER, attemptGuard);
         service = new CommentService(postRepository, userRepository, commentRepository, queryRepository, events,
-                guestAuthors, blockPolicy);
+                guestAuthors, blockPolicy, writeGuard);
+        lenient().when(writeGuard.guardNew(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(2));
+        lenient().when(writeGuard.guardEdit(any())).thenAnswer(i -> i.getArgument(0));
         owner = TestEntities.user(OWNER, "owner@example.com", "{hash}", "주인");
         writer = TestEntities.user(WRITER, "writer@example.com", "{hash}", "작성자");
         blog = TestEntities.blog(10L, owner, "marco");
@@ -577,7 +580,8 @@ class CommentServiceTest {
         assertThat(saved.getValue().isGuest()).isTrue();
         assertThat(saved.getValue().getUser()).isNull();
         assertThat(PASSWORD_ENCODER.matches("1234", saved.getValue().getGuestPasswordHash())).isTrue();
-        verify(writeGuard).check(any(), eq("203.0.113.9"));
+        verify(writeGuard).guardNew(eq(WriteGuard.Kind.COMMENT), eq(WriteGuard.Writer.guest("203.0.113.9")),
+                eq("안녕"), any(), eq("손님"));
         ArgumentCaptor<CommentCreatedEvent> event = ArgumentCaptor.forClass(CommentCreatedEvent.class);
         verify(events).publishEvent(event.capture());
         assertThat(event.getValue().authorId()).isNull();

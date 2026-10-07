@@ -49,6 +49,9 @@ import org.springframework.util.unit.DataSize;
 @ExtendWith(MockitoExtension.class)
 class MediaUploadServiceTest {
 
+    @Mock
+    private net.java21.blog.backend.spam.RateLimitPolicy rateLimits;
+
     private static final long USER_ID = 7L;
 
     @TempDir
@@ -72,7 +75,8 @@ class MediaUploadServiceTest {
 
     private MediaUploadService service(MediaProperties properties) {
         return new MediaUploadService(properties, new ImageInspector(properties), new MediaKeyGenerator(),
-                new LocalMediaStorage(properties), mediaRepository, mediaQueryRepository, userRepository);
+                new LocalMediaStorage(properties), mediaRepository, mediaQueryRepository, userRepository,
+                rateLimits);
     }
 
     private void accepts() {
@@ -103,6 +107,23 @@ class MediaUploadServiceTest {
         assertThat(Files.readAllBytes(root.resolve("temp").resolve(media.getStoredName()))).isEqualTo(png);
         assertThat(response).isEqualTo(new MediaUploadResponse(media.getMediaKey(), "/media/" + media.getMediaKey(),
                 "image/png", png.length, 30, 20));
+    }
+
+    /** 005 T069: 회원 1분 업로드 한도(넘으면 429, 저장 없음), 관리자는 세지 않는다. */
+    @Test
+    void uploadRateLimitIsCheckedFirstExceptForAdmins() {
+        org.mockito.Mockito.doThrow(net.java21.blog.backend.common.error.BusinessException.retryAfter(
+                ErrorCode.TOO_MANY_REQUESTS, "x", 20)).when(rateLimits)
+                .check(net.java21.blog.backend.spam.RateLimitKind.MEDIA_UPLOAD, "u:" + USER_ID);
+        MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", TestImages.png(3, 3));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.upload(USER_ID, file, MediaPurpose.POST))
+                .isInstanceOfSatisfying(net.java21.blog.backend.common.error.BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+        verify(mediaRepository, never()).save(any());
+
+        accepts();
+        service.upload(USER_ID, file, MediaPurpose.POST, true);
+        verify(mediaRepository).save(any(Media.class));
     }
 
     @Test

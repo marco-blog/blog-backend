@@ -38,6 +38,8 @@
 | `BLOG_MEDIA_TEMP_DIR` | `blog.media.temp-dir` | | 업로드 직후 임시 보관 디렉터리. 백업 제외 |
 | `BLOG_MEDIA_THUMBNAIL_DIR` | `blog.media.thumbnail-dir` | | 썸네일 디렉터리. 다시 만들 수 있어 백업 제외 |
 | `BLOG_EXPORT_DIR` | `blog.export.dir` | | 블로그 백업 zip 디렉터리(004 FR-145). 백업 제외(4.1절) |
+| `BLOG_CAPTCHA_SITE_KEY` | `blog.captcha.site-key` | | Cloudflare Turnstile 사이트 키(005 FR-141, 10.1절). 브라우저에 보이는 공개 값 |
+| `BLOG_CAPTCHA_SECRET_KEY` | `blog.captcha.secret-key` | 예 | Turnstile 비밀 키. prod는 provider가 `turnstile`로 고정이라 두 키 중 하나라도 비면 기동 실패 |
 
 세 이미지 디렉터리와 백업 디렉터리는 앱 실행 계정이 쓸 수 있어야 한다. 없으면 기동 때 만들고, 쓸 수 없으면 기동을 멈춘다.
 정식·임시 디렉터리는 같은 파일 시스템에 두는 것을 권한다(등록 때 임시 → 정식으로 옮긴다).
@@ -90,13 +92,25 @@
 | `blog.posts.password-max-failures` / `password-lock-duration` | 5 / 10m | 보호 글·비회원 글 비밀번호 연속 실패 허용 수와 막는 시간(IP·방문자 쿠키 기준, 메모리) |
 | `blog.posts.schedule-max-ahead` | 365d | 예약 발행으로 정할 수 있는 가장 먼 시각(004 FR-064) |
 | `blog.stats.time-zone` / `visit-dedup-max-size` / `bot-user-agent-pattern` | Asia/Seoul / 200000 / `application.yml` 참고 | 방문자 수·월별 보관함의 날짜 기준 시간대, 방문 중복 제거 캐시 크기, 세지 않는 User-Agent(004 FR-061·067) |
-| `blog.guest.comment-per-minute` / `guestbook-per-minute` | 5 / 3 | 비회원 댓글·방명록 IP당 1분 한도(004 FR-066). E2E·수동 검증은 `BLOG_GUEST_COMMENTPERMINUTE=1000`처럼 크게 |
 | `blog.guest.ip-retention` | 90d | 비회원 작성 IP 보관 기간. 지나면 개인정보 파기 작업이 IP만 지운다(글은 남김) |
 | `blog.export.retention` / `min-interval` / `stale-running` | 7d / 24h / 1h | 백업 파일 보관 기간, 블로그별 요청 간격(하루 한 번), 이 시간 넘게 RUNNING이면 기동 때 실패 처리(004 FR-145) |
 | `blog.jobs.scheduled-publish-delay` | 30s | 예약 발행 작업 주기(앞 실행이 끝난 뒤 기준). 실제 발행 지연은 최대 이 값 + 처리 시간 |
 | `blog.jobs.export-poll-delay` | 30s | 대기 중인 백업을 만드는 작업 주기(한 번에 최대 10건을 차례로) |
 | `blog.release-notes.portal-card-days` | 14d | 최신 릴리스 노트를 포털 메인 카드로 보여주는 기간(처음 게시부터, 003 FR-162) |
 | `blog.admin.dashboard-cache-ttl` | 5m | 관리 콘솔 대시보드 수치를 관리자 시간대별로 메모리에 두는 시간(006 FR-103). 0s면 매번 계산(E2E는 `BLOG_ADMIN_DASHBOARD_CACHE_TTL=0s`). 음수면 기동 실패 |
+| `blog.ratelimit.post-publish-per-hour` / `comment-per-minute` / `guestbook-per-minute` / `media-upload-per-minute` / `signup-per-ip-per-hour` | 10 / 5 / 3 / 30 / 5 | 작성 속도 한도 기본값(005 FR-142, 10.2절). 운영 설정 `ratelimit.*`가 있으면 그 값. 004의 `blog.guest.comment-per-minute`·`guestbook-per-minute`는 **없어졌다**(남겨 두면 무시된다. 환경 변수 `BLOG_GUEST_COMMENT_PER_MINUTE` 등은 지운다) |
+| `blog.spam.duplicate-comment.window-minutes` / `max-count` / `min-length` | 10 / 3 / 10 | 같은 내용 댓글·방명록 반복 기준(005 FR-144). 앞 두 값은 운영 설정 `spam.duplicate-comment` 우선. `min-length`(이보다 짧은 글은 세지 않음)는 프로퍼티로만 |
+| `blog.captcha.provider` | prod `turnstile`, local `none` | `turnstile`·`test`·`none`. prod에서 `test`·`none`이면 기동 실패. `test`는 E2E 전용(토큰 `blog.captcha.test-token`, 기본 `e2e-pass`) |
+| `blog.captcha.verify-timeout` | 3s | Turnstile 검증 요청 시간 제한. 넘거나 Turnstile 장애면 400 `CAPTCHA_FAILED`(통과시키지 않음) |
+| `blog.captcha.login-failures-before-captcha` | 3 | 같은 이메일 또는 같은 IP의 연속 로그인 실패가 이 수 이상이면 다음 로그인에 CAPTCHA(30분 창, 성공하면 초기화). 001의 5회 잠금은 그대로 |
+| `blog.reports.member-per-hour` / `rights-request-per-ip-per-hour` | 30 / 5 | 회원 신고 1시간 한도, 권리 침해 신고 IP당 1시간 한도(005 FR-040) |
+| `blog.reports.penalty-window` | 90d | 포털 인기 점수 감점에 넣는 처리(ACTIONED) 신고 기간 |
+| `blog.trackback.receive-limit` / `receive-window` | 10 / 10m | 같은 IP가 보낼 수 있는 트랙백 수(005 FR-054). 넘으면 TrackBack 응답 `Too many pings` |
+| `blog.trackback.connect-timeout` / `read-timeout` | 5s / 5s | 트랙백 보내기 시간 제한 |
+| `blog.trackback.max-targets` | 10 | 글 하나에서 한 번에 보낼 수 있는 주소 수(중복 제외) |
+| `blog.trackback.executor-threads` / `executor-queue` / `recover-pending-after` | 2 / 100 / 5m | 트랙백 보내기 스레드·대기열, 기동 때 다시 보낼 PENDING 기준(11절) |
+| `blog.outbound.allowed-ports` / `allow-private` | 80,443,8080,8443 / false | 서버가 밖으로 보내는 요청(트랙백 송신, 007 피드 수집)의 허용 포트와 내부망 허용. `allow-private`는 시험용이며 prod에서 true면 기동 실패(11절) |
+| `blog.privacy.rights-request-retention` / `trackback-ip-retention` | 365d / 90d | 처리한 권리 침해 신고의 연락 이메일, 받은 트랙백의 송신 IP 보관 기간. 개인정보 파기 작업이 값만 지운다(005) |
 | `blog.admin.audit-retention` | 365d | 관리자 작업 기록 보관 기간(006 FR-106). 30일보다 짧게 주면 기동 실패 |
 
 ## 3. 로그
@@ -166,7 +180,7 @@ Spring `@Scheduled`(스케줄러 스레드 3개)로 앱 안에서 돈다. cron�
 |---|---|---|---|---|
 | 이미지 정리 | `MediaCleanupJob` | `blog.media.cleanup-cron` | `0 0 * * * *`(매시 정각) | 24시간 지난 TEMP와 어디서도 쓰지 않는 ORPHANED 이미지의 행·원본·썸네일 삭제 (FR-072·073) |
 | 휴지통 비우기 | `TrashPurgeJob` | `blog.jobs.trash-purge-cron` | `0 30 3 * * *`(매일 03:30) | 휴지통 30일 지난 글 영구 삭제, 삭제 30일 지난 블로그의 카테고리 삭제·제목 비우기(주소는 재사용 방지로 남김) (FR-084·159) |
-| 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139), `blog.guest.ip-retention`(90일) 지난 비회원 댓글·방명록의 작성 IP 삭제 (004 FR-066) |
+| 개인정보 파기 | `PrivacyPurgeJob` | `blog.jobs.privacy-purge-cron` | `0 0 4 * * *`(매일 04:00) | 탈퇴 30일 지난 회원의 개인정보 파기, 90일 지난 로그인 기록 삭제, 만료된 재설정·리프레시 토큰 삭제 (FR-138·139), `blog.guest.ip-retention`(90일) 지난 비회원 댓글·방명록의 작성 IP 삭제 (004 FR-066), 처리 뒤 `blog.privacy.rights-request-retention`(365일) 지난 권리 침해 신고의 연락 이메일과 `blog.privacy.trackback-ip-retention`(90일) 지난 트랙백 송신 IP 삭제 (005) |
 | 알림 정리 | `NotificationPurgeJob` | `blog.jobs.notification-purge-cron` | `0 15 4 * * *`(매일 04:15) | `blog.notifications.retention`(90일) 지난 알림 삭제 (002 FR-033) |
 | 예약 발행 | `ScheduledPublishJob` | `blog.jobs.scheduled-publish-delay`(고정 지연) | 30초 | 예약 시각이 지난 SCHEDULED 글을 발행(구독자 알림·피드 반영 포함, 004 FR-064) |
 | 백업 생성 | `BlogExportJob` | `blog.jobs.export-poll-delay`(고정 지연) | 30초 | PENDING 백업을 RUNNING으로 바꿔 zip을 만들고 READY(완료 알림) 또는 FAILED로 둔다 (004 FR-145) |
@@ -279,3 +293,85 @@ cron 형식은 Spring 6자리(초 분 시 일 월 요일)다. 작업을 잠시 �
 `idx_users_created`·`idx_posts_published_at`·`idx_comments_status_created`·`idx_guestbook_entries_status_created`, 승인 대기)
 7일 범위 조건이 표 전체를 훑는다. 회원·글이 수십만 건을 넘어 대시보드가 느려지면 그 인덱스 추가를 검토한다.
 캐시 TTL을 줄이면 계산이 그만큼 자주 돈다(0s는 E2E·수동 검증용).
+
+## 10. 스팸 방어(005)
+
+### 10.1 CAPTCHA(Cloudflare Turnstile) 키 발급
+
+1. Cloudflare 대시보드 → Turnstile → "Add widget". 도메인에 `blog.java21.net`(로컬 확인이 필요하면 `localhost`도)을 넣고
+   위젯 모드는 "Managed"로 둔다.
+2. 발급된 **Site Key**를 `BLOG_CAPTCHA_SITE_KEY`, **Secret Key**를 `BLOG_CAPTCHA_SECRET_KEY`로 운영 서버 환경 변수에 넣는다(2.1절).
+   secret은 저장소·로그에 남기지 않는다. front는 `GET /api/v1/captcha/config`(1시간 캐시)로 사이트 키를 받으므로 front 설정은 없다.
+3. 키를 바꾸면 backend만 다시 띄운다. 이미 열린 화면은 길게는 1시간 동안 옛 사이트 키를 쓸 수 있다.
+
+CAPTCHA가 걸리는 곳: 가입, 비회원 댓글·방명록 쓰기, 권리 침해 신고, 로그인 반복 실패 뒤 재시도(2.3절 `login-failures-before-captcha`).
+Turnstile 장애·시간 초과는 실패로 본다(사람도 잠시 가입·비회원 쓰기를 못 한다). 장애가 길면 Cloudflare 상태를 확인한다.
+
+### 10.2 운영 설정 키(관리 콘솔 "스팸 방어 설정", `/admin/spam`)
+
+운영 설정(`site_settings`)에 값이 있으면 프로퍼티 기본값보다 우선하고, 저장하면 바로 적용된다(재기동 없음). "기본값으로"는 행을 지워
+프로퍼티 값으로 돌아간다. 바꿀 때마다 작업 기록에 `SETTING_CHANGE`가 남는다. **관리자는 작성 속도 한도와 반복 기준을 적용받지 않는다.**
+
+| 키 | 값 | 범위 | 기본값(프로퍼티) | 단위·기준 |
+|---|---|---|---|---|
+| `ratelimit.post-publish-per-hour` | 정수 | 1~10000 | 10 | 회원 한 명이 1시간에 처음 발행·예약하는 글 수(여러 블로그 합계) |
+| `ratelimit.comment-per-minute` | 정수 | 1~10000 | 5 | 회원은 회원별, 비회원은 IP별 1분 댓글 수 |
+| `ratelimit.guestbook-per-minute` | 정수 | 1~10000 | 3 | 회원은 회원별, 비회원은 IP별 1분 방명록 글 수 |
+| `ratelimit.media-upload-per-minute` | 정수 | 1~10000 | 30 | 회원별 1분 이미지 업로드 수 |
+| `ratelimit.signup-per-ip-per-hour` | 정수 | 1~100000 | 5 | IP별 1시간 가입 수 |
+| `spam.duplicate-comment` | `{ windowMinutes, maxCount }` | 1~1440 / 2~100 | 10 / 3 | 같은 작성자(회원 또는 비회원 IP)가 `windowMinutes`분 안에 같은 내용(NFKC·소문자·공백 정규화)을 `maxCount`번 쓴 뒤 다음 댓글·방명록은 422 `DUPLICATE_CONTENT_SPAM`. 댓글·방명록, 글을 가리지 않고 센다 |
+
+한도는 서버 메모리(Caffeine 고정 창) 카운터라 재기동하면 비고, 서버를 여러 대 두면 서버마다 따로 센다(backend 1대 전제, 001 R26).
+같은 공유기·회사망처럼 IP 하나를 여럿이 쓰는 곳에서 가입이 막힌다는 문의가 오면 `ratelimit.signup-per-ip-per-hour`를 올린다.
+
+### 10.3 금칙어
+
+같은 화면에서 관리한다. 범위는 이름류(`NAME`: 닉네임·블로그 주소·블로그 제목), 본문류(`CONTENT`: 댓글·방명록), 둘 다(`ALL`),
+처리는 거부(`REJECT`, 400 `BANNED_WORD`) 또는 가림(`MASK`, 같은 길이 `*`로 저장). 이름류는 거부만 된다. 단어는 NFKC·소문자로 맞춰
+비교하고 이미 저장된 글은 바꾸지 않는다. 추가·변경·삭제는 바로 적용되고 작업 기록(`BANNED_WORD_*`)이 남는다.
+
+## 11. 트랙백(005)
+
+### 11.1 보내기 스레드 풀과 재기동 복구
+
+- 발행(예약 발행 포함)·발행된 글 수정 때 보낼 주소마다 `trackback_ping_logs`에 PENDING 행을 만들고, 커밋 뒤 전용 스레드 풀
+  (`blog.trackback.executor-threads` 2개, 대기열 `executor-queue` 100)이 보낸다. 대기열이 차면 그 요청은 FAILED `REMOTE_ERROR`
+  "Queue full"로 남고 다시 보내지 않는다(글쓴이가 발행 설정에서 다시 보낼 수 있다).
+- 보내는 중 재기동되면 PENDING이 남는다. 기동 때(`PendingPingRecovery`) `recover-pending-after`(5분)보다 오래된 PENDING을 다시
+  대기열에 넣는다. 글쓴이는 관리 글 목록·발행 설정의 "트랙백 결과"에서 상태를 본다.
+- 받는 쪽 응답이 `<error>1</error>`이거나 XML이 아니면 FAILED `REMOTE_ERROR`(상대 메시지), 2xx가 아니거나 연결 실패면 `HTTP_ERROR`,
+  시간 초과는 `TIMEOUT`, 내부망·허용하지 않는 포트는 `BLOCKED_ADDRESS`, 형식·이름 해석 실패는 `INVALID_URL`. 리다이렉트는 따르지
+  않는다(3xx도 `HTTP_ERROR`). 응답은 64KB까지만 읽는다.
+
+### 11.2 내부망 차단과 남은 위험
+
+`OutboundUrlGuard`가 http/https와 허용 포트만 통과시키고, 호스트 이름이 가리키는 **모든** 주소가 공인 주소일 때만 보낸다(루프백·사설·
+링크 로컬·CGNAT·멀티캐스트·IPv6 ULA 등 차단). 다만 JDK `HttpClient`는 검사한 주소로 연결을 고정할 수 없어, 검사와 연결 사이에 DNS 응답을
+바꾸는 **DNS 재바인딩**은 막지 못한다. 서버에서 다음을 함께 둔다.
+
+- 방화벽(nftables·보안 그룹)에서 앱 실행 계정의 나가는 연결 중 사설 대역(10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, 127/8,
+  IPv6 fc00::/7·fe80::/10)과 DB·관리 포트를 막는다. 메타데이터 주소 169.254.169.254는 꼭 막는다.
+- nginx를 앞에 둔다면 트랙백 받기 경로(`POST /{handle}/{postId}/trackback`)에 요청 크기 제한(`client_max_body_size 256k`)과
+  IP별 속도 제한(`limit_req`)을 둔다. 앱도 같은 IP의 받기를 `blog.trackback.receive-limit`으로 막는다.
+- `blog.outbound.allow-private`는 시험용이다. prod 프로필에서 true면 기동을 멈춘다.
+
+### 11.3 받기
+
+블로그 설정 "트랙백 받기"가 꺼졌거나 본문을 볼 수 없는 글(비공개·보호·숨김 등)은 `Trackback is not allowed`로 거절한다. 같은 글에
+같은 출처 주소(정규화 뒤 SHA-256)는 한 번만 받는다(주인이 지운 뒤에도 다시 받지 않음). 송신 IP는 암호화해 저장하고 어떤 응답에도
+나오지 않으며, `blog.privacy.trackback-ip-retention`(90일) 뒤 파기된다.
+
+## 12. 신고 처리·숨김·정지(005)
+
+1. 관리 콘솔 `/admin/reports`에서 처리 대기 신고를 대상별로 본다(메뉴의 배지는 처리 대기 수). 권리 침해 신고는 상세에서 연락 이메일과
+   권리 근거를 보고, 대상 콘텐츠를 지정할 수 있다.
+2. 처리(신고 상세의 "처리"): 조치는 "콘텐츠 숨김"(대상 글·댓글·방명록 글·트랙백을 HIDDEN으로) 또는 "작성자 정지", 아니면 "기각".
+   같은 대상의 처리 대기 신고가 한 번에 ACTIONED·DISMISSED로 닫히고, 회원 신고자에게는 결과 알림이, 권리 침해 신고는 연락 이메일로 결과
+   메일이 간다. 숨긴 글은 주인에게만 숨김 안내와 함께 보이고, 숨긴 댓글·방명록은 작성 회원에게만 보인다.
+3. 신고 없이 숨기거나 해제할 때는 콘텐츠 숨김 API(`PUT`·`DELETE /api/v1/admin/contents/{posts|comments|guestbook-entries|trackbacks}/{id}/hidden`)를
+   쓴다. 이 경로는 신고를 닫지 않는다. 숨긴 글은 `/admin/contents/hidden-posts`에서 찾아 해제하고, 해제하면 숨기기 전 상태로 돌아간다.
+4. 회원 정지는 `/admin/users/{id}`에서 사유와 함께 한다. 정지 즉시 그 회원의 리프레시 토큰이 모두 폐기되고, 이미 발급된 접근
+   토큰도 다음 요청부터 인증되지 않는다(정지 목록은 서버 메모리, 1대 전제). 모든 블로그는 "이용이 제한된 블로그"(`BLOG_RESTRICTED`)로 안내되며 글은 목록·피드·포털·검색에서 빠진다.
+   해제하면 그대로 돌아온다. 자기 자신과 마지막 최고 관리자는 정지할 수 없다.
+5. 숨김·해제·정지·해제·신고 처리는 `/admin/audit-log`에서 `CONTENT_HIDE`·`CONTENT_UNHIDE`·`USER_SUSPEND`·
+   `USER_UNSUSPEND`·`REPORT_ACTION`·`REPORT_DISMISS`로 확인한다(8절).

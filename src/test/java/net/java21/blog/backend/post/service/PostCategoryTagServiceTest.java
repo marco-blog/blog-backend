@@ -111,18 +111,25 @@ class PostCategoryTagServiceTest {
         CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access, blogAccess,
                 categoryAccess, tagQueryRepository,
-                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock,
+                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class),
+                org.mockito.Mockito.mock(net.java21.blog.backend.trackback.repository.TrackbackQueryRepository.class),
+                new net.java21.blog.backend.trackback.TrackbackUrls(
+                        new net.java21.blog.backend.config.SiteProperties("https://blog.java21.net")),
+                org.mockito.Mockito.mock(net.java21.blog.backend.trackback.service.TrackbackSendService.class), clock,
                 new BlogCalendar(StatsProperties.defaults(), clock));
         publishService = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
                 org.mockito.Mockito.mock(net.java21.blog.backend.topic.service.TopicService.class),
                 new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4),
-                net.java21.blog.backend.post.PostsProperties.defaults(), clock);
+                net.java21.blog.backend.post.PostsProperties.defaults(),
+                org.mockito.Mockito.mock(net.java21.blog.backend.spam.RateLimitPolicy.class),
+                org.mockito.Mockito.mock(net.java21.blog.backend.trackback.service.TrackbackSendService.class), clock);
         draftService = new PostDraftService(blogAccess, access, postRepository, postDraftRepository,
                 postQueryRepository, tagQueryRepository, mediaReferences, clock);
         managePostService = new ManagePostService(blogAccess, managePostQueryRepository, categoryAccess,
-                tagQueryRepository, new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), clock);
+                tagQueryRepository, new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500),
+                org.mockito.Mockito.mock(net.java21.blog.backend.trackback.service.TrackbackSendService.class), clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         spring = TestEntities.with(new Category(blog, null, "Spring", 0), "id", 12L);

@@ -54,6 +54,7 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
     private Member reporter;
     private long note;
     private long draftNote;
+    private long bannedWord;
 
     @Test
     void everyAdminChangeIsAudited() throws Exception {
@@ -176,6 +177,14 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
                         () -> new Call("/api/v1/admin/contents/posts/" + post + "/hidden", "{\"reason\":\"광고\"}")),
                 new Row("DELETE", "/api/v1/admin/contents/{segment}/{id}/hidden", AuditActions.CONTENT_UNHIDE,
                         () -> new Call("/api/v1/admin/contents/posts/" + post + "/hidden", "{}")),
+                // 005 금칙어(US2)
+                new Row("POST", "/api/v1/admin/banned-words", AuditActions.BANNED_WORD_CREATE, () -> new Call(
+                        "/api/v1/admin/banned-words", "{\"word\":\"%s\",\"scope\":\"CONTENT\",\"action\":\"REJECT\"}"
+                                .formatted(uniqueHandle("acword")))),
+                new Row("PATCH", "/api/v1/admin/banned-words/{id}", AuditActions.BANNED_WORD_UPDATE, () -> new Call(
+                        "/api/v1/admin/banned-words/" + bannedWord, "{\"action\":\"MASK\"}")),
+                new Row("DELETE", "/api/v1/admin/banned-words/{id}", AuditActions.BANNED_WORD_DELETE, () -> new Call(
+                        "/api/v1/admin/banned-words/" + bannedWord, null)),
                 // 006 관리자 권한
                 new Row("PUT", "/api/v1/admin/users/{id}/role", AuditActions.ROLE_GRANT, () -> new Call(
                         "/api/v1/admin/users/" + writer.id() + "/role", "{\"role\":\"ADMIN\"}")));
@@ -187,6 +196,7 @@ class AdminAuditCoverageIntegrationTest extends AdminConsoleIntegrationSupport {
             case "POST /api/v1/admin/topics" -> topicParent = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/portal/curations" -> curation = ((Number) reply.read("$.result.id")).longValue();
             case "POST /api/v1/admin/release-notes" -> note = ((Number) reply.read("$.result.id")).longValue();
+            case "POST /api/v1/admin/banned-words" -> bannedWord = ((Number) reply.read("$.result.id")).longValue();
             default -> {
             }
         }

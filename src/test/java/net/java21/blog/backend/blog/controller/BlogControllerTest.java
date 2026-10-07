@@ -51,7 +51,7 @@ class BlogControllerTest {
 
     private static final BlogResponse MARCO = new BlogResponse("marco", "마르코의 블로그", null, null, true,
             new BlogResponse.Owner("마르코", null, "자바 개발자"), List.of(), 3, null, 20,
-            net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null, true, false);
+            net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null, true, false, true);
 
     @Autowired
     private MockMvc mvc;
@@ -154,7 +154,7 @@ class BlogControllerTest {
     void getPassesViewerForSubscribedByMe() throws Exception {
         when(blogService.get("marco", 7L)).thenReturn(new BlogResponse("marco", "마르코의 블로그", null, null, true,
                 new BlogResponse.Owner("마르코", null, null), List.of(), 3, true, 20,
-                net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null, true, false));
+                net.java21.blog.backend.blog.domain.FeedContentMode.FULL, true, null, true, false, true));
 
         mvc.perform(get("/api/v1/blogs/marco").cookie(authCookies.user(7L)))
                 .andExpect(status().isOk())

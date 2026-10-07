@@ -55,6 +55,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 @ExtendWith(MockitoExtension.class)
 class PostPublishServiceTest {
 
+    @Mock
+    private net.java21.blog.backend.spam.RateLimitPolicy rateLimits;
+
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
     private static final String KEY_A = "k3Jd9fQ2xLmA7pZ0bR5tYw";
     private static final String KEY_B = "AAAAAAAAAAAAAAAAAAAAAA";
@@ -79,6 +82,13 @@ class PostPublishServiceTest {
     @Mock
     private TopicRepository topicRepository;
 
+    @Mock
+    private net.java21.blog.backend.trackback.repository.TrackbackPingLogRepository pingLogRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher events;
+    @Mock
+    private net.java21.blog.backend.trackback.repository.TrackbackQueryRepository trackbackQueryRepository;
+
     private PostPublishService service;
     private Blog blog;
     private Post post;
@@ -90,13 +100,20 @@ class PostPublishServiceTest {
         CategoryAccess categoryAccess = new CategoryAccess(categoryRepository);
         PostService postService = new PostService(postRepository, postDraftRepository, postQueryRepository, access,
                 new BlogAccess(blogRepository), categoryAccess, tagQueryRepository,
-                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class), clock,
+                org.mockito.Mockito.mock(net.java21.blog.backend.like.repository.PostLikeRepository.class),
+                trackbackQueryRepository,
+                new net.java21.blog.backend.trackback.TrackbackUrls(
+                        new net.java21.blog.backend.config.SiteProperties("https://blog.java21.net")),
+                org.mockito.Mockito.mock(net.java21.blog.backend.trackback.service.TrackbackSendService.class), clock,
                 new BlogCalendar(StatsProperties.defaults(), clock));
         service = new PostPublishService(access, postDraftRepository,
                 new MarkdownRenderer(new HtmlSanitizerPolicy(), new VideoEmbedTransformer()), postService,
                 categoryAccess, tagService, mediaReferences,
                 new TopicService(topicRepository, null, null, null, null, null, null), PASSWORD_ENCODER,
-                PostsProperties.defaults(), clock);
+                PostsProperties.defaults(), rateLimits,
+                new net.java21.blog.backend.trackback.service.TrackbackSendService(pingLogRepository, events,
+                        net.java21.blog.backend.trackback.TrackbackProperties.defaults()),
+                clock);
         blog = TestEntities.blog(10L, TestEntities.user(1L), "marco");
         post = TestEntities.post(100L, blog, "제목");
         lenient().when(postRepository.findWithBlogAndOwner(100L)).thenReturn(Optional.of(post));
@@ -124,6 +141,43 @@ class PostPublishServiceTest {
         assertThat(detail.status()).isEqualTo(PostStatus.PUBLISHED);
         assertThat(detail.contentMarkdown()).isNotNull();
         assertThat(detail.blogHandle()).isEqualTo("marco");
+    }
+
+    /** 005 T069: 처음 발행(DRAFT → PUBLISHED·SCHEDULED)만 회원 1시간 한도로 센다. 수정 재발행은 세지 않는다. 관리자 제외. */
+    @Test
+    void onlyFirstPublishIsCountedAgainstTheHourlyLimit() {
+        draft("제목", "본문");
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        verify(rateLimits).check(net.java21.blog.backend.spam.RateLimitKind.POST_PUBLISH, "u:1");
+
+        draft("새 제목", "새 본문");
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        verify(rateLimits, org.mockito.Mockito.times(1)).check(any(), any());
+    }
+
+    @Test
+    void publishOverTheLimitIs429AndPostStaysDraft() {
+        draft("제목", "본문");
+        org.mockito.Mockito.doThrow(net.java21.blog.backend.common.error.BusinessException.retryAfter(
+                net.java21.blog.backend.common.error.ErrorCode.TOO_MANY_REQUESTS, "x", 100)).when(rateLimits)
+                .check(net.java21.blog.backend.spam.RateLimitKind.POST_PUBLISH, "u:1");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null)))
+                .isInstanceOf(net.java21.blog.backend.common.error.BusinessException.class);
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void adminsAreNotCounted() {
+        TestEntities.with(blog.getUser(), "role", net.java21.blog.backend.user.domain.UserRole.ADMIN);
+        draft("제목", "본문");
+        lenient().when(postQueryRepository.findPrevious(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        lenient().when(postQueryRepository.findNext(anyLong(), anyLong(), any())).thenReturn(Optional.empty());
+        service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+        org.mockito.Mockito.verifyNoInteractions(rateLimits);
     }
 
     @Test
@@ -529,5 +583,81 @@ class PostPublishServiceTest {
 
     private static PublishSettingsRequest settings(PostVisibility visibility, String thumbnailKey, Boolean comments) {
         return new PublishSettingsRequest(visibility, thumbnailKey, comments, null, null, null);
+    }
+
+    // ---- 005 US3 T089: 트랙백 보내기 ----
+
+    private static PublishSettingsRequest trackbacks(PostVisibility visibility, Instant at, String... urls) {
+        return new PublishSettingsRequest(visibility, null, null, null, null, null, null,
+                visibility == PostVisibility.PROTECTED ? "secret1" : null, at, java.util.List.of(urls));
+    }
+
+    @Test
+    void immediatePublishRecordsPendingPingsAndSendsAfterCommit() {
+        noNeighbours();
+        draft("제목", "본문");
+        when(pingLogRepository.save(any(net.java21.blog.backend.trackback.domain.TrackbackPingLog.class)))
+                .thenAnswer(i -> TestEntities.with(i.getArgument(0), "id", 9L));
+        when(pingLogRepository.findByPostIdAndStatus(100L,
+                net.java21.blog.backend.trackback.domain.PingStatus.PENDING)).thenAnswer(i -> java.util.List.of(
+                        TestEntities.with(new net.java21.blog.backend.trackback.domain.TrackbackPingLog(post,
+                                "https://other.example/tb"), "id", 9L)));
+
+        service.publish(1L, 100L, trackbacks(PostVisibility.PUBLIC, null, "https://other.example/tb"));
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        verify(pingLogRepository).save(any(net.java21.blog.backend.trackback.domain.TrackbackPingLog.class));
+        verify(events).publishEvent(new net.java21.blog.backend.trackback.service.TrackbackSendRequested(100L,
+                java.util.List.of(9L)));
+    }
+
+    @Test
+    void scheduledPublishOnlyRecordsPendingPings() {
+        noNeighbours();
+        draft("제목", "본문");
+        when(pingLogRepository.save(any(net.java21.blog.backend.trackback.domain.TrackbackPingLog.class)))
+                .thenAnswer(i -> i.getArgument(0));
+
+        service.publish(1L, 100L, trackbacks(PostVisibility.PUBLIC, NOW.plusSeconds(600), "https://other.example/tb"));
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.SCHEDULED);
+        verify(pingLogRepository).save(any(net.java21.blog.backend.trackback.domain.TrackbackPingLog.class));
+        org.mockito.Mockito.verifyNoInteractions(events);
+    }
+
+    @Test
+    void invalidTrackbackUrlsOrNonPublicPostsAreRejectedBeforeAnyChange() {
+        draft("제목", "본문");
+
+        assertThatThrownBy(() -> service.publish(1L, 100L,
+                trackbacks(PostVisibility.PUBLIC, null, "https://ok.example/", "not a url")))
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(e.fieldErrors().getFirst().field()).isEqualTo("trackbackUrls[1]");
+                    assertThat(e.fieldErrors().getFirst().code()).isEqualTo("INVALID");
+                });
+        assertThatThrownBy(() -> service.publish(1L, 100L,
+                trackbacks(PostVisibility.PRIVATE, null, "https://ok.example/")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.TRACKBACK_NOT_ALLOWED));
+        assertThatThrownBy(() -> service.publish(1L, 100L,
+                trackbacks(PostVisibility.PROTECTED, null, "https://ok.example/")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.TRACKBACK_NOT_ALLOWED));
+
+        assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
+        org.mockito.Mockito.verifyNoInteractions(pingLogRepository, events);
+    }
+
+    @Test
+    void detailCarriesTrackbackUrlAndCount() {
+        noNeighbours();
+        draft("제목", "본문");
+        when(trackbackQueryRepository.countVisible(100L)).thenReturn(3L);
+
+        PostDetailResponse detail = service.publish(1L, 100L, settings(PostVisibility.PUBLIC, null, null));
+
+        assertThat(detail.trackbackUrl()).isEqualTo("https://blog.java21.net/marco/100/trackback");
+        assertThat(detail.trackbackCount()).isEqualTo(3L);
     }
 }

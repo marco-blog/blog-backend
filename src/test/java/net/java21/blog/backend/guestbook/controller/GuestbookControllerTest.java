@@ -115,6 +115,26 @@ class GuestbookControllerTest {
                 eq(new ClientInfo("127.0.0.1", null)));
     }
 
+    /** 005 T070: CAPTCHA 토큰 바인딩, 반복 422, 금칙어 필드 오류. */
+    @Test
+    void captchaTokenIsBoundAndSpamErrorsUseCommonFormat() throws Exception {
+        when(guestbookService.create(eq("spam"), isNull(), any(), any()))
+                .thenThrow(new BusinessException(ErrorCode.DUPLICATE_CONTENT_SPAM, "dup"))
+                .thenThrow(new BusinessException(ErrorCode.VALIDATION_FAILED, "banned",
+                        java.util.List.of(net.java21.blog.backend.common.api.FieldError.of("guestName", "BANNED_WORD"))));
+        String body = "{\"content\":\"안녕\",\"guestName\":\"손님\",\"guestPassword\":\"1234\","
+                + "\"captchaToken\":\"tok\"}";
+        mvc.perform(post("/api/v1/blogs/spam/guestbook").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.header.resultCode").value("DUPLICATE_CONTENT_SPAM"));
+        mvc.perform(post("/api/v1/blogs/spam/guestbook").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("guestName"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("BANNED_WORD"));
+        verify(guestbookService, org.mockito.Mockito.times(2)).create(eq("spam"), isNull(),
+                eq(new GuestbookWriteRequest("안녕", null, null, "손님", "1234", "tok")), any());
+    }
+
     @Test
     void guestRejectionsAndRateLimit() throws Exception {
         when(guestbookService.create(eq("closed"), isNull(), any(), any()))

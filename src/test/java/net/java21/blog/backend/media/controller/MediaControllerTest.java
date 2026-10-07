@@ -90,7 +90,7 @@ class MediaControllerTest {
     @Test
     void uploadReturns201WithKeyUrlAndSize() throws Exception {
         MockMultipartFile part = new MockMultipartFile("file", "photo.png", "image/png", png);
-        when(uploadService.upload(eq(OWNER), any(), eq(MediaPurpose.PROFILE))).thenReturn(
+        when(uploadService.upload(eq(OWNER), any(), eq(MediaPurpose.PROFILE), eq(false))).thenReturn(
                 new MediaUploadResponse(KEY, "/media/" + KEY, "image/png", png.length, 30, 20));
 
         mvc.perform(multipart("/api/v1/media").file(part).param("purpose", "PROFILE").cookie(authCookies.user(OWNER)))
@@ -107,7 +107,7 @@ class MediaControllerTest {
     @Test
     void purposeDefaultsToPostAndUnknownPurposeIs400() throws Exception {
         MockMultipartFile part = new MockMultipartFile("file", "photo.png", "image/png", png);
-        when(uploadService.upload(eq(OWNER), any(), eq(MediaPurpose.POST))).thenReturn(
+        when(uploadService.upload(eq(OWNER), any(), eq(MediaPurpose.POST), eq(false))).thenReturn(
                 new MediaUploadResponse(KEY, "/media/" + KEY, "image/png", png.length, 30, 20));
         mvc.perform(multipart("/api/v1/media").file(part).cookie(authCookies.user(OWNER)))
                 .andExpect(status().isCreated());
@@ -123,7 +123,7 @@ class MediaControllerTest {
         mvc.perform(multipart("/api/v1/media").file(new MockMultipartFile("file", png)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.header.resultCode").value("UNAUTHENTICATED"));
-        verify(uploadService, never()).upload(any(Long.class), any(), any());
+        verify(uploadService, never()).upload(any(Long.class), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -134,10 +134,30 @@ class MediaControllerTest {
                 .andExpect(jsonPath("$.header.fieldErrors[0].field").value("file"));
     }
 
+    /** 005 T070: 업로드 속도 한도는 429 + Retry-After, 관리자 토큰이면 속도 제한 제외 표시를 넘긴다. */
+    @Test
+    void uploadRateLimitIs429WithRetryAfterAndAdminsAreExempt() throws Exception {
+        MockMultipartFile part = new MockMultipartFile("file", "photo.png", "image/png", "x".getBytes());
+        when(uploadService.upload(eq(OWNER), any(), any(), eq(false)))
+                .thenThrow(BusinessException.retryAfter(ErrorCode.TOO_MANY_REQUESTS, "slow", 42));
+        mvc.perform(multipart("/api/v1/media").file(part).cookie(authCookies.user(OWNER)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Retry-After", "42"))
+                .andExpect(jsonPath("$.header.resultCode").value("TOO_MANY_REQUESTS"));
+
+        when(uploadService.upload(eq(OWNER), any(), any(), eq(true))).thenThrow(
+                new BusinessException(ErrorCode.MEDIA_TYPE_NOT_ALLOWED, "admin path"));
+        mvc.perform(multipart("/api/v1/media").file(part).cookie(authCookies.of(OWNER, "ADMIN")))
+                .andExpect(jsonPath("$.header.resultCode").value("MEDIA_TYPE_NOT_ALLOWED"));
+        mvc.perform(multipart("/api/v1/media").file(part).cookie(authCookies.of(OWNER, "SUPER_ADMIN")))
+                .andExpect(jsonPath("$.header.resultCode").value("MEDIA_TYPE_NOT_ALLOWED"));
+    }
+
     @Test
     void serviceErrorsKeepTheirStatus() throws Exception {
         MockMultipartFile part = new MockMultipartFile("file", "photo.jpg", "image/jpeg", "text".getBytes());
-        when(uploadService.upload(eq(OWNER), any(), any()))
+        when(uploadService.upload(eq(OWNER), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenThrow(new BusinessException(ErrorCode.MEDIA_TYPE_NOT_ALLOWED, "no"))
                 .thenThrow(new BusinessException(ErrorCode.MEDIA_TEMP_QUOTA_EXCEEDED, "quota"))
                 .thenThrow(new MaxUploadSizeExceededException(10));

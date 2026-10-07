@@ -14,6 +14,7 @@ import net.java21.blog.backend.blog.domain.Blog;
  * 포털 설정(003 FR-077·089): {@code portalEnabled}는 지울 수 없고(null이면 400 {@code REQUIRED}), {@code defaultTopicId}는
  * null이면 지우며 값이면 고를 수 있는 소분류여야 한다(지금 값과 같으면 검사하지 않음).
  * 004 방명록·비회원 쓰기 설정(FR-058, FR-066): {@code guestbookEnabled}·{@code guestWriteEnabled}는 지울 수 없다(null이면 400 {@code REQUIRED}).
+ * 005 트랙백 받기(FR-053): {@code trackbackEnabled}는 지울 수 없다(null이면 400 {@code REQUIRED}).
  */
 public class UpdateBlogRequest {
 
@@ -37,6 +38,8 @@ public class UpdateBlogRequest {
     private boolean guestbookEnabledPresent;
     private Boolean guestWriteEnabled;
     private boolean guestWriteEnabledPresent;
+    private Boolean trackbackEnabled;
+    private boolean trackbackEnabledPresent;
 
     public UpdateBlogRequest() {
     }
@@ -171,5 +174,18 @@ public class UpdateBlogRequest {
 
     public boolean hasGuestWriteEnabled() {
         return guestWriteEnabledPresent;
+    }
+
+    public Boolean getTrackbackEnabled() {
+        return trackbackEnabled;
+    }
+
+    public void setTrackbackEnabled(Boolean trackbackEnabled) {
+        this.trackbackEnabled = trackbackEnabled;
+        this.trackbackEnabledPresent = true;
+    }
+
+    public boolean hasTrackbackEnabled() {
+        return trackbackEnabledPresent;
     }
 }

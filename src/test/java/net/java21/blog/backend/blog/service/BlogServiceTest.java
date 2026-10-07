@@ -38,6 +38,8 @@ import net.java21.blog.backend.support.TestEntities;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.domain.UserStatus;
 import net.java21.blog.backend.user.repository.UserRepository;
+import net.java21.blog.backend.spam.BannedWordMatcher;
+import net.java21.blog.backend.spam.repository.BannedWordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +55,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 /** 블로그 만들기·조회·수정·삭제(T055, FR-010~012, FR-158·159, AS17~19). */
 @ExtendWith(MockitoExtension.class)
 class BlogServiceTest {
+
+    @Mock
+    private BannedWordRepository bannedWordRepository;
 
     private static final Instant NOW = Instant.parse("2026-10-06T04:24:19Z");
 
@@ -83,7 +88,7 @@ class BlogServiceTest {
                 passwordEncoder, new BlogsProperties(3), categoryQueryRepository, mediaReferences,
                 subscriptionRepository,
                 new net.java21.blog.backend.topic.service.TopicService(topicRepository, null, null, null, null, null, null),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                new BannedWordMatcher(bannedWordRepository), Clock.fixed(NOW, ZoneOffset.UTC));
         owner = TestEntities.user(1L, "marco@example.com", "$2a$hash", "마르코");
     }
 
@@ -104,6 +109,21 @@ class BlogServiceTest {
         order.verify(userRepository).findByIdForUpdate(1L);
         order.verify(blogRepository).countByUserIdAndStatus(1L, BlogStatus.ACTIVE);
         order.verify(blogRepository).saveAndFlush(any(Blog.class));
+    }
+
+    @Test
+    void bannedHandleTitleAndUpdatedTitleAreRejected() {
+        when(bannedWordRepository.findAll()).thenReturn(java.util.List.of(new net.java21.blog.backend.spam.domain.BannedWord(
+                owner, "casino", net.java21.blog.backend.spam.domain.BannedWordScope.NAME,
+                net.java21.blog.backend.spam.domain.BannedWordAction.REJECT)));
+        assertFieldError(() -> service.create(1L, new CreateBlogRequest("my-casino", "Casino Royale")),
+                FieldError.of("handle", "BANNED_WORD"), FieldError.of("title", "BANNED_WORD"));
+        verify(userRepository, never()).findByIdForUpdate(anyLong());
+
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
+        UpdateBlogRequest title = new UpdateBlogRequest();
+        title.setTitle("CA SI NO");
+        assertFieldError(() -> service.update(1L, "marco", title), FieldError.of("title", "BANNED_WORD"));
     }
 
     @Test
@@ -469,6 +489,33 @@ class BlogServiceTest {
         assertThat(blog.isGuestWriteEnabled()).isFalse();
     }
 
+    // ---- 트랙백 받기(005 T088, FR-053) ----
+
+    @Test
+    void trackbackEnabledDefaultsOnAndOwnerTogglesIt() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        assertThat(BlogResponse.of(blog).trackbackEnabled()).isTrue();
+
+        UpdateBlogRequest off = new UpdateBlogRequest();
+        off.setTrackbackEnabled(false);
+        assertThat(service.update(1L, "marco", off).trackbackEnabled()).isFalse();
+        assertThat(blog.isTrackbackEnabled()).isFalse();
+
+        UpdateBlogRequest title = new UpdateBlogRequest();
+        title.setTitle("새 제목");
+        assertThat(service.update(1L, "marco", title).trackbackEnabled()).as("보내지 않으면 그대로").isFalse();
+
+        UpdateBlogRequest cleared = new UpdateBlogRequest();
+        cleared.setTrackbackEnabled(null);
+        assertFieldError(() -> service.update(1L, "marco", cleared),
+                new FieldError("trackbackEnabled", "REQUIRED", Map.of()));
+        UpdateBlogRequest byOther = new UpdateBlogRequest();
+        byOther.setTrackbackEnabled(true);
+        expect(() -> service.update(2L, "marco", byOther), ErrorCode.FORBIDDEN);
+        assertThat(blog.isTrackbackEnabled()).isFalse();
+    }
+
     @Test
     void onlyOwnerCanPatch() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));
@@ -536,7 +583,7 @@ class BlogServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.errorCode()).isEqualTo(code));
     }
 
-    private static void assertFieldError(Runnable action, FieldError expected) {
+    private static void assertFieldError(Runnable action, FieldError... expected) {
         assertThatThrownBy(action::run)
                 .isInstanceOfSatisfying(BusinessException.class, e -> {
                     assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);

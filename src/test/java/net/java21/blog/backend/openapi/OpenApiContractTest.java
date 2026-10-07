@@ -212,6 +212,16 @@ class OpenApiContractTest {
             "GET /api/v1/admin/users/{id}",
             "POST /api/v1/admin/users/{id}/suspend",
             "POST /api/v1/admin/users/{id}/unsuspend",
+            // 005 금칙어(US2)
+            "GET /api/v1/admin/banned-words",
+            "POST /api/v1/admin/banned-words",
+            "PATCH /api/v1/admin/banned-words/{id}",
+            "DELETE /api/v1/admin/banned-words/{id}",
+            // 005 트랙백(US3). 받기 POST /{handle}/{postId}/trackback은 TrackBack 1.2 XML이라 문서에서 뺀다.
+            "GET /api/v1/posts/{id}/trackbacks",
+            "DELETE /api/v1/trackbacks/{id}",
+            "GET /api/v1/blogs/{handle}/manage/trackbacks",
+            "GET /api/v1/posts/{id}/trackback-pings",
             // 006 (006 contracts/api.md) — 대시보드·콘텐츠 검색·예약어·서비스 설정·작업 기록·관리자 권한
             "GET /api/v1/admin/dashboard",
             "GET /api/v1/admin/contents/posts",
@@ -224,6 +234,21 @@ class OpenApiContractTest {
             "GET /api/v1/admin/audit-logs/actions",
             "GET /api/v1/admin/admins",
             "PUT /api/v1/admin/users/{id}/role");
+
+    /** 005 응답·요청 스키마(005 contracts/api.md 타입): 스키마 이름 → 필드. */
+    static final Map<String, List<String>> SCHEMAS_005 = Map.ofEntries(
+            Map.entry("CaptchaConfigResponse", List.of("provider", "siteKey")),
+            Map.entry("CreateReportRequest", List.of("targetType", "targetId", "reason", "detail")),
+            Map.entry("ReportCreatedResponse", List.of("id", "status")),
+            Map.entry("BannedWordRequest", List.of("word", "scope", "action")),
+            Map.entry("BannedWordResponse", List.of("id", "word", "scope", "action", "createdBy", "createdAt",
+                    "updatedAt")),
+            Map.entry("TrackbackResponse", List.of("id", "title", "excerpt", "blogName", "url", "receivedAt",
+                    "internal")),
+            Map.entry("ManagedTrackbackResponse", List.of("id", "title", "excerpt", "blogName", "url", "receivedAt",
+                    "internal", "hidden", "post")),
+            Map.entry("TrackbackPingResponse", List.of("id", "targetUrl", "status", "errorCode", "errorMessage",
+                    "attemptedAt", "createdAt")));
 
     /** 006 응답 스키마(006 contracts/api.md 타입): 스키마 이름 → 필드. */
     static final Map<String, List<String>> SCHEMAS_006 = Map.ofEntries(
@@ -253,24 +278,29 @@ class OpenApiContractTest {
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.ofEntries(
             Map.entry("MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote")),
             Map.entry("BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
-                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled", "trackbackEnabled")),
             Map.entry("PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice", "locked",
-                    "scheduledAt", "hidden")),
+                    "scheduledAt", "hidden", "trackbackUrl", "trackbackCount")),
             // 005 숨김(005 contracts "001~004 응답 확장")
             Map.entry("GuestbookEntryResponse", List.of("hidden")),
             Map.entry("BulkPostResponse", List.of("skipped")),
             Map.entry("UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled",
-                    "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+                    "defaultTopicId", "guestbookEnabled", "guestWriteEnabled", "trackbackEnabled")),
             Map.entry("DraftWriteRequest", List.of("topicId")),
             Map.entry("DraftResponse", List.of("topicId")),
-            Map.entry("PublishSettingsRequest", List.of("topicId", "notice", "password", "scheduledAt")),
+            Map.entry("PublishSettingsRequest", List.of("topicId", "notice", "password", "scheduledAt",
+                    "trackbackUrls")),
             Map.entry("DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors")),
             Map.entry("PostSummaryResponse", List.of("notice", "scheduledAt")),
             // 004 비밀·비회원 댓글(004 contracts "001~003 요청·응답 확장")
             Map.entry("CommentResponse", List.of("secret", "hidden")),
             Map.entry("AuthorResponse", List.of("guest")),
-            Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword")),
-            Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")));
+            Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword", "captchaToken")),
+            Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")),
+            // 005 CAPTCHA(US2, 005 contracts "001~004 요청 확장")
+            Map.entry("SignupRequest", List.of("captchaToken")),
+            Map.entry("LoginRequest", List.of("captchaToken")),
+            Map.entry("GuestbookWriteRequest", List.of("captchaToken")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
@@ -347,6 +377,26 @@ class OpenApiContractTest {
             fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
         });
         assertThat(missing).as("문서에 없는 002~004 응답 확장 필드").isEmpty();
+    }
+
+    @Test
+    void schemasOf005AreDocumented() {
+        JsonNode schemas = doc.get("components").get("schemas");
+        List<String> missing = new ArrayList<>();
+        SCHEMAS_005.forEach((schema, fields) -> {
+            JsonNode node = schemas.get(schema);
+            Set<String> properties = node == null || node.get("properties") == null ? Set.of()
+                    : names(node.get("properties"));
+            fields.stream().filter(field -> !properties.contains(field)).forEach(field -> missing.add(schema + "." + field));
+        });
+        assertThat(missing).as("문서에 없는 005 스키마 필드").isEmpty();
+    }
+
+    /** 트랙백 받기({@code POST /{handle}/{postId}/trackback})는 TrackBack 1.2 XML이라 API 문서에 없다(005 contracts). */
+    @Test
+    void trackbackXmlEndpointIsNotDocumented() {
+        assertThat(documentedOperations()).noneMatch(op -> op.endsWith("/trackback"));
+        assertThat(names(doc.get("paths"))).noneMatch(path -> path.endsWith("/trackback"));
     }
 
     @Test

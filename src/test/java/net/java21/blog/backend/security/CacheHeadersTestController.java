@@ -116,4 +116,17 @@ class CacheHeadersTestController {
     ApiResponse<Long> adminConsole(@CurrentUser AuthUser user) {
         return ApiResponse.ok(user.userId());
     }
+
+    /** 005 관리자 API(신고·숨김·회원 정지·금칙어)와 주인 API(받은 트랙백·트랙백 보내기 결과·트랙백 삭제). 기본 {@code no-store}. */
+    @RequestMapping(path = {"/api/v1/admin/reports", "/api/v1/admin/reports/summary", "/api/v1/admin/reports/{id}",
+            "/api/v1/admin/reports/{id}/resolve", "/api/v1/admin/contents/{type}/{id}/hidden",
+            "/api/v1/admin/contents/hidden-posts", "/api/v1/admin/users", "/api/v1/admin/users/{id}/suspend",
+            "/api/v1/admin/banned-words", "/api/v1/admin/banned-words/{id}",
+            "/api/v1/blogs/{handle}/manage/trackbacks", "/api/v1/posts/{id}/trackback-pings",
+            "/api/v1/trackbacks/{id}"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH,
+                    RequestMethod.DELETE})
+    ApiResponse<Long> moderation(@CurrentUser AuthUser user) {
+        return ApiResponse.ok(user.userId());
+    }
 }

@@ -428,6 +428,52 @@ class PostControllerTest {
                 401, "UNAUTHENTICATED");
     }
 
+    // ---- 005 US3 T092: 트랙백 주소·수·보내기 ----
+
+    @Test
+    void detailCarriesTrackbackUrlAndCount() throws Exception {
+        PostDetailResponse withTrackbacks = new PostDetailResponse(123L, "marco", "제목", "<p>본문</p>", null, "본문",
+                null, null, List.of(), PostVisibility.PUBLIC, PostStatus.PUBLISHED, 10, 2, true,
+                new PostDetailResponse.Author("마르코", null), null, null, NOW, NOW, 5, null, null, false, false, null,
+                false, "https://blog.java21.net/marco/123/trackback", 4);
+        when(postService.detail(eq(123L), eq(null), any())).thenReturn(withTrackbacks);
+
+        mvc.perform(get("/api/v1/posts/123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.trackbackUrl").value("https://blog.java21.net/marco/123/trackback"))
+                .andExpect(jsonPath("$.result.trackbackCount").value(4));
+        when(postService.detail(eq(124L), eq(null), any())).thenReturn(DETAIL);
+        mvc.perform(get("/api/v1/posts/124"))
+                .andExpect(jsonPath("$.result.trackbackUrl").value(nullValue()))
+                .andExpect(jsonPath("$.result.trackbackCount").value(0));
+    }
+
+    @Test
+    void publishPassesTrackbackUrlsAndReportsTheirErrors() throws Exception {
+        when(postPublishService.publish(eq(7L), eq(123L), any())).thenReturn(DETAIL);
+        mvc.perform(post("/api/v1/posts/123/publish").cookie(authCookies.user(7L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visibility\":\"PUBLIC\",\"trackbackUrls\":[\"https://a.example/tb\"]}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<PublishSettingsRequest> request = ArgumentCaptor.forClass(PublishSettingsRequest.class);
+        verify(postPublishService).publish(eq(7L), eq(123L), request.capture());
+        assertThat(request.getValue().trackbackUrls()).containsExactly("https://a.example/tb");
+
+        when(postPublishService.publish(eq(7L), eq(5L), any())).thenThrow(new BusinessException(
+                ErrorCode.VALIDATION_FAILED, "x", List.of(net.java21.blog.backend.common.api.FieldError.of(
+                        "trackbackUrls[0]", "INVALID"))));
+        when(postPublishService.publish(eq(7L), eq(6L), any()))
+                .thenThrow(new BusinessException(ErrorCode.TRACKBACK_NOT_ALLOWED, "x"));
+        String body = "{\"visibility\":\"PRIVATE\",\"trackbackUrls\":[\"x\"]}";
+        mvc.perform(post("/api/v1/posts/5/publish").cookie(authCookies.user(7L))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.fieldErrors[0].field").value("trackbackUrls[0]"))
+                .andExpect(jsonPath("$.header.fieldErrors[0].code").value("INVALID"));
+        expectError(mvc.perform(post("/api/v1/posts/6/publish").cookie(authCookies.user(7L))
+                .contentType(MediaType.APPLICATION_JSON).content(body)), 422, "TRACKBACK_NOT_ALLOWED");
+    }
+
     // ---- 휴지통 ----
 
     @Test

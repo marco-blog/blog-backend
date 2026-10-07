@@ -12,6 +12,7 @@ import net.java21.blog.backend.auth.validation.StrongPassword;
  *
  * @param locale   가입 화면의 현재 언어(ko·en·ja·zh-CN), 생략 가능
  * @param timeZone 브라우저 시간대(IANA ID), 생략하면 Asia/Seoul
+ * @param captchaToken 005 CAPTCHA 토큰(FR-141, 검증은 {@code SignupService})
  */
 public record SignupRequest(
         @NotBlank @Email @Size(max = 254) String email,
@@ -23,7 +24,15 @@ public record SignupRequest(
         @NotNull Boolean over14,
         @NotBlank @Size(max = 20) String termsVersion,
         String locale,
-        String timeZone) {
+        String timeZone,
+        String captchaToken) {
+
+    /** 001~004 호출부용(CAPTCHA 없음). */
+    public SignupRequest(String email, String password, String nickname, String handle, Boolean agreeTerms,
+            Boolean agreePrivacy, Boolean over14, String termsVersion, String locale, String timeZone) {
+        this(email, password, nickname, handle, agreeTerms, agreePrivacy, over14, termsVersion, locale, timeZone,
+                null);
+    }
 
     @Override
     public String toString() {

@@ -80,9 +80,36 @@ class AuthControllerTest {
                  "locale":"ko","timeZone":"Asia/Seoul"}""".formatted(password);
     }
 
+    /** 005 T070: 가입·로그인의 captchaToken 바인딩, CAPTCHA 400과 가입 한도 429(Retry-After). */
+    @Test
+    void captchaTokenIsBoundAndSpamErrorsKeepTheirStatus() throws Exception {
+        when(signupService.signup(any(SignupRequest.class), any()))
+                .thenThrow(new BusinessException(ErrorCode.CAPTCHA_FAILED, "captcha"))
+                .thenThrow(BusinessException.retryAfter(ErrorCode.TOO_MANY_REQUESTS, "slow", 3600));
+        String body = signupJson("password1").replace("\"timeZone\":\"Asia/Seoul\"",
+                "\"timeZone\":\"Asia/Seoul\",\"captchaToken\":\"e2e-pass\"");
+        mvc.perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.resultCode").value("CAPTCHA_FAILED"));
+        mvc.perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "3600"));
+        org.mockito.ArgumentCaptor<SignupRequest> signup = org.mockito.ArgumentCaptor.forClass(SignupRequest.class);
+        verify(signupService, org.mockito.Mockito.times(2)).signup(signup.capture(), eq("127.0.0.1"));
+        assertThat(signup.getValue().captchaToken()).isEqualTo("e2e-pass");
+
+        when(loginService.login(any(), any(LoginRequest.class)))
+                .thenThrow(new BusinessException(ErrorCode.CAPTCHA_REQUIRED, "required"));
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"password\":\"x\",\"captchaToken\":\"tok\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.resultCode").value("CAPTCHA_REQUIRED"));
+        verify(loginService).login(any(), eq(new LoginRequest("a@b.com", "x", "tok")));
+    }
+
     @Test
     void signupIs201WithLocationBodyAndBothCookies() throws Exception {
-        when(signupService.signup(any(SignupRequest.class)))
+        when(signupService.signup(any(SignupRequest.class), any()))
                 .thenReturn(new SignupService.Result(new SignupResponse(42L, "marco"), TOKENS));
 
         MvcResult result = mvc.perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON)
@@ -113,7 +140,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.header.fieldErrors[0].field").value("password"))
                 .andExpect(jsonPath("$.header.fieldErrors[0].code").value("PASSWORD_WEAK"))
                 .andExpect(jsonPath("$.result").value(nullValue()));
-        verify(signupService, never()).signup(any());
+        verify(signupService, never()).signup(any(), any());
     }
 
     @Test
@@ -132,7 +159,7 @@ class AuthControllerTest {
             "EMAIL_TAKEN, 409", "HANDLE_TAKEN, 409", "HANDLE_RESERVED, 422", "HANDLE_INVALID, 422",
             "TERMS_VERSION_OUTDATED, 422", "VALIDATION_FAILED, 400"})
     void signupErrorsUseContractStatus(ErrorCode code, int httpStatus) throws Exception {
-        when(signupService.signup(any())).thenThrow(new BusinessException(code, "x"));
+        when(signupService.signup(any(), any())).thenThrow(new BusinessException(code, "x"));
         expectError(mvc.perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON)
                 .content(signupJson("password1"))), httpStatus, code.name());
     }

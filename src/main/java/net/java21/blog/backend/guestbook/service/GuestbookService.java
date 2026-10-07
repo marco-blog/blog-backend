@@ -18,7 +18,6 @@ import net.java21.blog.backend.common.security.AttemptTarget;
 import net.java21.blog.backend.common.text.PlainTextNormalizer;
 import net.java21.blog.backend.common.web.ClientInfo;
 import net.java21.blog.backend.guest.dto.GuestCredentials;
-import net.java21.blog.backend.guest.dto.GuestWriteKind;
 import net.java21.blog.backend.guest.service.GuestAuthorService;
 import net.java21.blog.backend.guestbook.domain.GuestbookEntry;
 import net.java21.blog.backend.guestbook.domain.GuestbookStatus;
@@ -29,6 +28,7 @@ import net.java21.blog.backend.guestbook.repository.GuestbookEntryRepository;
 import net.java21.blog.backend.guestbook.repository.GuestbookQueryRepository;
 import net.java21.blog.backend.guestbook.repository.GuestbookRow;
 import net.java21.blog.backend.media.domain.Media;
+import net.java21.blog.backend.spam.WriteGuard;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
 import org.springframework.data.domain.Page;
@@ -62,17 +62,19 @@ public class GuestbookService {
     private final UserRepository userRepository;
     private final GuestAuthorService guestAuthors;
     private final BlogBlockPolicy blockPolicy;
+    private final WriteGuard writeGuard;
     private final Clock clock;
 
     public GuestbookService(BlogAccess blogAccess, GuestbookEntryRepository entryRepository,
             GuestbookQueryRepository queryRepository, UserRepository userRepository, GuestAuthorService guestAuthors,
-            BlogBlockPolicy blockPolicy, Clock clock) {
+            BlogBlockPolicy blockPolicy, WriteGuard writeGuard, Clock clock) {
         this.blogAccess = blogAccess;
         this.entryRepository = entryRepository;
         this.queryRepository = queryRepository;
         this.userRepository = userRepository;
         this.guestAuthors = guestAuthors;
         this.blockPolicy = blockPolicy;
+        this.writeGuard = writeGuard;
         this.clock = clock;
     }
 
@@ -109,19 +111,23 @@ public class GuestbookService {
         boolean owner = blog.isOwnedBy(userId);
         requireGuestbookOpen(blog, userId);
         String content = normalize(request.content());
+        String ip = client == null ? null : client.ip();
         if (request.parentId() != null) {
-            return reply(blog, userId, owner, request.parentId(), content);
+            return reply(blog, userId, owner, request.parentId(), content, ip);
         }
         boolean secret = Boolean.TRUE.equals(request.secret());
         GuestbookEntry entry;
         if (userId == null) {
             guestAuthors.requireGuestAllowed(blog);
-            GuestCredentials guest = guestAuthors.newGuest(request.guestName(), request.guestPassword(), client,
-                    GuestWriteKind.GUESTBOOK);
+            content = writeGuard.guardNew(WriteGuard.Kind.GUESTBOOK, WriteGuard.Writer.guest(ip), content,
+                    request.captchaToken(), request.guestName());
+            GuestCredentials guest = guestAuthors.newGuest(request.guestName(), request.guestPassword(), client);
             entry = GuestbookEntry.byGuest(blog, guest.name(), guest.passwordHash(), guest.ip(), content, secret);
         } else {
             User member = requireActiveMember(userId);
             blockPolicy.requireNotBlocked(blog.getId(), userId);
+            content = writeGuard.guardNew(WriteGuard.Kind.GUESTBOOK, WriteGuard.Writer.member(member, ip), content,
+                    null, null);
             entry = new GuestbookEntry(blog, member, null, content, secret);
         }
         entryRepository.save(entry);
@@ -139,7 +145,7 @@ public class GuestbookService {
         } else {
             requireAuthor(entry, userId);
         }
-        String content = request.content() == null ? null : normalize(request.content());
+        String content = request.content() == null ? null : writeGuard.guardEdit(normalize(request.content()));
         entry.edit(content, entry.isReply() ? null : request.secret());
         entryRepository.flush();
         return single(entry);
@@ -182,7 +188,8 @@ public class GuestbookService {
         return single(entry);
     }
 
-    private GuestbookEntryResponse reply(Blog blog, Long userId, boolean owner, Long parentId, String content) {
+    private GuestbookEntryResponse reply(Blog blog, Long userId, boolean owner, Long parentId, String content,
+            String ip) {
         if (userId == null) {
             throw new BusinessException(ErrorCode.UNAUTHENTICATED, "Authentication required");
         }
@@ -196,8 +203,11 @@ public class GuestbookService {
             throw new BusinessException(ErrorCode.REPLY_DEPTH_EXCEEDED,
                     "Replies are allowed only to top-level entries: " + parentId);
         }
-        GuestbookEntry entry = entryRepository.save(new GuestbookEntry(blog, requireActiveMember(userId), parent,
-                content, parent.isSecret()));
+        User member = requireActiveMember(userId);
+        String guarded = writeGuard.guardNew(WriteGuard.Kind.GUESTBOOK, WriteGuard.Writer.member(member, ip), content,
+                null, null);
+        GuestbookEntry entry = entryRepository.save(new GuestbookEntry(blog, member, parent, guarded,
+                parent.isSecret()));
         return single(entry);
     }
 

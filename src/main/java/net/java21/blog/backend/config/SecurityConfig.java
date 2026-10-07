@@ -112,6 +112,9 @@ public class SecurityConfig {
             "/*/*/trackback"
     };
 
+    /** 005 트랙백 받기(TrackBack 1.2). POST만 처리하고 다른 메서드는 405다. */
+    static final String TRACKBACK_RECEIVE = "/*/*/trackback";
+
     /** 004 비회원도 비밀번호로 고치는 PATCH 경로(Origin 검사는 받는다). 회원·비회원 판단은 서비스가 한다. */
     static final String[] PUBLIC_PATCH = {
             "/api/v1/comments/*",
@@ -154,6 +157,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
                         .requestMatchers(HttpMethod.PATCH, PUBLIC_PATCH).permitAll()
                         .requestMatchers(HttpMethod.DELETE, PUBLIC_DELETE).permitAll()
+                        // 005 트랙백 받기 주소는 어떤 메서드든 컨트롤러가 답한다(POST 외에는 405, 로그인 요구 아님).
+                        .requestMatchers(TRACKBACK_RECEIVE).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, ex) ->

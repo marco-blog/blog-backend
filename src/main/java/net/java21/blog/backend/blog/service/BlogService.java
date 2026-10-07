@@ -2,6 +2,7 @@ package net.java21.blog.backend.blog.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import net.java21.blog.backend.media.domain.MediaPurpose;
 import net.java21.blog.backend.media.service.MediaReferenceService;
 import net.java21.blog.backend.subscription.repository.BlogSubscriptionRepository;
 import net.java21.blog.backend.topic.domain.Topic;
+import net.java21.blog.backend.spam.BannedWordMatcher;
 import net.java21.blog.backend.topic.service.TopicService;
 import net.java21.blog.backend.user.domain.User;
 import net.java21.blog.backend.user.repository.UserRepository;
@@ -53,13 +55,15 @@ public class BlogService {
     private final MediaReferenceService mediaReferences;
     private final BlogSubscriptionRepository subscriptionRepository;
     private final TopicService topicService;
+    private final BannedWordMatcher bannedWords;
     private final Clock clock;
 
     public BlogService(BlogRepository blogRepository, BlogQueryRepository blogQueryRepository,
             UserRepository userRepository, BlogAccess blogAccess, HandlePolicy handlePolicy,
             PasswordEncoder passwordEncoder, BlogsProperties blogsProperties,
             CategoryQueryRepository categoryQueryRepository, MediaReferenceService mediaReferences,
-            BlogSubscriptionRepository subscriptionRepository, TopicService topicService, Clock clock) {
+            BlogSubscriptionRepository subscriptionRepository, TopicService topicService,
+            BannedWordMatcher bannedWords, Clock clock) {
         this.blogRepository = blogRepository;
         this.blogQueryRepository = blogQueryRepository;
         this.userRepository = userRepository;
@@ -71,6 +75,7 @@ public class BlogService {
         this.mediaReferences = mediaReferences;
         this.subscriptionRepository = subscriptionRepository;
         this.topicService = topicService;
+        this.bannedWords = bannedWords;
         this.clock = clock;
     }
 
@@ -104,6 +109,14 @@ public class BlogService {
     @Transactional
     public BlogResponse create(long userId, CreateBlogRequest request) {
         handlePolicy.check(request.handle());
+        List<FieldError> banned = new ArrayList<>();
+        bannedWords.collectName(banned, "handle", request.handle());
+        if (!isBlank(request.title())) {
+            bannedWords.collectName(banned, "title", request.title());
+        }
+        if (!banned.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Banned word", banned);
+        }
         User user = requireActiveUser(userRepository.findByIdForUpdate(userId).orElse(null));
         long activeBlogs = blogRepository.countByUserIdAndStatus(userId, BlogStatus.ACTIVE);
         if (activeBlogs >= user.effectiveBlogLimit(blogsProperties.defaultMaxPerMember())) {
@@ -151,6 +164,7 @@ public class BlogService {
             if (isBlank(request.getTitle())) {
                 throw required("title");
             }
+            bannedWords.requireCleanName("title", request.getTitle());
             blog.changeTitle(request.getTitle().strip());
         }
         if (request.hasDescription()) {
@@ -173,6 +187,12 @@ public class BlogService {
         }
         if (request.hasGuestbookEnabled() || request.hasGuestWriteEnabled()) {
             changeGuestSettings(blog, request);
+        }
+        if (request.hasTrackbackEnabled()) {
+            if (request.getTrackbackEnabled() == null) {
+                throw required("trackbackEnabled");
+            }
+            blog.changeTrackbackEnabled(request.getTrackbackEnabled());
         }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
     }
