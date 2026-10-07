@@ -15,7 +15,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 /**
- * 백업 zip 파일 보관(004 research B14). 기준 디렉터리는 {@code blog.export.dir}(prod 환경 변수 {@code BLOG_EXPORT_DIR})이며
+ * 백업 zip 파일 보관(004 research B14). 기준 디렉터리는 {@code blog.export.dir}({@code BLOG_DATA_DIR}/exports)이며
  * 파일은 {@code {yyyy}/{MM}/{무작위 UUID}.zip}에 둔다. DB의 {@code file_path}는 이 디렉터리 기준 상대 경로이고, 풀 때 기준 밖을 가리키면
  * 거부한다(경로 조작 방지). 기동 때 디렉터리를 만들고 실제로 써 보아 쓸 수 없으면 기동을 멈춘다(001 이미지 디렉터리와 같은 방식).
  */

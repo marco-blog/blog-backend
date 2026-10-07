@@ -89,7 +89,7 @@ curl http://localhost:8080/actuator/health
 
 - 邮件中的链接地址（`blog.base-url`）为 `http://localhost:5173`（front 开发服务器）。可用 `BLOG_BASE_URL` 修改。
 - 修改状态的请求只接受来自允许的 Origin（`http://localhost:5173`、`http://localhost:3000`）。界面请启动 blog-front 查看。
-- 未指定图片目录时，使用系统临时目录下的 `blog-media/upload|temp|thumb`。
+- 文件存储根目录由 `BLOG_DATA_DIR` 一个变量指定。未指定时使用 `./data` 下的 `media/upload|temp|thumbnail` 和 `exports`。
 - OpenAPI 文档：`http://localhost:8080/v3/api-docs`
 - 以 jar 运行：`./mvnw -B -DskipTests package` → `java -jar target/blog-backend-*.jar`
 

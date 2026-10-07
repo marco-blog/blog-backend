@@ -137,7 +137,7 @@ blog:
   outbound:
     allowed-ports: 80,443,8080,8443
     allow-private: false
-  # 004 블로그 백업(FR-145): 디렉터리(dir)는 프로필 파일이 정한다(local ./data/exports, prod 환경 변수 BLOG_EXPORT_DIR 필수).
+  # 004 블로그 백업(FR-145): 디렉터리(dir)는 프로필 파일이 정한다(BLOG_DATA_DIR/exports, local 기본 ./data/exports).
   export:
     retention: 7d
     min-interval: 24h

@@ -38,14 +38,14 @@ blog:
   auth:
     # 접근 토큰 서명 키(UTF-8 32바이트 이상). .env 의 값을 쓴다. 생성: openssl rand -base64 48
     jwt-secret: ${BLOG_AUTH_JWT_SECRET}
-  # 이미지 보관 디렉터리(US4). 환경 변수가 없으면 시스템 임시 디렉터리 아래를 쓴다(재부팅 때 지워질 수 있음).
+  # 파일 보관 루트(BLOG_DATA_DIR). 없으면 저장소 루트 아래 data(커밋하지 않음).
+  # 이미지(US4)는 media/upload·temp·thumbnail, 블로그 백업 파일(004 FR-145)은 exports.
   media:
-    upload-dir: ${BLOG_MEDIA_UPLOAD_DIR:${java.io.tmpdir}/blog-media/upload}
-    temp-dir: ${BLOG_MEDIA_TEMP_DIR:${java.io.tmpdir}/blog-media/temp}
-    thumbnail-dir: ${BLOG_MEDIA_THUMBNAIL_DIR:${java.io.tmpdir}/blog-media/thumb}
-  # 블로그 백업 파일 디렉터리(004 FR-145). 저장소 루트 아래 data/exports(커밋하지 않음).
+    upload-dir: ${BLOG_DATA_DIR:./data}/media/upload
+    temp-dir: ${BLOG_DATA_DIR:./data}/media/temp
+    thumbnail-dir: ${BLOG_DATA_DIR:./data}/media/thumbnail
   export:
-    dir: ${BLOG_EXPORT_DIR:./data/exports}
+    dir: ${BLOG_DATA_DIR:./data}/exports
   security:
     # 상태 변경 요청의 Origin 허용 목록(R3): front 개발 서버
     allowed-origins:

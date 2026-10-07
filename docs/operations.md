@@ -34,10 +34,7 @@
 | `BLOG_MAIL_HOST` | `blog.mail.host` | | SMTP 서버(비밀번호 재설정 메일) |
 | `BLOG_MAIL_PORT` | `blog.mail.port` | | SMTP 포트 |
 | `BLOG_MAIL_FROM` | `blog.mail.from` | | 보내는 사람 주소 |
-| `BLOG_MEDIA_UPLOAD_DIR` | `blog.media.upload-dir` | | 이미지 정식 보관 디렉터리. **백업 대상**(4절) |
-| `BLOG_MEDIA_TEMP_DIR` | `blog.media.temp-dir` | | 업로드 직후 임시 보관 디렉터리. 백업 제외 |
-| `BLOG_MEDIA_THUMBNAIL_DIR` | `blog.media.thumbnail-dir` | | 썸네일 디렉터리. 다시 만들 수 있어 백업 제외 |
-| `BLOG_EXPORT_DIR` | `blog.export.dir` | | 블로그 백업 zip 디렉터리(004 FR-145). 백업 제외(4.1절) |
+| `BLOG_DATA_DIR` | `blog.media.*-dir`, `blog.export.dir` | | 파일 보관 루트(필수). `media/upload`(이미지 정식, **백업 대상**, 4절), `media/temp`(업로드 임시, 백업 제외), `media/thumbnail`(썸네일, 다시 만들 수 있어 백업 제외), `exports`(블로그 백업 zip, 004 FR-145, 백업 제외 4.1절)를 이 아래에 만든다 |
 | `BLOG_CAPTCHA_SITE_KEY` | `blog.captcha.site-key` | | Cloudflare Turnstile 사이트 키(005 FR-141, 10.1절). 브라우저에 보이는 공개 값. **1.0에서는 CAPTCHA를 꺼서 넣지 않는다** |
 | `BLOG_CAPTCHA_SECRET_KEY` | `blog.captcha.secret-key` | 예 | Turnstile 비밀 키. provider가 `turnstile`일 때 두 키 중 하나라도 비면 기동 실패. 1.0에서는 넣지 않는다 |
 
@@ -145,7 +142,7 @@ mysqldump --single-transaction --routines --triggers "$DB_NAME" | gzip > "/backu
 
 # 2) 이미지 원본: 날짜별 스냅숏. 바뀌지 않는 파일은 하드 링크로 공유해 공간을 아낀다.
 TODAY=$(date -u +%F); PREV=$(ls -1d /backup/media/20* 2>/dev/null | tail -n 1)
-rsync -a --delete ${PREV:+--link-dest="$PREV"} "$BLOG_MEDIA_UPLOAD_DIR"/ "/backup/media/$TODAY"/
+rsync -a --delete ${PREV:+--link-dest="$PREV"} "$BLOG_DATA_DIR/media/upload"/ "/backup/media/$TODAY"/
 
 # 3) 보관: 30일 지난 백업 삭제
 find /backup/db -name 'blog-*.sql.gz' -mtime +30 -delete
@@ -153,7 +150,7 @@ find /backup/media -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +
 ```
 
 - 백업은 다른 디스크나 다른 호스트로 보낸다(같은 디스크의 사본은 디스크 장애에 쓸모가 없다).
-- 복구: 앱을 멈추고 DB를 복원한 뒤 같은 날짜의 스냅숏을 `upload-dir`에 되돌린다(`rsync -a /backup/media/<날짜>/ "$BLOG_MEDIA_UPLOAD_DIR"/`).
+- 복구: 앱을 멈추고 DB를 복원한 뒤 같은 날짜의 스냅숏을 `upload-dir`에 되돌린다(`rsync -a /backup/media/<날짜>/ "$BLOG_DATA_DIR/media/upload"/`).
   `thumbnail-dir`은 비워 두면 요청 때 다시 만들어진다. `temp-dir`은 비워도 된다.
 - 한 달에 한 번은 복구 연습을 한다(덤프가 열리는지, 아무 글의 이미지가 보이는지).
 
