@@ -4,7 +4,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import net.java21.blog.backend.common.error.ApiErrorWriter;
 import net.java21.blog.backend.common.time.TimeConfig;
+import net.java21.blog.backend.common.web.VisitorKeyResolver;
 import net.java21.blog.backend.config.SecurityConfig;
+import net.java21.blog.backend.post.PostsProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -21,6 +24,7 @@ import org.springframework.context.annotation.Import;
  *   <li>실제 보안 설정({@link SecurityConfig}: Origin 검사, {@code access_token} 쿠키 인증, 공개 경로)과
  *       그 의존 빈({@link ApiErrorWriter}, UTC Clock {@link TimeConfig})</li>
  *   <li>{@link AuthCookies}: 로그인 쿠키 생성</li>
+ *   <li>{@link VisitorKeyResolver}(004): 방문자 키·방문자 쿠키. 글 설정({@link PostsProperties})의 기본값을 쓴다</li>
  *   <li>모든 요청에 허용된 {@code Origin}(application-test.yml)을 실어 상태 변경 요청이 Origin 검사를 통과한다.
  *       Origin 검사 자체를 확인하는 테스트는 이 구성을 쓰지 않는다.</li>
  * </ul>
@@ -28,7 +32,8 @@ import org.springframework.context.annotation.Import;
  * {@code WebMvcConfig}(WebMvcConfigurer)는 {@code @WebMvcTest}가 스스로 찾아 올린다.
  */
 @TestConfiguration(proxyBeanMethods = false)
-@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class, AuthCookies.class})
+@Import({SecurityConfig.class, ApiErrorWriter.class, TimeConfig.class, AuthCookies.class, VisitorKeyResolver.class})
+@EnableConfigurationProperties(PostsProperties.class)
 public class WebMvcTestSupport {
 
     public static final String ALLOWED_ORIGIN = "http://localhost:5173";

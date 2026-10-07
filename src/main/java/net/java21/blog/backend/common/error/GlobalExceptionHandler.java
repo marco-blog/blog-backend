@@ -12,6 +12,7 @@ import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.web.RequestIdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -40,7 +41,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
-        return error(e.errorCode(), e.getMessage(), e.fieldErrors());
+        ResponseEntity<ApiResponse<Void>> response = error(e.errorCode(), e.getMessage(), e.fieldErrors());
+        if (e.retryAfterSeconds() == null) {
+            return response;
+        }
+        return ResponseEntity.status(response.getStatusCode()).contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.retryAfterSeconds()))
+                .body(response.getBody());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

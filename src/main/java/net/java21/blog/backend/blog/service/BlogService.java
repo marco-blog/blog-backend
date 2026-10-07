@@ -171,7 +171,29 @@ public class BlogService {
         if (request.hasPortalEnabled() || request.hasDefaultTopicId()) {
             changePortalSettings(blog, request);
         }
+        if (request.hasGuestbookEnabled() || request.hasGuestWriteEnabled()) {
+            changeGuestSettings(blog, request);
+        }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
+    }
+
+    /** 방명록·비회원 쓰기 설정(004 FR-058, FR-066, research B15): 보낸 값만 바꾸며 지울 수 없다(null이면 400 {@code REQUIRED}). */
+    private static void changeGuestSettings(Blog blog, UpdateBlogRequest request) {
+        boolean guestbook = blog.isGuestbookEnabled();
+        boolean guestWrite = blog.isGuestWriteEnabled();
+        if (request.hasGuestbookEnabled()) {
+            if (request.getGuestbookEnabled() == null) {
+                throw required("guestbookEnabled");
+            }
+            guestbook = request.getGuestbookEnabled();
+        }
+        if (request.hasGuestWriteEnabled()) {
+            if (request.getGuestWriteEnabled() == null) {
+                throw required("guestWriteEnabled");
+            }
+            guestWrite = request.getGuestWriteEnabled();
+        }
+        blog.changeGuestSettings(guestbook, guestWrite);
     }
 
     /**

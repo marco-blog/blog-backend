@@ -19,6 +19,7 @@ import net.java21.blog.backend.comment.repository.CommentRow;
 import net.java21.blog.backend.common.api.FieldError;
 import net.java21.blog.backend.common.error.BusinessException;
 import net.java21.blog.backend.common.error.ErrorCode;
+import net.java21.blog.backend.common.text.PlainTextNormalizer;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.repository.PostExposure;
 import net.java21.blog.backend.post.repository.PostRepository;
@@ -129,12 +130,7 @@ public class CommentService {
      * 비면 400 {@code VALIDATION_FAILED}(content REQUIRED). HTML은 그대로 두고 출력할 때 이스케이프한다.
      */
     static String normalize(String raw) {
-        String text = raw == null ? "" : raw.replace("\r\n", "\n").replace('\r', '\n');
-        StringBuilder cleaned = new StringBuilder(text.length());
-        text.codePoints()
-                .filter(cp -> cp == '\n' || cp == '\t' || !Character.isISOControl(cp))
-                .forEach(cleaned::appendCodePoint);
-        String content = cleaned.toString().strip();
+        String content = PlainTextNormalizer.multiline(raw);
         if (content.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Comment content is blank",
                     List.of(FieldError.of("content", "REQUIRED")));

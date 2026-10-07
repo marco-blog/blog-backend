@@ -10,6 +10,7 @@ import net.java21.blog.backend.category.dto.CategoryNode;
  * {@code GET /blogs/{handle}} 응답. 대표·프로필 이미지 주소는 {@code /media/{key}} 또는 null. 카테고리는 트리({@link CategoryNode}).
  * 002: 구독자 수, {@code subscribedByMe}(로그인 회원이 구독 중이면 true, 아니면 false, 비로그인이면 null), 피드 설정.
  * 003: {@code portalEnabled}("포털에 내 글 노출"), {@code defaultTopicId}(블로그 기본 주제, 없으면 null).
+ * 004: {@code guestbookEnabled}(방명록 사용, FR-058), {@code guestWriteEnabled}(비회원 댓글·방명록 허용, FR-066).
  */
 public record BlogResponse(
         String handle,
@@ -24,7 +25,9 @@ public record BlogResponse(
         int feedItemCount,
         FeedContentMode feedContentMode,
         boolean portalEnabled,
-        Long defaultTopicId) {
+        Long defaultTopicId,
+        boolean guestbookEnabled,
+        boolean guestWriteEnabled) {
 
     public record Owner(String nickname, String profileImageUrl, String bio) {
     }
@@ -43,6 +46,7 @@ public record BlogResponse(
         return new BlogResponse(blog.getHandle(), blog.getTitle(), blog.getDescription(), blog.coverImageUrl(),
                 blog.isCommentEnabled(), new Owner(user.getNickname(), user.profileImageUrl(), user.getBio()),
                 categories, blog.getSubscriberCount(), subscribedByMe, blog.getFeedItemCount(),
-                blog.getFeedContentMode(), blog.isPortalEnabled(), blog.getDefaultTopicId());
+                blog.getFeedContentMode(), blog.isPortalEnabled(), blog.getDefaultTopicId(), blog.isGuestbookEnabled(),
+                blog.isGuestWriteEnabled());
     }
 }
