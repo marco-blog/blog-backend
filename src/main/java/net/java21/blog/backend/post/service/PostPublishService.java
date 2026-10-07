@@ -28,6 +28,7 @@ import net.java21.blog.backend.tag.domain.TagNormalizer;
 import net.java21.blog.backend.tag.service.TagService;
 import net.java21.blog.backend.topic.domain.Topic;
 import net.java21.blog.backend.topic.service.TopicService;
+import net.java21.blog.backend.trackback.service.TrackbackSendService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code SCHEDULE_NOT_ALLOWED}, {@code blog.posts.schedule-max-ahead} 넘으면 400 {@code scheduledAt INVALID}). 예약은
  * {@code published_at}을 건드리지 않고 블로그 첫 발행 시각도 남기지 않는다(작업이 실제로 발행할 때 남긴다). 없거나 지금 이하면 즉시 발행.
  * <p>005 작성 속도(FR-142): 처음 발행만 회원 1시간 한도로 센다({@link #countFirstPublish}).
+ * <p>005 트랙백 보내기(FR-052): {@code trackbackUrls}를 글을 바꾸기 전에 검증하고 발행 뒤 주소마다 PENDING 기록을 만든다.
  */
 @Service
 public class PostPublishService {
@@ -68,12 +70,14 @@ public class PostPublishService {
     private final PasswordEncoder passwordEncoder;
     private final PostsProperties properties;
     private final RateLimitPolicy rateLimits;
+    private final TrackbackSendService trackbacks;
     private final Clock clock;
 
     public PostPublishService(PostAccess postAccess, PostDraftRepository postDraftRepository,
             MarkdownRenderer markdownRenderer, PostService postService, CategoryAccess categoryAccess,
             TagService tagService, MediaReferenceService mediaReferences, TopicService topicService,
-            PasswordEncoder passwordEncoder, PostsProperties properties, RateLimitPolicy rateLimits, Clock clock) {
+            PasswordEncoder passwordEncoder, PostsProperties properties, RateLimitPolicy rateLimits,
+            TrackbackSendService trackbacks, Clock clock) {
         this.postAccess = postAccess;
         this.postDraftRepository = postDraftRepository;
         this.markdownRenderer = markdownRenderer;
@@ -85,6 +89,7 @@ public class PostPublishService {
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
         this.rateLimits = rateLimits;
+        this.trackbacks = trackbacks;
         this.clock = clock;
     }
 
@@ -116,6 +121,7 @@ public class PostPublishService {
         Instant now = clock.instant();
         String passwordHash = passwordHash(post, settings);
         boolean schedule = schedule(post, settings.scheduledAt(), now);
+        List<String> trackbackTargets = trackbacks.validate(settings.trackbackUrls(), settings.visibility());
         countFirstPublish(post);
 
         RenderedContent content = markdownRenderer.render(markdown);
@@ -146,6 +152,8 @@ public class PostPublishService {
         }
         postDraftRepository.flush();
         mediaReferences.syncPublished(postId, userId, markdown);
+        // 005 FR-052: 즉시 발행·발행된 글 수정이면 커밋 뒤 보내고, 예약이면 작업이 발행할 때 보낸다.
+        trackbacks.request(post, trackbackTargets, !schedule);
         return postService.detailOf(post, userId);
     }
 

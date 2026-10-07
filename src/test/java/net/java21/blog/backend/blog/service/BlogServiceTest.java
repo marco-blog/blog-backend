@@ -489,6 +489,33 @@ class BlogServiceTest {
         assertThat(blog.isGuestWriteEnabled()).isFalse();
     }
 
+    // ---- 트랙백 받기(005 T088, FR-053) ----
+
+    @Test
+    void trackbackEnabledDefaultsOnAndOwnerTogglesIt() {
+        Blog blog = TestEntities.blog(10L, owner, "marco");
+        when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(blog));
+        assertThat(BlogResponse.of(blog).trackbackEnabled()).isTrue();
+
+        UpdateBlogRequest off = new UpdateBlogRequest();
+        off.setTrackbackEnabled(false);
+        assertThat(service.update(1L, "marco", off).trackbackEnabled()).isFalse();
+        assertThat(blog.isTrackbackEnabled()).isFalse();
+
+        UpdateBlogRequest title = new UpdateBlogRequest();
+        title.setTitle("새 제목");
+        assertThat(service.update(1L, "marco", title).trackbackEnabled()).as("보내지 않으면 그대로").isFalse();
+
+        UpdateBlogRequest cleared = new UpdateBlogRequest();
+        cleared.setTrackbackEnabled(null);
+        assertFieldError(() -> service.update(1L, "marco", cleared),
+                new FieldError("trackbackEnabled", "REQUIRED", Map.of()));
+        UpdateBlogRequest byOther = new UpdateBlogRequest();
+        byOther.setTrackbackEnabled(true);
+        expect(() -> service.update(2L, "marco", byOther), ErrorCode.FORBIDDEN);
+        assertThat(blog.isTrackbackEnabled()).isFalse();
+    }
+
     @Test
     void onlyOwnerCanPatch() {
         when(blogRepository.findByHandleWithOwner("marco")).thenReturn(Optional.of(TestEntities.blog(10L, owner, "marco")));

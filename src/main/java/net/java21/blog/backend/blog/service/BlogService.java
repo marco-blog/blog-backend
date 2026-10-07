@@ -188,6 +188,12 @@ public class BlogService {
         if (request.hasGuestbookEnabled() || request.hasGuestWriteEnabled()) {
             changeGuestSettings(blog, request);
         }
+        if (request.hasTrackbackEnabled()) {
+            if (request.getTrackbackEnabled() == null) {
+                throw required("trackbackEnabled");
+            }
+            blog.changeTrackbackEnabled(request.getTrackbackEnabled());
+        }
         return BlogResponse.of(blog, categoryQueryRepository.findTree(blog.getId()), false);
     }
 

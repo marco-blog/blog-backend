@@ -10,9 +10,12 @@ import java.util.Set;
 import com.querydsl.core.types.dsl.BooleanExpression;
 
 import net.java21.blog.backend.blog.domain.BlogStatus;
+import net.java21.blog.backend.blog.domain.QBlog;
 import net.java21.blog.backend.post.domain.Post;
 import net.java21.blog.backend.post.domain.PostStatus;
 import net.java21.blog.backend.post.domain.PostVisibility;
+import net.java21.blog.backend.post.domain.QPost;
+import net.java21.blog.backend.user.domain.QUser;
 import net.java21.blog.backend.user.domain.UserStatus;
 
 /**
@@ -38,15 +41,28 @@ public final class PostExposure {
     }
 
     public static BooleanExpression listable() {
-        return post.status.eq(PostStatus.PUBLISHED)
-                .and(post.visibility.in(LISTABLE_VISIBILITIES))
-                .and(user.status.eq(UserStatus.ACTIVE))
-                .and(blog.status.eq(BlogStatus.ACTIVE));
+        return listable(post, blog, user);
     }
 
     public static BooleanExpression bodyVisible() {
+        return bodyVisible(post, blog, user);
+    }
+
+    /**
+     * 별칭을 받는 목록 노출 가능 조건(005 research M14: 트랙백 출처 글처럼 한 쿼리에 글이 둘 이상일 때). 쿼리는 {@code p}의 블로그를
+     * {@code b}로, {@code b}의 주인을 {@code u}로 이어야 한다.
+     */
+    public static BooleanExpression listable(QPost p, QBlog b, QUser u) {
+        return p.status.eq(PostStatus.PUBLISHED)
+                .and(p.visibility.in(LISTABLE_VISIBILITIES))
+                .and(u.status.eq(UserStatus.ACTIVE))
+                .and(b.status.eq(BlogStatus.ACTIVE));
+    }
+
+    /** 별칭을 받는 본문 노출 가능 조건({@link #listable(QPost, QBlog, QUser)}와 같은 연결 규칙). */
+    public static BooleanExpression bodyVisible(QPost p, QBlog b, QUser u) {
         // 004: 보호 글(PROTECTED)은 목록 노출 가능이지만 본문 노출 가능이 아니다.
-        return listable().and(post.visibility.eq(PostVisibility.PUBLIC));
+        return listable(p, b, u).and(p.visibility.eq(PostVisibility.PUBLIC));
     }
 
     /**

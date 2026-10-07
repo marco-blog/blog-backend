@@ -22,6 +22,7 @@ import net.java21.blog.backend.manage.repository.ManagePostRow;
 import net.java21.blog.backend.post.domain.PostVisibility;
 import net.java21.blog.backend.post.dto.PostSummaryResponse;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
+import net.java21.blog.backend.trackback.service.TrackbackSendService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -39,16 +40,18 @@ public class ManagePostService {
     private final CategoryAccess categoryAccess;
     private final TagQueryRepository tagQueryRepository;
     private final JobsProperties jobsProperties;
+    private final TrackbackSendService trackbacks;
     private final Clock clock;
 
     public ManagePostService(BlogAccess blogAccess, ManagePostQueryRepository repository,
             CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository, JobsProperties jobsProperties,
-            Clock clock) {
+            TrackbackSendService trackbacks, Clock clock) {
         this.blogAccess = blogAccess;
         this.repository = repository;
         this.categoryAccess = categoryAccess;
         this.tagQueryRepository = tagQueryRepository;
         this.jobsProperties = jobsProperties;
+        this.trackbacks = trackbacks;
         this.clock = clock;
     }
 
@@ -99,7 +102,10 @@ public class ManagePostService {
             }
             case DELETE -> {
                 requireOwned(blog, postIds);
-                yield new BulkPostResponse(repository.moveToTrash(blog.getId(), postIds, clock.instant()));
+                long moved = repository.moveToTrash(blog.getId(), postIds, clock.instant());
+                // 005 FR-052: 휴지통에 보낸 글의 보내지 않은 트랙백 요청(PENDING)은 지운다.
+                trackbacks.discardPending(postIds);
+                yield new BulkPostResponse(moved);
             }
             case NOTICE, UNNOTICE -> {
                 requireOwned(blog, postIds);

@@ -24,6 +24,10 @@ import net.java21.blog.backend.post.repository.PostSummaryRow;
 import net.java21.blog.backend.stats.BlogCalendar;
 import net.java21.blog.backend.tag.domain.TagNormalizer;
 import net.java21.blog.backend.tag.repository.TagQueryRepository;
+import net.java21.blog.backend.trackback.TrackbackUrls;
+import net.java21.blog.backend.trackback.TrackbackVisibility;
+import net.java21.blog.backend.trackback.repository.TrackbackQueryRepository;
+import net.java21.blog.backend.trackback.service.TrackbackSendService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -44,13 +48,18 @@ public class PostService {
     private final CategoryAccess categoryAccess;
     private final TagQueryRepository tagQueryRepository;
     private final PostLikeRepository postLikeRepository;
+    private final TrackbackQueryRepository trackbackQueryRepository;
+    private final TrackbackUrls trackbackUrls;
+    private final TrackbackSendService trackbackSendService;
     private final Clock clock;
     private final BlogCalendar calendar;
 
     public PostService(PostRepository postRepository, PostDraftRepository postDraftRepository,
             PostQueryRepository postQueryRepository, PostAccess postAccess, BlogAccess blogAccess,
             CategoryAccess categoryAccess, TagQueryRepository tagQueryRepository,
-            PostLikeRepository postLikeRepository, Clock clock, BlogCalendar calendar) {
+            PostLikeRepository postLikeRepository, TrackbackQueryRepository trackbackQueryRepository,
+            TrackbackUrls trackbackUrls, TrackbackSendService trackbackSendService, Clock clock,
+            BlogCalendar calendar) {
         this.postRepository = postRepository;
         this.postDraftRepository = postDraftRepository;
         this.postQueryRepository = postQueryRepository;
@@ -59,6 +68,9 @@ public class PostService {
         this.categoryAccess = categoryAccess;
         this.tagQueryRepository = tagQueryRepository;
         this.postLikeRepository = postLikeRepository;
+        this.trackbackQueryRepository = trackbackQueryRepository;
+        this.trackbackUrls = trackbackUrls;
+        this.trackbackSendService = trackbackSendService;
         this.clock = clock;
         this.calendar = calendar;
     }
@@ -101,7 +113,7 @@ public class PostService {
      * 글 상세. 주인 외에게는 목록 노출 가능 글만, 주인에게는 DRAFT·PRIVATE·SCHEDULED도 보인다(DELETED는 상세에서 404).
      * 보호 글(004)은 주인이 아니고 유효한 열람 쿠키가 없으면 잠긴 상세({@code locked: true})다.
      * 쿼리: 글(블로그·주인·카테고리 fetch join) 1회 + 태그 1회(잠긴 글은 없음) + 발행된 글이면 이전·다음 2회
-     * + 로그인했으면 좋아요 여부 1회(002).
+     * + 로그인했으면 좋아요 여부 1회(002) + 발행된 적이 있는 열린 글이면 트랙백 수 1회(005).
      */
     @Transactional(readOnly = true)
     public PostDetailResponse detail(Long postId, Long viewerId, PostUnlockCheck unlock) {
@@ -136,8 +148,13 @@ public class PostService {
         }
         Boolean likedByMe = viewerId == null ? null
                 : postLikeRepository.existsByUserIdAndPostId(viewerId, post.getId());
+        // 005: 트랙백 주소는 핑을 받는 글에만, 개수는 발행된 적이 있는 열린 글만 센다(쿼리 1회).
+        String trackbackUrl = TrackbackVisibility.acceptsPings(post)
+                ? trackbackUrls.trackbackUrl(post.getBlog().getHandle(), post.getId()) : null;
+        long trackbackCount = locked || post.getPublishedAt() == null ? 0
+                : trackbackQueryRepository.countVisible(post.getId());
         return PostDetailResponse.of(post, owner, prev, next, locked ? List.of() : tagNames(post.getId()), likedByMe,
-                locked);
+                locked, trackbackUrl, trackbackCount);
     }
 
     /**
@@ -151,6 +168,8 @@ public class PostService {
             throw new BusinessException(ErrorCode.POST_NOT_SCHEDULED, "Post is not scheduled: " + postId);
         }
         post.unschedule();
+        // 005 FR-052: 예약 발행 때 보내려던 트랙백 요청(PENDING)은 지운다.
+        trackbackSendService.discardPending(List.of(postId));
         postRepository.flush();
         return summaryOf(post);
     }
@@ -159,6 +178,8 @@ public class PostService {
     @Transactional
     public void delete(long userId, Long postId) {
         postAccess.requireOwnedEditablePost(postId, userId).moveToTrash(clock.instant());
+        // 005 FR-052: 휴지통에 보낸 글의 보내지 않은 트랙백 요청(PENDING)은 지운다.
+        trackbackSendService.discardPending(List.of(postId));
     }
 
     /** 휴지통에서 삭제 전 상태로(FR-084). 휴지통 글이 아니면 422 {@code POST_NOT_IN_TRASH}. */

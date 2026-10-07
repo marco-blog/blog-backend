@@ -60,13 +60,17 @@ class ManagePostServiceTest {
     @Mock
     private TagQueryRepository tagQueryRepository;
 
+    @Mock
+    private net.java21.blog.backend.trackback.service.TrackbackSendService trackbacks;
+
     private ManagePostService service;
     private Blog blog;
 
     @BeforeEach
     void setUp() {
         service = new ManagePostService(blogAccess, repository, categoryAccess, tagQueryRepository,
-                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), Clock.fixed(NOW, ZoneOffset.UTC));
+                new JobsProperties("0 30 3 * * *", Duration.ofDays(30), 500), trackbacks,
+                Clock.fixed(NOW, ZoneOffset.UTC));
         blog = TestEntities.blog(10L, TestEntities.user(OWNER), "marco");
     }
 
@@ -192,6 +196,8 @@ class ManagePostServiceTest {
 
         assertThat(service.bulk(OWNER, "marco", new BulkPostRequest(List.of(4L, 5L), BulkAction.DELETE, null, null))
                 .updated()).isEqualTo(1);
+        // 005 FR-052: 휴지통에 보낸 글의 보내지 않은 트랙백 요청은 지운다.
+        verify(trackbacks).discardPending(List.of(4L, 5L));
     }
 
     /** 004 T050: 공지 지정·해제(휴지통 글은 저장소 쿼리가 건너뜀). */

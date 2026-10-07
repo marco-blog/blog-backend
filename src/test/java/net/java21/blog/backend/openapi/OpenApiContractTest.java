@@ -216,7 +216,12 @@ class OpenApiContractTest {
             "GET /api/v1/admin/banned-words",
             "POST /api/v1/admin/banned-words",
             "PATCH /api/v1/admin/banned-words/{id}",
-            "DELETE /api/v1/admin/banned-words/{id}");
+            "DELETE /api/v1/admin/banned-words/{id}",
+            // 005 트랙백(US3). 받기 POST /{handle}/{postId}/trackback은 TrackBack 1.2 XML이라 문서에서 뺀다.
+            "GET /api/v1/posts/{id}/trackbacks",
+            "DELETE /api/v1/trackbacks/{id}",
+            "GET /api/v1/blogs/{handle}/manage/trackbacks",
+            "GET /api/v1/posts/{id}/trackback-pings");
 
     /** 공통 틀 대신 표준 형식(바이너리, 002 피드·사이트맵 XML, robots 텍스트)을 쓰는 경로(api-guidelines 4절 예외). */
     static final Set<String> BINARY = Set.of("GET /media/{}", "GET /media/{}/{}", "GET /{}/rss", "GET /{}/atom",
@@ -227,24 +232,29 @@ class OpenApiContractTest {
     static final Map<String, List<String>> RESPONSE_EXTENSIONS = Map.ofEntries(
             Map.entry("MeResponse", List.of("unreadNotificationCount", "unseenReleaseNote")),
             Map.entry("BlogResponse", List.of("subscriberCount", "subscribedByMe", "feedItemCount", "feedContentMode",
-                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+                    "portalEnabled", "defaultTopicId", "guestbookEnabled", "guestWriteEnabled", "trackbackEnabled")),
             Map.entry("PostDetailResponse", List.of("likeCount", "likedByMe", "topicId", "notice", "locked",
-                    "scheduledAt", "hidden")),
+                    "scheduledAt", "hidden", "trackbackUrl", "trackbackCount")),
             // 005 숨김(005 contracts "001~004 응답 확장")
             Map.entry("GuestbookEntryResponse", List.of("hidden")),
             Map.entry("BulkPostResponse", List.of("skipped")),
             Map.entry("UpdateBlogRequest", List.of("feedItemCount", "feedContentMode", "portalEnabled",
-                    "defaultTopicId", "guestbookEnabled", "guestWriteEnabled")),
+                    "defaultTopicId", "guestbookEnabled", "guestWriteEnabled", "trackbackEnabled")),
             Map.entry("DraftWriteRequest", List.of("topicId")),
             Map.entry("DraftResponse", List.of("topicId")),
-            Map.entry("PublishSettingsRequest", List.of("topicId", "notice", "password", "scheduledAt")),
+            Map.entry("PublishSettingsRequest", List.of("topicId", "notice", "password", "scheduledAt",
+                    "trackbackUrls")),
             Map.entry("DashboardResponse", List.of("newGuestbook7d", "recentGuestbook", "visitors")),
             Map.entry("PostSummaryResponse", List.of("notice", "scheduledAt")),
             // 004 비밀·비회원 댓글(004 contracts "001~003 요청·응답 확장")
             Map.entry("CommentResponse", List.of("secret", "hidden")),
             Map.entry("AuthorResponse", List.of("guest")),
-            Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword")),
-            Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")));
+            Map.entry("CreateCommentRequest", List.of("secret", "guestName", "guestPassword", "captchaToken")),
+            Map.entry("UpdateCommentRequest", List.of("secret", "guestPassword")),
+            // 005 CAPTCHA(US2, 005 contracts "001~004 요청 확장")
+            Map.entry("SignupRequest", List.of("captchaToken")),
+            Map.entry("LoginRequest", List.of("captchaToken")),
+            Map.entry("GuestbookWriteRequest", List.of("captchaToken")));
 
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
 
